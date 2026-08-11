@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prism Dashboard — 实时设计监控</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Top Bar -->
+<header class="topbar">
+  <div class="topbar-left">
+    <span class="logo">Prism</span>
+    <span class="project-name" id="project-name">等待 AI 初始化...</span>
+  </div>
+  <div class="topbar-right">
+    <span class="status-dot" id="ws-status"></span>
+    <span class="status-text" id="ws-status-text">连接中</span>
+    <span class="style-badge" id="style-badge">--</span>
+    <button class="toolbar-btn" id="undo-btn" title="撤销 (Ctrl+Z)">↶</button>
+    <button class="toolbar-btn" id="redo-btn" title="重做 (Ctrl+Shift+Z)">↷</button>
+    <button class="toolbar-btn" id="screenshot-btn" title="截图">📸</button>
+    <button class="toolbar-btn" id="export-btn" title="导出代码">📤 导出</button>
+    <button class="theme-toggle" id="theme-toggle" title="切换主题">🌙</button>
+  </div>
+</header>
+
+<!-- Main Layout: 3 columns -->
+<div class="main-layout">
+
+  <!-- Left Panel: Page Switcher + Activity Log -->
+  <aside class="panel panel-left">
+    <div class="page-switcher">
+      <div class="page-tabs" id="page-tabs"></div>
+      <button class="page-add-btn" id="page-add-btn" title="添加页面">+</button>
+    </div>
+    <h3 class="panel-title">活动日志</h3>
+    <div class="activity-list" id="activity-list">
+      <div class="activity-empty">AI Agent 操作将显示在这里</div>
+    </div>
+  </aside>
+
+  <!-- Center: Canvas -->
+  <main class="canvas-area">
+    <div class="canvas-toolbar">
+      <div class="canvas-toolbar-left">
+        <span class="canvas-label">实时预览画布</span>
+        <div class="device-switcher">
+          <button class="device-btn active" data-device="desktop" title="桌面">🖥️</button>
+          <button class="device-btn" data-device="tablet" title="平板">📱</button>
+          <button class="device-btn" data-device="mobile" title="手机">📲</button>
+        </div>
+      </div>
+      <div class="canvas-meta" id="canvas-meta">0 个组件</div>
+    </div>
+    <div class="canvas-scroll-wrap">
+      <div class="canvas" id="canvas">
+        <div class="canvas-placeholder">
+          <div class="placeholder-icon">🎨</div>
+          <p>等待 AI Agent 创建设计...</p>
+          <p class="placeholder-hint">AI 会通过 MCP 工具调用在此画布上构建 UI</p>
+          <p class="placeholder-hint">你的调整会实时同步回 AI</p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Right Panel: Tokens -->
+  <aside class="panel panel-right">
+    <h3 class="panel-title">设计令牌</h3>
+    <div class="conflict-warnings" id="conflict-warnings"></div>
+    <div class="token-tabs">
+      <button class="tab-btn active" data-tab="colors">色彩</button>
+      <button class="tab-btn" data-tab="typography">字体</button>
+      <button class="tab-btn" data-tab="spacing">间距</button>
+      <button class="tab-btn" data-tab="radii">圆角</button>
+    </div>
+    <div class="token-list" id="token-list">
+      <div class="token-empty">令牌将在 AI 初始化后出现</div>
+    </div>
+  </aside>
+
+</div>
+
+<!-- Prompt Bar (fixed at bottom) -->
+<div class="prompt-bar">
+  <input type="text" class="prompt-input" id="prompt-input" placeholder="输入指令给 AI，如：把主色改成蓝色">
+  <button class="prompt-send" id="prompt-send">发送</button>
+</div>
+
+<!-- Export Modal -->
+<div class="modal-overlay" id="export-modal" style="display:none">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>导出代码</h3>
+      <button class="modal-close" id="export-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="export-tabs">
+        <button class="export-tab active" data-format="html">HTML</button>
+        <button class="export-tab" data-format="react">React</button>
+        <button class="export-tab" data-format="vue">Vue</button>
+        <button class="export-tab" data-format="figma_tokens">Figma Tokens</button>
+      </div>
+      <pre class="export-code" id="export-code"></pre>
+      <button class="btn-copy" id="export-copy">复制代码</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

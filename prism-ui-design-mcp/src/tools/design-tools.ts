@@ -7,55 +7,11 @@ import {
   type DesignToken,
   type DesignState,
 } from "../state.js";
-import {
-  STYLE_PRESETS,
-  FONT_PAIRINGS,
-  TYPE_SCALE_RATIOS,
-} from "../constants.js";
-import {
-  hexToHsl,
-  hslToHex,
-  generateHarmony,
-  generateNeutralGrays,
-  normalizeHex,
-  isValidHex,
-  adjustLightness,
-} from "../utils/color.js";
+import { applyStyleTokenSet } from "../tokens.js";
 
-// ===== Extended State Store Type =====
-// The following methods and types are being added to DesignStateStore by another
-// concurrent task. We declare them here so that TypeScript compilation passes
-// regardless of whether the other task has completed yet.
-
-interface PageDef {
-  id: string;
-  name: string;
-  components: ComponentNode[];
-}
-
-type ExtendedStateStore = typeof stateStore & {
-  undo(): boolean;
-  redo(): boolean;
-  canUndo(): boolean;
-  canRedo(): boolean;
-  addPage(name: string, source?: "ai" | "user"): PageDef;
-  switchPage(pageId: string, source?: "ai" | "user"): boolean;
-  removePage(pageId: string, source?: "ai" | "user"): boolean;
-  renamePage(pageId: string, name: string, source?: "ai" | "user"): boolean;
-  reorderComponent(
-    fromId: string,
-    toId: string,
-    position: "before" | "after",
-    source?: "ai" | "user"
-  ): boolean;
-  setThemeMode(mode: "light" | "dark", source?: "ai" | "user"): void;
-  getTokenConflicts(): Array<{ key: string; message: string }>;
-  setPendingPrompt(prompt: string): void;
-  getPendingPrompt(): string | null;
-  clearPendingPrompt(): void;
-};
-
-const store = stateStore as ExtendedStateStore;
+// All methods used below now live directly on DesignStateStore (state.ts),
+// so no type extension or cast is needed.
+const store = stateStore;
 
 // ===== Export Helper Functions =====
 
@@ -632,124 +588,44 @@ Examples:
         stateStore.setProjectName(params.project_name, "ai");
         stateStore.setStyle(params.style, "ai");
 
-        const preset = STYLE_PRESETS[params.style];
+        const tokens = applyStyleTokenSet(
+          stateStore,
+          params.style,
+          params.base_color,
+          "ai"
+        );
 
-        // Determine base color
-        let baseHex: string;
-        if (params.base_color && isValidHex(params.base_color)) {
-          baseHex = normalizeHex(params.base_color);
-        } else {
-          baseHex = hslToHex({
-            h: preset.base_hue,
-            s: preset.saturation,
-            l: preset.lightness,
-          });
-        }
-
-        const baseHsl = hexToHsl(baseHex);
-        const harmonyColors = generateHarmony(baseHsl, "monochromatic");
-        const neutralHsls = generateNeutralGrays(baseHsl, 11);
-
-        // Set color tokens
-        const colorTokens: Record<string, string> = {
-          "color-primary": hslToHex(harmonyColors[1]),
-          "color-primary-dark": hslToHex(harmonyColors[0]),
-          "color-primary-light": hslToHex(harmonyColors[2]),
-          "color-accent": hslToHex(harmonyColors[3]),
-          "color-bg": preset.bg_light,
-          "color-surface": hslToHex(adjustLightness({ h: baseHsl.h, s: 10, l: 98 }, 0)),
-          "color-text": preset.text_light,
-          "color-text-muted": hslToHex(neutralHsls[5]),
-          "color-border": hslToHex(adjustLightness(neutralHsls[8], -5)),
-          "color-success": "#22C55E",
-          "color-warning": "#F59E0B",
-          "color-error": "#EF4444",
-        };
-
-        stateStore.setTokenBatch("colors", colorTokens, "ai");
-
-        // Set typography tokens
-        const fontMatch = FONT_PAIRINGS.find((p) => p.style === params.style) || FONT_PAIRINGS[0];
-        const ratio = TYPE_SCALE_RATIOS.perfect_fourth;
-        const baseSize = 16;
-        const typeNames = ["xs", "sm", "base", "lg", "xl", "2xl", "3xl", "4xl"];
-        const typeSteps = [-2, -1, 0, 1, 2, 3, 4, 5];
-
-        const typoTokens: Record<string, string> = {
-          "font-display": fontMatch.display.family,
-          "font-body": fontMatch.body.family,
-          "font-mono": "'JetBrains Mono', monospace",
-          "font-weight-normal": "400",
-          "font-weight-medium": "500",
-          "font-weight-semibold": "600",
-          "font-weight-bold": "700",
-          "line-height-tight": "1.2",
-          "line-height-normal": "1.5",
-          "line-height-relaxed": "1.75",
-        };
-        typeNames.forEach((name, i) => {
-          const size = baseSize * Math.pow(ratio, typeSteps[i]);
-          typoTokens[`text-${name}`] = `${(size / 16).toFixed(3)}rem`;
-        });
-        stateStore.setTokenBatch("typography", typoTokens, "ai");
-
-        // Set spacing tokens
-        const spacingBase = preset.spacing_base;
-        const spacingValues = [0, spacingBase, spacingBase * 1.5, spacingBase * 2, spacingBase * 3, spacingBase * 4, spacingBase * 6, spacingBase * 8];
-        const spacingNames = ["0", "xs", "sm", "md", "lg", "xl", "2xl", "3xl"];
-        const spacingTokens: Record<string, string> = {};
-        spacingNames.forEach((name, i) => {
-          const px = Math.round(spacingValues[i]);
-          spacingTokens[`space-${name}`] = `${(px / 16).toFixed(px % 16 === 0 ? 0 : 3)}rem`;
-        });
-        stateStore.setTokenBatch("spacing", spacingTokens, "ai");
-
-        // Set radius tokens
-        const radiusPresets: Record<string, number[]> = {
-          sharp: [0, 2, 4, 6, 8],
-          subtle: [0, 4, 6, 8, 12],
-          rounded: [0, 8, 12, 16, 24],
-          pill: [0, 12, 16, 24, 32],
-        };
-        const radiusVals = radiusPresets[preset.radius_style];
-        const radiusNames = ["none", "sm", "md", "lg", "xl"];
-        const radiusTokens: Record<string, string> = {};
-        radiusNames.forEach((name, i) => {
-          radiusTokens[`radius-${name}`] = `${radiusVals[i]}px`;
-        });
-        radiusTokens["radius-full"] = "9999px";
-        stateStore.setTokenBatch("radii", radiusTokens, "ai");
-
-        // Set transition tokens
-        const transitionTokens: Record<string, string> = {
-          "transition-fast": "150ms ease",
-          "transition-normal": "250ms ease",
-          "transition-slow": "400ms ease",
-          "transition-spring": "500ms cubic-bezier(0.34, 1.56, 0.64, 1)",
-        };
-        stateStore.setTokenBatch("transitions", transitionTokens, "ai");
-
-        const state = stateStore.getState();
         const summary = [
           `# Design Project Initialized: ${params.project_name}`,
           ``,
           `**Style:** ${params.style}`,
-          `**Base Color:** ${baseHex}`,
-          `**Font:** ${fontMatch.display.name} + ${fontMatch.body.name}`,
+          `**Base Color:** ${tokens.baseHex}`,
+          `**Font:** ${tokens.font.display.name} + ${tokens.font.body.name}`,
           ``,
           `Tokens generated:`,
-          `- Colors: ${Object.keys(colorTokens).length}`,
-          `- Typography: ${Object.keys(typoTokens).length}`,
-          `- Spacing: ${Object.keys(spacingTokens).length}`,
-          `- Radii: ${Object.keys(radiusTokens).length}`,
-          `- Transitions: ${Object.keys(transitionTokens).length}`,
+          `- Colors: ${Object.keys(tokens.colors).length}`,
+          `- Typography: ${Object.keys(tokens.typography).length}`,
+          `- Spacing: ${Object.keys(tokens.spacing).length}`,
+          `- Radii: ${Object.keys(tokens.radii).length}`,
+          `- Transitions: ${Object.keys(tokens.transitions).length}`,
           ``,
           `The client dashboard is now live. Use design_add_component to start building the UI.`,
         ].join("\n");
 
         return {
           content: [{ type: "text", text: summary }],
-          structuredContent: { success: true, project_name: params.project_name, style: params.style, base_color: baseHex, token_count: Object.keys(colorTokens).length + Object.keys(typoTokens).length + Object.keys(spacingTokens).length + Object.keys(radiusTokens).length + Object.keys(transitionTokens).length },
+          structuredContent: {
+            success: true,
+            project_name: params.project_name,
+            style: params.style,
+            base_color: tokens.baseHex,
+            token_count:
+              Object.keys(tokens.colors).length +
+              Object.keys(tokens.typography).length +
+              Object.keys(tokens.spacing).length +
+              Object.keys(tokens.radii).length +
+              Object.keys(tokens.transitions).length,
+          },
         };
       } catch (error) {
         return {

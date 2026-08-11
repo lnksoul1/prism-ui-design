@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0B0A0F">
+<meta name="description" content="Prism Studio — AI 驱动的实时 UI 设计协作画布">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%238B5CF6'/%3E%3Cstop offset='0.5' stop-color='%233B82F6'/%3E%3Cstop offset='1' stop-color='%2306B6D4'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='%230B0A0F'/%3E%3Cpath d='M16 7 L22 16 L16 25 L10 16 Z' fill='url(%23g)'/%3E%3C/svg%3E">
+<title>Prism Studio — 实时设计画布</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Top Bar -->
+<header class="topbar">
+  <div class="topbar-left">
+    <span class="logo">Prism</span>
+    <span class="project-name" id="project-name">等待 AI 初始化...</span>
+  </div>
+  <div class="topbar-right">
+    <span class="status-dot" id="ws-status"></span>
+    <span class="status-text" id="ws-status-text">连接中</span>
+    <span class="style-badge" id="style-badge">--</span>
+    <button class="toolbar-btn" id="undo-btn" title="撤销 (Ctrl+Z)">↶</button>
+    <button class="toolbar-btn" id="redo-btn" title="重做 (Ctrl+Shift+Z)">↷</button>
+    <button class="toolbar-btn" id="screenshot-btn" title="截图">📸</button>
+    <button class="toolbar-btn" id="import-btn" title="导入项目">📥 导入</button>
+    <button class="toolbar-btn" id="export-btn" title="导出代码">📤 导出</button>
+    <button class="theme-toggle" id="theme-toggle" title="切换主题">🌙</button>
+  </div>
+</header>
+
+<!-- Main Layout: 3 columns -->
+<div class="main-layout">
+
+  <!-- Left Panel: Page Switcher + Layers + Design Library + Activity Log -->
+  <aside class="panel panel-left">
+    <div class="page-switcher">
+      <div class="page-tabs" id="page-tabs"></div>
+      <button class="page-add-btn" id="page-add-btn" title="添加页面">+</button>
+    </div>
+    <!-- Layer Panel -->
+    <div class="layer-section">
+      <div class="layer-header">
+        <span class="layer-title">图层</span>
+      </div>
+      <div class="layer-tree" id="layer-tree">
+        <div class="layer-empty">组件图层将显示在这里</div>
+      </div>
+    </div>
+    <!-- Design Library -->
+    <div class="library-section">
+      <div class="library-tabs">
+        <button class="lib-tab active" data-lib="styles" title="风格库">风格</button>
+        <button class="lib-tab" data-lib="animations" title="动效库">动效</button>
+        <button class="lib-tab" data-lib="components" title="组件库">组件</button>
+      </div>
+      <div class="library-list" id="library-list">
+        <div class="library-empty">加载中...</div>
+      </div>
+    </div>
+    <h3 class="panel-title">活动日志</h3>
+    <div class="activity-list" id="activity-list">
+      <div class="activity-empty">AI Agent 操作将显示在这里</div>
+    </div>
+  </aside>
+
+  <!-- Design Library Hover Preview Popup -->
+  <div class="lib-preview-popup" id="lib-preview-popup" style="display:none"></div>
+
+  <!-- Canvas Drop Hint -->
+  <div class="canvas-drop-hint" id="canvas-drop-hint" style="display:none">释放以添加到画布</div>
+
+  <!-- Center: Canvas -->
+  <main class="canvas-area">
+    <div class="canvas-toolbar">
+      <div class="canvas-toolbar-left">
+        <span class="canvas-label">实时预览画布</span>
+        <div class="platform-switcher" id="platform-switcher">
+          <div class="platform-group">
+            <button class="platform-btn active" data-platform="web-desktop" title="Web 桌面">🖥️</button>
+            <button class="platform-btn" data-platform="web-tablet" title="Web 平板">📱</button>
+            <button class="platform-btn" data-platform="web-mobile" title="Web 手机">📲</button>
+          </div>
+          <div class="platform-group">
+            <button class="platform-btn" data-platform="desktop-macos" title="macOS 应用"></button>
+            <button class="platform-btn" data-platform="desktop-windows" title="Windows 应用">⊞</button>
+          </div>
+          <div class="platform-group">
+            <button class="platform-btn" data-platform="mobile-ios" data-icon="ios" title="iOS 应用"></button>
+            <button class="platform-btn" data-platform="mobile-android" data-icon="android" title="Android 应用">🤖</button>
+          </div>
+        </div>
+      </div>
+      <div class="canvas-toolbar-right">
+        <div class="zoom-control">
+          <button class="zoom-btn" id="zoom-out" title="缩小">−</button>
+          <span class="zoom-value" id="zoom-value">100%</span>
+          <button class="zoom-btn" id="zoom-in" title="放大">+</button>
+        </div>
+        <div class="canvas-meta" id="canvas-meta">0 个组件</div>
+      </div>
+    </div>
+    <div class="canvas-scroll-wrap" id="canvas-scroll-wrap">
+      <div class="canvas-frame" id="canvas-frame">
+        <div class="platform-chrome" id="platform-chrome"></div>
+        <div class="canvas" id="canvas">
+          <div class="canvas-placeholder">
+            <div class="placeholder-icon">◈</div>
+            <p>等待 AI Agent 创建设计</p>
+            <p class="placeholder-hint">AI 会通过 MCP 工具调用在此画布上构建 UI</p>
+            <p class="placeholder-hint">你的调整会实时同步回 AI</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Right Panel: Property Inspector + Tokens -->
+  <aside class="panel panel-right">
+    <!-- Property Inspector -->
+    <div class="inspector-section-wrapper" id="inspector-wrapper">
+      <h3 class="panel-title inspector-panel-title">属性检查器</h3>
+      <div class="inspector-body" id="inspector-body">
+        <div class="inspector-empty">
+          <div class="inspector-empty-icon">◈</div>
+          <p>点击画布上的组件</p>
+          <p class="inspector-empty-hint">查看并编辑属性</p>
+          <div class="inspector-shortcuts">
+            <strong>快捷操作</strong>
+            <span>单击组件 → 选中</span>
+            <span>双击文字 → 内联编辑</span>
+            <span>拖拽边角 → 调整大小</span>
+            <span>Delete → 删除选中</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- Design Tokens -->
+    <h3 class="panel-title">设计令牌</h3>
+    <div class="conflict-warnings" id="conflict-warnings"></div>
+    <div class="token-tabs">
+      <button class="tab-btn active" data-tab="colors">色彩</button>
+      <button class="tab-btn" data-tab="typography">字体</button>
+      <button class="tab-btn" data-tab="spacing">间距</button>
+      <button class="tab-btn" data-tab="radii">圆角</button>
+    </div>
+    <div class="token-list" id="token-list">
+      <div class="token-empty">令牌将在 AI 初始化后出现</div>
+    </div>
+  </aside>
+
+</div>
+
+<!-- Prompt Bar (fixed at bottom) -->
+<div class="prompt-bar">
+  <input type="text" class="prompt-input" id="prompt-input" placeholder="输入指令给 AI，如：把主色改成蓝色">
+  <button class="prompt-send" id="prompt-send">发送</button>
+</div>
+
+<!-- Export Modal -->
+<div class="modal-overlay" id="export-modal" style="display:none">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>导出代码</h3>
+      <button class="modal-close" id="export-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="export-tabs">
+        <button class="export-tab active" data-format="html">HTML</button>
+        <button class="export-tab" data-format="react">React</button>
+        <button class="export-tab" data-format="vue">Vue</button>
+        <button class="export-tab" data-format="figma_tokens">Figma Tokens</button>
+      </div>
+      <pre class="export-code" id="export-code"></pre>
+      <button class="btn-copy" id="export-copy">复制代码</button>
+    </div>
+  </div>
+</div>
+
+<!-- Import Modal -->
+<div class="modal-overlay" id="import-modal" style="display:none">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>导入项目</h3>
+      <button class="modal-close" id="import-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="import-desc">输入项目文件夹路径，系统将自动扫描 HTML / JSX / Vue 文件并提取页面组件。</p>
+      <input type="text" class="import-input" id="import-path" placeholder="例如: D:\MyProject" autocomplete="off">
+      <label class="import-checkbox">
+        <input type="checkbox" id="import-clear"> 清除现有设计（否则在新页面中导入）
+      </label>
+      <div class="import-result" id="import-result" style="display:none"></div>
+      <button class="btn-import-go" id="import-go">开始导入</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

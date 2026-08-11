@@ -34,8 +34,9 @@ import http from "http";
 import path from "path";
 import { fileURLToPath } from "url";
 import { WebSocketServer, WebSocket } from "ws";
-import { SERVER_NAME, SERVER_VERSION } from "./constants.js";
-import { stateStore } from "./state.js";
+import { SERVER_NAME, SERVER_VERSION, STYLE_PRESETS } from "./constants.js";
+import { stateStore, type AnimationDef } from "./state.js";
+import { applyStyleTokenSet } from "./tokens.js";
 
 // Existing design generation tools
 import { registerColorPaletteTool } from "./tools/color-palette.js";
@@ -50,6 +51,9 @@ import { registerDesignTokensTool } from "./tools/design-tokens.js";
 
 // New real-time design manipulation tools
 import { registerAllDesignTools, exportDesign } from "./tools/design-tools.js";
+
+// Project import module
+import { scanProject, type ExtractedPage } from "./import-project.js";
 
 // ===== Server Initialization =====
 
@@ -110,7 +114,7 @@ app.post("/api/component/reorder", (req, res) => {
     res.status(400).json({ error: "Missing from_id, to_id, or position" });
     return;
   }
-  const success = (stateStore as any).reorderComponent(from_id, to_id, position, "user");
+  const success = stateStore.reorderComponent(from_id, to_id, position, "user");
   res.json({ success });
 });
 
@@ -131,14 +135,14 @@ app.delete("/api/component/:id", (req, res) => {
 
 // API: Undo
 app.post("/api/undo", (_req, res) => {
-  const success = (stateStore as any).undo();
-  res.json({ success, canUndo: (stateStore as any).canUndo(), canRedo: (stateStore as any).canRedo() });
+  const success = stateStore.undo();
+  res.json({ success, canUndo: stateStore.canUndo(), canRedo: stateStore.canRedo() });
 });
 
 // API: Redo
 app.post("/api/redo", (_req, res) => {
-  const success = (stateStore as any).redo();
-  res.json({ success, canUndo: (stateStore as any).canUndo(), canRedo: (stateStore as any).canRedo() });
+  const success = stateStore.redo();
+  res.json({ success, canUndo: stateStore.canUndo(), canRedo: stateStore.canRedo() });
 });
 
 // API: Add page
@@ -148,21 +152,21 @@ app.post("/api/page", (req, res) => {
     res.status(400).json({ error: "Missing page name" });
     return;
   }
-  const page = (stateStore as any).addPage(name, "user");
+  const page = stateStore.addPage(name, "user");
   res.json({ success: true, page_id: page.id, name: page.name });
 });
 
 // API: Switch page
 app.post("/api/page/:id/switch", (req, res) => {
   const { id } = req.params;
-  const success = (stateStore as any).switchPage(id, "user");
+  const success = stateStore.switchPage(id, "user");
   res.json({ success });
 });
 
 // API: Remove page
 app.delete("/api/page/:id", (req, res) => {
   const { id } = req.params;
-  const success = (stateStore as any).removePage(id, "user");
+  const success = stateStore.removePage(id, "user");
   res.json({ success });
 });
 
@@ -174,7 +178,7 @@ app.post("/api/page/:id/rename", (req, res) => {
     res.status(400).json({ error: "Missing page name" });
     return;
   }
-  const success = (stateStore as any).renamePage(id, name, "user");
+  const success = stateStore.renamePage(id, name, "user");
   res.json({ success });
 });
 
@@ -185,13 +189,13 @@ app.post("/api/theme", (req, res) => {
     res.status(400).json({ error: "Mode must be 'light' or 'dark'" });
     return;
   }
-  (stateStore as any).setThemeMode(mode, "user");
+  stateStore.setThemeMode(mode, "user");
   res.json({ success: true, mode });
 });
 
 // API: Get token conflicts
 app.get("/api/conflicts", (_req, res) => {
-  const conflicts = (stateStore as any).getTokenConflicts();
+  const conflicts = stateStore.getTokenConflicts();
   res.json({ conflicts, count: conflicts.length });
 });
 
@@ -217,8 +221,155 @@ app.post("/api/prompt", (req, res) => {
     res.status(400).json({ error: "Missing prompt string" });
     return;
   }
-  (stateStore as any).setPendingPrompt?.(prompt);
+  stateStore.setPendingPrompt(prompt);
   res.json({ success: true });
+});
+
+// API: Import project from folder path — scans for HTML/JSX/Vue files and extracts pages
+app.post("/api/import", async (req, res) => {
+  const { path: folderPath, clear_existing } = req.body;
+  if (!folderPath || typeof folderPath !== "string") {
+    res.status(400).json({ error: "Missing 'path' field (project folder path)" });
+    return;
+  }
+
+  try {
+    // Validate path exists
+    const fs = await import("fs");
+    if (!fs.existsSync(folderPath)) {
+      res.status(404).json({ error: `Path not found: ${folderPath}` });
+      return;
+    }
+
+    const stat = fs.statSync(folderPath);
+    if (!stat.isDirectory()) {
+      res.status(400).json({ error: `Path is not a directory: ${folderPath}` });
+      return;
+    }
+
+    // Scan and parse the project
+    const result = scanProject(folderPath);
+
+    if (result.pages.length === 0) {
+      res.json({
+        success: false,
+        message: "No supported files found (HTML, JSX, TSX, Vue)",
+        scannedFiles: result.scannedFiles,
+      });
+      return;
+    }
+
+    // Optionally clear existing state
+    if (clear_existing) {
+      stateStore.clearAll("ai");
+    }
+
+    // Get the current project name or use the folder name
+    const projectName = path.basename(folderPath);
+    stateStore.setProjectName(projectName, "ai");
+
+    // Create pages from extracted content
+    const createdPages: Array<{ id: string; name: string; componentCount: number }> = [];
+
+    for (const page of result.pages) {
+      // Create a new page
+      const newPage = stateStore.addPage(page.name, "ai");
+
+      // Add each extracted component to the page
+      for (const comp of page.components) {
+        stateStore.addComponent(
+          comp.type,
+          comp.variant,
+          comp.props,
+          null,
+          "ai"
+        );
+      }
+
+      createdPages.push({
+        id: newPage.id,
+        name: page.name,
+        componentCount: page.components.length,
+      });
+    }
+
+    // Switch to the first imported page
+    if (createdPages.length > 0) {
+      stateStore.switchPage(createdPages[0].id, "ai");
+    }
+
+    res.json({
+      success: true,
+      project_name: projectName,
+      scanned_files: result.scannedFiles,
+      pages_imported: createdPages.length,
+      total_components: result.totalComponents,
+      pages: createdPages,
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
+// API: Initialize design project (mirrors design_init MCP tool)
+app.post("/api/init", (req, res) => {
+  const { project_name, style, base_color } = req.body;
+  if (!project_name || !style) {
+    res.status(400).json({ error: "Missing project_name or style" });
+    return;
+  }
+  try {
+    stateStore.clearAll("ai");
+    stateStore.setProjectName(project_name, "ai");
+    stateStore.setStyle(style, "ai");
+
+    const preset = STYLE_PRESETS[style];
+    if (!preset) {
+      res.status(400).json({ error: `Unknown style: ${style}` });
+      return;
+    }
+
+    const tokens = applyStyleTokenSet(stateStore, style, base_color, "ai");
+
+    res.json({
+      success: true,
+      project_name,
+      style,
+      base_color: tokens.baseHex,
+      font: `${tokens.font.display.name} + ${tokens.font.body.name}`,
+      token_count:
+        Object.keys(tokens.colors).length +
+        Object.keys(tokens.typography).length +
+        Object.keys(tokens.spacing).length +
+        Object.keys(tokens.radii).length +
+        Object.keys(tokens.transitions).length,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+// API: Add component to canvas (mirrors design_add_component MCP tool)
+app.post("/api/component", (req, res) => {
+  const { type, variant, props, parent_id } = req.body;
+  if (!type) {
+    res.status(400).json({ error: "Missing component type" });
+    return;
+  }
+  try {
+    const node = stateStore.addComponent(
+      type,
+      variant,
+      props || {},
+      parent_id || null,
+      "ai"
+    );
+    res.json({ success: true, id: node.id, type: node.type });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+  }
 });
 
 // Health check
@@ -275,63 +426,105 @@ function handleClientMessage(msg: { type: string; [key: string]: unknown }): voi
       break;
     }
     case "undo": {
-      (stateStore as any).undo();
+      stateStore.undo();
       break;
     }
     case "redo": {
-      (stateStore as any).redo();
+      stateStore.redo();
       break;
     }
     case "add_page": {
       const { name } = msg;
       if (typeof name === "string") {
-        (stateStore as any).addPage(name, "user");
+        stateStore.addPage(name, "user");
       }
       break;
     }
     case "switch_page": {
       const { pageId } = msg;
       if (typeof pageId === "string") {
-        (stateStore as any).switchPage(pageId, "user");
+        stateStore.switchPage(pageId, "user");
       }
       break;
     }
     case "remove_page": {
       const { pageId } = msg;
       if (typeof pageId === "string") {
-        (stateStore as any).removePage(pageId, "user");
+        stateStore.removePage(pageId, "user");
       }
       break;
     }
     case "rename_page": {
       const { pageId, name } = msg;
       if (typeof pageId === "string" && typeof name === "string") {
-        (stateStore as any).renamePage(pageId, name, "user");
+        stateStore.renamePage(pageId, name, "user");
       }
       break;
     }
     case "reorder_component": {
       const { fromId, toId, position } = msg;
       if (typeof fromId === "string" && typeof toId === "string" && (position === "before" || position === "after")) {
-        (stateStore as any).reorderComponent(fromId, toId, position, "user");
+        stateStore.reorderComponent(fromId, toId, position, "user");
       }
       break;
     }
     case "set_theme": {
       const { mode } = msg;
       if (mode === "light" || mode === "dark") {
-        (stateStore as any).setThemeMode(mode, "user");
+        stateStore.setThemeMode(mode, "user");
       }
       break;
     }
     case "prompt": {
       const { prompt } = msg;
       if (typeof prompt === "string") {
-        (stateStore as any).setPendingPrompt?.(prompt);
+        stateStore.setPendingPrompt(prompt);
+      }
+      break;
+    }
+    case "add_component": {
+      const { component_type, variant, props } = msg;
+      if (typeof component_type === "string") {
+        stateStore.addComponent(
+          component_type,
+          typeof variant === "string" ? variant : undefined,
+          (props as Record<string, unknown>) || {},
+          null,
+          "user"
+        );
+      }
+      break;
+    }
+    case "set_animation": {
+      const { component_id, entry, hover, duration, delay, curve } = msg;
+      if (typeof component_id === "string") {
+        const animation: AnimationDef = {};
+        if (typeof entry === "string") animation.entry = entry;
+        if (typeof hover === "string") animation.hover = hover;
+        if (typeof duration === "number") animation.duration = duration;
+        if (typeof delay === "number") animation.delay = delay;
+        if (typeof curve === "string") animation.curve = curve;
+        stateStore.setAnimation(component_id, animation, "user");
+      }
+      break;
+    }
+    case "apply_style": {
+      const { style } = msg;
+      if (typeof style === "string" && STYLE_PRESETS[style]) {
+        applyStylePreset(style);
       }
       break;
     }
   }
+}
+
+// ===== Helper: Apply style preset and generate all tokens =====
+
+function applyStylePreset(styleName: string): void {
+  if (!STYLE_PRESETS[styleName]) return;
+
+  stateStore.setStyle(styleName, "user");
+  applyStyleTokenSet(stateStore, styleName, undefined, "user");
 }
 
 // ===== Broadcast state changes to all WebSocket clients =====
@@ -365,13 +558,78 @@ stateStore.on("activity", (entry: unknown) => {
 
 const PORT = parseInt(process.env.DASHBOARD_PORT || "3100", 10);
 
+// Auto-import existing project pages on startup
+async function autoImportProjectPages(): Promise<void> {
+  try {
+    // Determine the project root: two levels up from dist/ (e.g., d:\Prism from d:\Prism\prism-ui-design-mcp\dist)
+    const projectRoot = path.resolve(__dirname, "..", "..");
+    const fs = await import("fs");
+
+    if (!fs.existsSync(projectRoot)) {
+      console.error(`[${SERVER_NAME}] Auto-import: project root not found: ${projectRoot}`);
+      return;
+    }
+
+    console.error(`[${SERVER_NAME}] Auto-import: scanning ${projectRoot} for existing pages...`);
+
+    const result = scanProject(projectRoot);
+
+    if (result.pages.length === 0) {
+      console.error(`[${SERVER_NAME}] Auto-import: no supported design files found`);
+      return;
+    }
+
+    // Clear the default empty page and import found pages
+    stateStore.clearAll("ai");
+    const projectName = path.basename(projectRoot);
+    stateStore.setProjectName(projectName, "ai");
+
+    // Remember the default "Home" page ID so we can remove it after importing
+    const stateAfterClear = stateStore.getState();
+    const defaultPageId = stateAfterClear.pages && stateAfterClear.pages.length > 0 ? stateAfterClear.pages[0].id : null;
+
+    let totalComponents = 0;
+    for (const page of result.pages) {
+      const newPage = stateStore.addPage(page.name, "ai");
+      for (const comp of page.components) {
+        stateStore.addComponent(
+          comp.type,
+          comp.variant,
+          comp.props,
+          null,
+          "ai"
+        );
+      }
+      totalComponents += page.components.length;
+    }
+
+    // Remove the default empty "Home" page now that we have imported pages
+    if (defaultPageId) {
+      stateStore.removePage(defaultPageId, "ai");
+    }
+
+    // Switch to the first imported page
+    const state = stateStore.getState();
+    if (state.pages && state.pages.length > 0) {
+      stateStore.switchPage(state.pages[0].id, "ai");
+    }
+
+    console.error(`[${SERVER_NAME}] Auto-import: imported ${result.pages.length} pages, ${totalComponents} components from ${result.scannedFiles} files`);
+  } catch (error) {
+    console.error(`[${SERVER_NAME}] Auto-import error:`, error instanceof Error ? error.message : String(error));
+  }
+}
+
 async function main(): Promise<void> {
   // 1. Start MCP server on stdio (for AI agent)
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error(`[${SERVER_NAME} v${SERVER_VERSION}] MCP stdio transport ready for AI agent`);
 
-  // 2. Start HTTP + WebSocket server (for browser client)
+  // 2. Auto-import existing project pages
+  await autoImportProjectPages();
+
+  // 3. Start HTTP + WebSocket server (for browser client)
   httpServer.listen(PORT, () => {
     console.error(`[${SERVER_NAME}] Dashboard: http://localhost:${PORT}`);
     console.error(`[${SERVER_NAME}] WebSocket: ws://localhost:${PORT}/ws`);

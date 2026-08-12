@@ -94,6 +94,42 @@ test("drawing canvas mounts and offers a template-first start", async ({ page }:
   // Empty page => the template picker appears
   await expect(page.locator("#canvas-template-modal")).toBeVisible({ timeout: 10000 });
   await expect(page.locator(".template-card").first()).toBeVisible();
+  // Start from the first template: closes the picker and materializes shapes
+  await page.locator(".template-card").first().click();
+  await page.waitForFunction(
+    () => {
+      const canvas = (globalThis as { PrismCanvas?: { countShapes(): number } }).PrismCanvas;
+      return !!canvas && canvas.countShapes() > 0;
+    },
+    null,
+    { timeout: 10000 }
+  );
+
+  // Drag a library component straight onto the drawing canvas
+  await page.locator('.lib-tab[data-lib="components"]').click();
+  await page.waitForSelector('#library-list .lib-item[data-lib-type="components"]', { timeout: 5000 });
+  const beforeDrop = await page.evaluate(() => {
+    const canvas = (globalThis as { PrismCanvas?: { countShapes(): number } }).PrismCanvas;
+    return canvas ? canvas.countShapes() : -1;
+  });
+  await page.evaluate(`(() => {
+    const item = document.querySelector('#library-list .lib-item[data-lib-type="components"]');
+    const editor = document.querySelector("#canvas-editor");
+    if (!item || !editor) return;
+    const rect = editor.getBoundingClientRect();
+    const dt = new DataTransfer();
+    item.dispatchEvent(new DragEvent("dragstart", { bubbles: true, cancelable: true, dataTransfer: dt }));
+    const x = rect.left + 140;
+    const y = rect.top + 140;
+    editor.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, clientX: x, clientY: y, dataTransfer: dt }));
+    editor.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, clientX: x, clientY: y, dataTransfer: dt }));
+  })()`);
+  await page.waitForTimeout(900);
+  const afterDrop = await page.evaluate(() => {
+    const canvas = (globalThis as { PrismCanvas?: { countShapes(): number } }).PrismCanvas;
+    return canvas ? canvas.countShapes() : -1;
+  });
+  expect(afterDrop).toBeGreaterThan(beforeDrop);
   expect(errors).toEqual([]);
 });
 

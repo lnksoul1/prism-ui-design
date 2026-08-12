@@ -785,6 +785,45 @@ window.PrismCanvas = {
     }
   },
 
+  /** Convert viewport coordinates to canvas page coordinates. */
+  screenToPage(clientX, clientY) {
+    if (!editorRef) return { x: 0, y: 0 };
+    const point = editorRef.screenToPage({ x: clientX, y: clientY });
+    return { x: point.x, y: point.y };
+  },
+
+  /**
+   * Drop a library component onto the canvas at page coordinates as a
+   * token-colored prism-block shape. Returns the new shape id.
+   */
+  addComponentShape(spec, x, y) {
+    if (!editorRef || !spec || !spec.type) return null;
+    loading = true;
+    clearSaveTimer();
+    try {
+      const shape = componentToShape(
+        {
+          id: null,
+          type: spec.type,
+          variant: spec.variant || undefined,
+          props: spec.props || {},
+        },
+        0
+      );
+      shape.x = Math.round(x);
+      shape.y = Math.round(y);
+      editorRef.createShapes([shape]);
+      return shape.id;
+    } catch (err) {
+      console.error("[PrismCanvas] addComponentShape failed:", err);
+      return null;
+    } finally {
+      setTimeout(() => {
+        loading = false;
+      }, 80);
+    }
+  },
+
   /** Arrange selected shapes (or all shapes) into a tidy column. */
   autoLayout() {
     if (!editorRef) return 0;

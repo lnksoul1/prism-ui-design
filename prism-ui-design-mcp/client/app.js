@@ -180,6 +180,7 @@ const I18N = {
     canvasLoading: "画布引擎加载中…",
     canvasDrawsApplied: "已应用 {n} 条 AI 绘制",
     canvasAutoLayoutDone: "已自动排列 {n} 个形状",
+    canvasComponentDropped: "已将 {name} 添加到画布",
   },
   en: {
     connected: "Connected",
@@ -301,6 +302,7 @@ const I18N = {
     canvasLoading: "Canvas engine loading…",
     canvasDrawsApplied: "Applied {n} AI drawings",
     canvasAutoLayoutDone: "Arranged {n} shapes",
+    canvasComponentDropped: "Added {name} to the canvas",
   },
 };
 
@@ -4445,6 +4447,78 @@ function setupCanvasEditor() {
   }
 
   renderCanvasTemplateCards();
+  setupCanvasEditorDropZone();
+}
+
+/**
+ * Let the design library drop straight onto the drawing canvas: a component
+ * becomes a token-colored prism-block shape at the drop point (canvas page
+ * coordinates), then the drawing is autosaved.
+ */
+function setupCanvasEditorDropZone() {
+  const editorEl = $("canvas-editor");
+  const hint = $("canvas-drop-hint");
+  if (!editorEl) return;
+
+  const isLibraryDrag = (e) =>
+    e.dataTransfer &&
+    e.dataTransfer.types &&
+    Array.from(e.dataTransfer.types).includes("text/plain") &&
+    canvasEditorMode;
+
+  editorEl.addEventListener("dragover", (e) => {
+    if (!isLibraryDrag(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "copy";
+    if (hint) {
+      hint.textContent = t("startWithLibraryDesc");
+      hint.style.display = "block";
+      hint.style.left = e.clientX - 60 + "px";
+      hint.style.top = e.clientY - 24 + "px";
+    }
+  });
+
+  editorEl.addEventListener("dragleave", (e) => {
+    if (!canvasEditorMode) return;
+    if (!editorEl.contains(e.relatedTarget) && hint) {
+      hint.style.display = "none";
+    }
+  });
+
+  editorEl.addEventListener("drop", (e) => {
+    if (!canvasEditorMode || !e.dataTransfer) return;
+    const raw = e.dataTransfer.getData("text/plain");
+    if (!raw || !raw.startsWith("{")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (hint) hint.style.display = "none";
+
+    try {
+      const data = JSON.parse(raw);
+      if (!data.item || data.libType !== "components") return;
+      if (!window.PrismCanvas || !window.PrismCanvas.isReady()) {
+        showToastMsg(t("canvasLoading"));
+        return;
+      }
+      const pt = window.PrismCanvas.screenToPage(e.clientX, e.clientY);
+      const created = window.PrismCanvas.addComponentShape(
+        {
+          type: data.item.id,
+          variant: data.item.variant,
+          props: data.item.defaultProps || {},
+        },
+        pt.x,
+        pt.y
+      );
+      if (created) {
+        saveCurrentCanvas(false);
+        showToastMsg(t("canvasComponentDropped", { name: data.item.name || data.item.id }));
+      }
+    } catch (err) {
+      console.error("Canvas library drop failed:", err);
+    }
+  });
 }
 
 /** Lazily load the tldraw bundle (client/vendor/prism-canvas.js). */

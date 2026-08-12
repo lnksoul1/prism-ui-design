@@ -196,6 +196,10 @@ optional Playwright browser smoke (`npm run test:e2e`).
 - **Capture actual UI**: "截取实际界面" screenshots the live dashboard with
   Playwright (`POST /api/capture-client`) and drops the image into the canvas
   as a faithful reference next to the structural components.
+- **One-click write-back**: "✍ 写回" (`POST /api/writeback`) writes the design
+  tokens back into `client/style.css` (with a timestamped backup) and exports
+  the full design to `client/design-writeback.html`, so canvas changes
+  directly restyle the project's own UI.
 - **Prompt queue visibility**: queued user prompts appear in the activity log
   and are broadcast as `prompt_queued` for connected agents/gateways.
 - **Canvas fixes**: the preview canvas now scrolls when content overflows, and

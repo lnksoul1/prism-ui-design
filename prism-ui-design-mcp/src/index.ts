@@ -69,6 +69,7 @@ import {
 } from "./project-store.js";
 import { listTemplates, loadTemplate, saveTemplate } from "./templates.js";
 import { createVersion, diffVersions, listVersions, restoreVersion } from "./versions.js";
+import { writebackAll, writebackPreview, writebackTokens, type WritebackMode } from "./writeback.js";
 
 // Phase B capabilities: token interop, a11y audit, render preview, resources, prompts
 import { registerTokenInteropTools } from "./tools/token-interop.js";
@@ -442,6 +443,25 @@ app.post("/api/capture-client", async (_req, res) => {
     res.json({ success: true, file, url, component_id: node.id, bytes: png.length });
   } catch (error) {
     res.status(501).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+// API: One-click write-back — design tokens into client/style.css (with backup)
+// and the full design into client/design-writeback.html.
+app.post("/api/writeback", (req, res) => {
+  const bodyMode = (req.body || {}).mode;
+  const mode: WritebackMode = bodyMode === "preview" || bodyMode === "all" ? bodyMode : "tokens";
+  try {
+    const clientDir = process.env.PRISM_CLIENT_DIR || path.resolve(__dirname, "..", "client");
+    const result =
+      mode === "all"
+        ? writebackAll(clientDir)
+        : mode === "preview"
+          ? writebackPreview(clientDir)
+          : writebackTokens(clientDir);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
   }
 });
 

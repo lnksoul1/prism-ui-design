@@ -146,6 +146,10 @@ const I18N = {
     freeformHint: "拖动组件调整位置，拖边角调整大小",
     captureActualUi: "截取实际界面",
     captureActualUiDesc: "截取真实运行的 Dashboard 作为参考图",
+    writeback: "✍ 写回",
+    writebackConfirm: "将设计令牌写回 client/style.css（自动备份）并生成 design-writeback.html 预览？",
+    writebackDone: "已写回 {count} 个令牌到 {files}，备份：{backup}",
+    writebackError: "写回失败",
   },
   en: {
     connected: "Connected",
@@ -233,6 +237,10 @@ const I18N = {
     freeformHint: "Drag components to move, drag corners to resize",
     captureActualUi: "Capture actual UI",
     captureActualUiDesc: "Screenshot the live dashboard as a reference",
+    writeback: "✍ Write back",
+    writebackConfirm: "Write design tokens back to client/style.css (auto-backup) and generate design-writeback.html?",
+    writebackDone: "Wrote {count} tokens to {files}. Backup: {backup}",
+    writebackError: "Write-back failed",
   },
 };
 
@@ -3462,6 +3470,40 @@ function setupProjectPersistence() {
   }
 }
 
+function setupWriteback() {
+  const btn = $("writeback-btn");
+  if (!btn) return;
+  btn.addEventListener("click", async () => {
+    if (!window.confirm(t("writebackConfirm"))) return;
+    btn.disabled = true;
+    try {
+      const response = await fetch("/api/writeback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "all" }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        alert(
+          t("writebackDone", {
+            count: Object.keys(data.token_map || {}).length,
+            files: (data.files || []).join(", "),
+            backup: data.backup || "—",
+          })
+        );
+      } else {
+        const data = await response.json().catch(() => ({}));
+        alert(`${t("writebackError")}: ${data.error || response.status}`);
+      }
+    } catch (err) {
+      console.error("Write-back failed:", err);
+      alert(t("writebackError"));
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}
+
 async function renderProjectList() {
   const list = $("project-list");
   if (!list) return;
@@ -4222,6 +4264,7 @@ function init() {
   setupExportModal();
   setupImportModal();
   setupProjectPersistence();
+  setupWriteback();
   setupToolTabs();
   setupVersionsPanel();
   setupCommentsPanel();

@@ -13,7 +13,7 @@
     "format": "prettier --write .",
     "check": "npm run lint && npm test",
     "test:e2e": "playwright test tests/e2e",
-    "test": "npm run build && tsc -p tsconfig.tests.json && node --test .test-build/tests/state.test.js .test-build/tests/tokens.test.js .test-build/tests/tools.test.js .test-build/tests/service.test.js .test-build/tests/project-store.test.js .test-build/tests/token-interop.test.js .test-build/tests/audit.test.js .test-build/tests/render.test.js .test-build/tests/templates.test.js .test-build/tests/versions.test.js .test-build/tests/design-md.test.js .test-build/tests/semantics.test.js .test-build/tests/style-guides.test.js .test-build/tests/webpage-import.test.js .test-build/tests/design-review.test.js .test-build/tests/exports.test.js .test-build/tests/collab-platform.test.js .test-build/tests/server.test.js"
+    "test": "npm run build && tsc -p tsconfig.tests.json && node --test .test-build/tests/state.test.js .test-build/tests/tokens.test.js .test-build/tests/tools.test.js .test-build/tests/service.test.js .test-build/tests/project-store.test.js .test-build/tests/token-interop.test.js .test-build/tests/audit.test.js .test-build/tests/render.test.js .test-build/tests/templates.test.js .test-build/tests/versions.test.js .test-build/tests/design-md.test.js .test-build/tests/semantics.test.js .test-build/tests/style-guides.test.js .test-build/tests/webpage-import.test.js .test-build/tests/design-review.test.js .test-build/tests/exports.test.js .test-build/tests/collab-platform.test.js .test-build/tests/writeback.test.js .test-build/tests/server.test.js"
   },
   "engines": {
     "node": ">=18"

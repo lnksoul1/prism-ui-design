@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { cpSync, readFileSync, rmSync } from "node:fs";
 import { spawn } from "node:child_process";
 import net from "node:net";
 import os from "node:os";
@@ -45,12 +46,16 @@ test(
   { timeout: 60000 },
   async () => {
     const port = await getFreePort();
+    const tempClientDir = path.join(os.tmpdir(), "prism-client-writeback-test");
+    rmSync(tempClientDir, { recursive: true, force: true });
+    cpSync(path.resolve(__dirname, "..", "..", "client"), tempClientDir, { recursive: true });
     const child = spawn(process.execPath, [SERVER_ENTRY], {
       cwd: path.resolve(__dirname, "..", ".."),
       env: {
         ...process.env,
         DASHBOARD_PORT: String(port),
         PRISM_PROJECT_DIR: path.join(os.tmpdir(), "prism-server-test"),
+        PRISM_CLIENT_DIR: tempClientDir,
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -278,6 +283,26 @@ test(
       } else {
         assert.equal(captureRes.status, 501);
       }
+
+      // One-click write-back: tokens -> temp style.css + design preview file
+      const wbRes = await fetch(`${base}/api/writeback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "all" }),
+      });
+      const wb = (await wbRes.json()) as {
+        success: boolean;
+        files: string[];
+        backup?: string;
+        token_map: Record<string, string>;
+      };
+      assert.equal(wb.success, true);
+      assert.ok(wb.files.length >= 2, "tokens + preview files written");
+      assert.ok(wb.backup, "backup created");
+      assert.ok(Object.keys(wb.token_map).length > 0, "tokens mapped");
+      const wbCss = readFileSync(path.join(tempClientDir, "style.css"), "utf-8");
+      assert.match(wbCss, /--accent:/);
+      assert.ok(readFileSync(path.join(tempClientDir, "design-writeback.html"), "utf-8").length > 500);
 
       const change = await Promise.race([
         changePromise,

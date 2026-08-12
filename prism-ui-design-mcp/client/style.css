@@ -2777,3 +2777,48 @@ textarea:focus-visible,
     transition-duration: 0.01ms !important;
   }
 }
+
+/* =================================================================
+   Freeform canvas (B6 — free positioning / auto layout)
+   ================================================================= */
+
+.canvas.canvas-freeform {
+  position: relative;
+  min-height: 1200px;
+}
+.canvas.canvas-freeform .comp-wrapper {
+  margin: 0;
+  z-index: 1;
+}
+.canvas.canvas-freeform .comp-wrapper.selected {
+  z-index: 2;
+}
+
+.resize-handle {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: var(--accent);
+  border: 1px solid #fff;
+  border-radius: 2px;
+  opacity: 0;
+  z-index: 5;
+  pointer-events: auto;
+}
+.comp-wrapper.selected .resize-handle,
+.comp-wrapper:hover .resize-handle {
+  opacity: 1;
+}
+.rh-n { top: -5px; left: 50%; margin-left: -5px; cursor: ns-resize; }
+.rh-s { bottom: -5px; left: 50%; margin-left: -5px; cursor: ns-resize; }
+.rh-e { right: -5px; top: 50%; margin-top: -5px; cursor: ew-resize; }
+.rh-w { left: -5px; top: 50%; margin-top: -5px; cursor: ew-resize; }
+.rh-ne { top: -5px; right: -5px; cursor: nesw-resize; }
+.rh-nw { top: -5px; left: -5px; cursor: nwse-resize; }
+.rh-se { bottom: -5px; right: -5px; cursor: nwse-resize; }
+.rh-sw { bottom: -5px; left: -5px; cursor: nesw-resize; }
+
+.layout-mode-btn.active {
+  background: var(--accent);
+  color: #fff;
+}

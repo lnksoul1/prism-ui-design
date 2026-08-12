@@ -131,7 +131,7 @@ describe("components", () => {
     assert.equal(state.components[0].children[0].id, child.id);
   });
 
-  test("updateComponent merges props and rejects unknown ids", () => {
+test("updateComponent merges props and rejects unknown ids", () => {
     const node = stateStore.addComponent("card", undefined, { title: "A" }, null, "ai");
     assert.equal(stateStore.updateComponent(node.id, { description: "D" }, "ai"), true);
     const updated = stateStore.getState().components[0];
@@ -178,6 +178,22 @@ describe("components", () => {
       stateStore.getState().activityLog.some((e) => e.action === "component_warning")
     );
   });
+});
+
+test("updateComponent accepts layout and visibility/locked flags", () => {
+  const comp = stateStore.addComponent("card", undefined, { title: "x" }, null, "ai");
+  const ok = stateStore.updateComponent(
+    comp.id,
+    {},
+    "user",
+    { x: 10, y: 20, w: 300, h: 160 },
+    { visible: false, locked: true }
+  );
+  assert.equal(ok, true);
+  const node = stateStore.getState().components[0];
+  assert.deepEqual(node.layout, { x: 10, y: 20, w: 300, h: 160 });
+  assert.equal(node.visible, false);
+  assert.equal(node.locked, true);
 });
 
 describe("tokens and conflicts", () => {

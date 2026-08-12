@@ -47,6 +47,7 @@ test("ws schema accepts valid client messages", () => {
   const cases = [
     { type: "set_token", category: "colors", key: "color-primary", value: "#ff0000" },
     { type: "update_component", id: "comp_1", props: { title: "x" } },
+    { type: "update_component", id: "comp_1", props: {}, layout: { x: 10, y: 20, w: 300, h: 160 } },
     { type: "remove_component", id: "comp_1" },
     { type: "undo" },
     { type: "redo" },
@@ -113,6 +114,15 @@ test("applyClientMessage mutates state and reports failures", () => {
   const upd = applyClientMessage({ type: "update_component", id: node.id, props: { text: "Stop" } });
   assert.equal(upd.ok, true);
   assert.equal(stateStore.getState().components[0].props.text, "Stop");
+
+  const layoutUpd = applyClientMessage({
+    type: "update_component",
+    id: node.id,
+    props: {},
+    layout: { x: 42, y: 88, w: 480, h: 240 },
+  });
+  assert.equal(layoutUpd.ok, true);
+  assert.deepEqual(stateStore.getState().components[0].layout, { x: 42, y: 88, w: 480, h: 240 });
 
   const undo = applyClientMessage({ type: "undo" });
   assert.equal(undo.ok, true);

@@ -5,11 +5,11 @@
 > 依据：源码审计（28 个 MCP 工具、REST/WS 双通道、客户端渲染引擎）+ 2026-08 外部调研
 
 > **实施进度（2026-08-12 更新）**
-> - ✅ Phase A1 测试体系：229 项测试全绿（新增 exports/design-review 覆盖，含双客户端在线状态集成测试）
+> - ✅ Phase A1 测试体系：230 项测试全绿（新增 exports/design-review/布局字段覆盖，含双客户端在线状态集成测试）
 > - ✅ Phase A2 持久化：`design_save_project` / `design_load_project` / `design_list_projects` + REST 端点 + 自动保存/启动恢复 + Dashboard 保存/加载按钮
 > - ✅ Phase A3 双通道收敛：`src/service/design-service.ts` 共享服务层 + WS 消息 zod 严格校验（拒绝未知类型/非法字段）
 > - ✅ Phase A4 修复：`getState()` 返回 canUndo/canRedo；阴影令牌纳入风格预设与客户端阴影 Tab；组件选中机制（动效应用目标）；新增缩放/图层面板/属性检查器
-> - ✅ Phase A5 文档：README 工具清单 60 个；对比报告追加 v1.2 勘误
+> - ✅ Phase A5 文档：README 工具清单 60 个；对比报告追加 v1.2 勘误；首轮成果已提交 Git（48cc8fe）
 > - ✅ Phase B2 无障碍审计：`design_audit_accessibility`（9 条 WCAG 规则，AA/AAA，评分 0–100）
 > - ✅ Phase B3 令牌互通：`design_export_tokens`（dtcg/css/style-dictionary/figma_tokens）+ `design_import_tokens`（replace/merge-overwrite/merge-keep）
 > - ✅ Phase B4 MCP 上下文：4 个 Resources（tokens/components/patterns/audit checklist）+ 3 个 Prompts（build_page/design_review/import_project）
@@ -37,7 +37,8 @@
 > - ✅ C5 子集（在线状态）：WS 在线人数广播 + 客户端"N 人在线"指示
 > - ✅ C2 种子（平台感知）：`activePlatform` 状态 + `design_set_platform` 工具 + WS set_platform + 客户端平台双向同步
 > - ✅ F9 子集（多框架）：`design_export` 新增 flutter（MaterialApp + 令牌主题）与 swiftui（Color(hex:) 主题）
-> - 🔄 待办：B6 自由定位/自动布局、C2 完整多平台设计状态（每平台独立页面）、C5 实时光标/评论/冲突、C6 完整智能体、F8 i18n、F9 更多框架、规格 Phase 2（截图转 UI）
+> - ✅ B6 自由定位与自动布局：组件 `layout/visible/locked` 字段 + `design_update_component` 布局参数 + 客户端流式/自由双模式（拖拽移动、8 向缩放手柄、检查器 X/Y/W/H、自动排列）
+> - 🔄 待办：C2 完整多平台设计状态（每平台独立页面）、C5 实时光标/评论/冲突、C6 完整智能体、F8 i18n、F9 更多框架、规格 Phase 2（截图转 UI）
 
 ---
 

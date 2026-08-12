@@ -33,6 +33,7 @@ let currentExportFormat = "html";
 let conflictCheckInterval = null;
 let selectedComponentId = null;
 let canvasZoom = 100;
+let canvasMode = "flow";
 
 // ===== DOM Helpers =====
 
@@ -202,6 +203,7 @@ function renderAll() {
 
   // Canvas
   renderCanvas();
+  applyCanvasMode($("canvas"));
 
   // Layers + inspector (skip inspector rebuild while the user is editing it)
   renderLayerPanel();
@@ -346,6 +348,9 @@ function countComponents(components) {
 function renderComponent(comp) {
   const wrapper = el("div", "comp-wrapper");
   wrapper.dataset.id = comp.id;
+  if (comp.visible === false) {
+    wrapper.style.display = "none";
+  }
   wrapper.addEventListener("click", (e) => {
     // Ignore clicks on overlay controls and active inline editing
     if (e.target.closest(".comp-delete") || e.target.closest(".comp-drag-handle")) return;
@@ -377,6 +382,20 @@ function renderComponent(comp) {
   const content = renderComponentContent(comp);
   if (content) wrapper.appendChild(content);
 
+  // Freeform layout: absolute positioning + drag/resize
+  if (canvasMode === "freeform" && comp.layout) {
+    const L = comp.layout;
+    wrapper.style.position = "absolute";
+    wrapper.style.left = L.x + "px";
+    wrapper.style.top = L.y + "px";
+    if (L.w > 0) wrapper.style.width = L.w + "px";
+    if (L.h > 0) wrapper.style.minHeight = L.h + "px";
+    if (!comp.locked) {
+      attachFreeformDrag(wrapper, comp.id);
+      attachResizeHandles(wrapper, comp.id);
+    }
+  }
+
   // Apply animation if set
   if (comp.animation) {
     applyAnimation(wrapper, comp.animation);
@@ -400,6 +419,170 @@ function renderComponent(comp) {
   }
 
   return wrapper;
+}
+
+// ===== Freeform Canvas (B6) =====
+
+function attachFreeformDrag(wrapper, compId) {
+  wrapper.addEventListener("mousedown", (e) => {
+    if (e.button !== 0) return;
+    if (e.target.closest(".comp-overlay") || e.target.closest(".resize-handle")) return;
+    if (e.target.closest("[contenteditable='true']")) return;
+    e.preventDefault();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const comp = getCompById(compId);
+    const origX = (comp && comp.layout ? comp.layout.x : 0);
+    const origY = (comp && comp.layout ? comp.layout.y : 0);
+    wrapper.style.transition = "none";
+
+    const onMove = (ev) => {
+      const dx = ev.clientX - startX;
+      const dy = ev.clientY - startY;
+      wrapper.style.left = Math.max(0, origX + dx) + "px";
+      wrapper.style.top = Math.max(0, origY + dy) + "px";
+    };
+    const onUp = () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      wrapper.style.transition = "";
+      const x = parseFloat(wrapper.style.left) || 0;
+      const y = parseFloat(wrapper.style.top) || 0;
+      const compNow = getCompById(compId);
+      sendUpdateComponent(compId, {}, { x, y });
+      if (compNow) {
+        compNow.layout = { ...(compNow.layout || {}), x, y };
+      }
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  });
+}
+
+const RESIZE_DIRS = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
+
+function attachResizeHandles(wrapper, compId) {
+  RESIZE_DIRS.forEach((dir) => {
+    const handle = el("div", `resize-handle rh-${dir}`);
+    handle.dataset.dir = dir;
+    handle.addEventListener("mousedown", (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const comp = getCompById(compId);
+      const L = comp && comp.layout ? { ...comp.layout } : { x: 0, y: 0, w: 0, h: 0 };
+
+      const onMove = (ev) => {
+        const dx = ev.clientX - startX;
+        const dy = ev.clientY - startY;
+        let { x, y, w, h } = L;
+        if (dir.includes("e")) w = Math.max(60, (L.w || 320) + dx);
+        if (dir.includes("s")) h = Math.max(40, (L.h || 140) + dy);
+        if (dir.includes("w")) {
+          w = Math.max(60, (L.w || 320) - dx);
+          x = (L.x || 0) + ((L.w || 320) - w);
+        }
+        if (dir.includes("n")) {
+          h = Math.max(40, (L.h || 140) - dy);
+          y = (L.y || 0) + ((L.h || 140) - h);
+        }
+        wrapper.style.left = x + "px";
+        wrapper.style.top = y + "px";
+        wrapper.style.width = w + "px";
+        wrapper.style.minHeight = h + "px";
+      };
+      const onUp = () => {
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+        const rect = wrapper.getBoundingClientRect();
+        const canvasRect = $("canvas").getBoundingClientRect();
+        const layout = {
+          x: Math.round(rect.left - canvasRect.left),
+          y: Math.round(rect.top - canvasRect.top),
+          w: Math.round(rect.width),
+          h: Math.round(rect.height),
+        };
+        sendUpdateComponent(compId, {}, layout);
+        const compNow = getCompById(compId);
+        if (compNow) compNow.layout = layout;
+      };
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    });
+    wrapper.appendChild(handle);
+  });
+}
+
+function getCompById(id) {
+  if (!currentState) return null;
+  return getCurrentComponents().find((c) => c.id === id) || null;
+}
+
+function sendUpdateComponent(id, props, layout) {
+  send({ type: "update_component", id, props: props || {}, layout: layout || undefined });
+}
+
+function applyCanvasMode(canvas) {
+  if (!canvas) return;
+  canvas.classList.toggle("canvas-freeform", canvasMode === "freeform");
+  const btn = $("layout-mode-btn");
+  if (btn) btn.textContent = canvasMode === "freeform" ? "自由" : "流式";
+}
+
+function initializeFreeformLayouts() {
+  const canvas = $("canvas");
+  const width = canvas ? Math.max(320, Math.round(canvas.getBoundingClientRect().width) - 32) : 640;
+  let cursor = 16;
+  const components = getCurrentComponents();
+  components.forEach((comp) => {
+    if (!comp.layout) {
+      const layout = { x: 16, y: cursor, w: width, h: 140 };
+      comp.layout = layout;
+      sendUpdateComponent(comp.id, {}, layout);
+    }
+    cursor += (comp.layout.h || 140) + 16;
+  });
+}
+
+function autoLayout() {
+  const canvas = $("canvas");
+  const width = canvas ? Math.max(320, Math.round(canvas.getBoundingClientRect().width) - 32) : 640;
+  let cursor = 16;
+  const components = getCurrentComponents();
+  components.forEach((comp) => {
+    const layout = { x: 16, y: cursor, w: width, h: comp.layout && comp.layout.h ? comp.layout.h : 140 };
+    comp.layout = layout;
+    sendUpdateComponent(comp.id, {}, layout);
+    cursor += layout.h + 16;
+  });
+}
+
+function setupCanvasMode() {
+  const modeBtn = $("layout-mode-btn");
+  if (modeBtn) {
+    modeBtn.addEventListener("click", () => {
+      canvasMode = canvasMode === "flow" ? "freeform" : "flow";
+      if (canvasMode === "freeform") {
+        initializeFreeformLayouts();
+      }
+      renderCanvas();
+      renderInspector();
+      applyCanvasMode($("canvas"));
+    });
+  }
+  const autoBtn = $("auto-layout-btn");
+  if (autoBtn) {
+    autoBtn.addEventListener("click", () => {
+      if (canvasMode !== "freeform") {
+        canvasMode = "freeform";
+      }
+      autoLayout();
+      renderCanvas();
+      applyCanvasMode($("canvas"));
+    });
+  }
+  applyCanvasMode($("canvas"));
 }
 
 // ===== Selection / Inspector / Layers / Zoom =====
@@ -456,6 +639,30 @@ function renderInspector() {
   const idLine = el("div", "inspector-id", `ID: ${comp.id}`);
   header.appendChild(idLine);
   panel.appendChild(header);
+
+  // Layout section (freeform mode)
+  if (canvasMode === "freeform") {
+    const layoutSection = el("div", "inspector-section");
+    layoutSection.appendChild(el("div", "inspector-section-title", "布局"));
+    const L = comp.layout || { x: 0, y: 0, w: 0, h: 0 };
+    ["x", "y", "w", "h"].forEach((key) => {
+      const row = el("div", "prop-row");
+      row.appendChild(el("div", "prop-label", key === "w" ? "宽度" : key === "h" ? "高度" : key.toUpperCase()));
+      const input = el("input", "prop-num-input");
+      input.type = "number";
+      input.value = String(L[key] || 0);
+      input.addEventListener("change", () => {
+        const value = Math.max(0, parseInt(input.value, 10) || 0);
+        const next = { ...(comp.layout || { x: 0, y: 0, w: 0, h: 0 }), [key]: value };
+        comp.layout = next;
+        sendUpdateComponent(comp.id, {}, { [key]: value });
+        renderCanvas();
+      });
+      row.appendChild(input);
+      layoutSection.appendChild(row);
+    });
+    panel.appendChild(layoutSection);
+  }
 
   // Content (string props)
   const contentSection = el("div", "inspector-section");
@@ -559,10 +766,6 @@ function renderInspector() {
   });
   actions.appendChild(delBtn);
   panel.appendChild(actions);
-}
-
-function sendUpdateComponent(id, props) {
-  send({ type: "update_component", id, props });
 }
 
 function sendSetAnimation(id, patch) {
@@ -3194,6 +3397,7 @@ function init() {
   setupUndoRedo();
   setupZoom();
   setupCanvasShortcuts();
+  setupCanvasMode();
   setupThemeToggle();
   setupPageSwitcher();
   setupExportModal();

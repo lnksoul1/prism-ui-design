@@ -107,7 +107,7 @@ const VALID_PARAMS: Record<string, Record<string, unknown>> = {
   ui_generate_design_tokens: { style: "minimal", base_color: "#6366F1", dark_mode: true, response_format: "json" },
   design_init: { project_name: "Smoke Test", style: "minimal", base_color: "#2563EB" },
   design_add_component: { type: "hero", variant: "center", props: { title: "Hello" } },
-  design_update_component: { id: "missing", props: { title: "x" } },
+  design_update_component: { id: "missing", props: { title: "x" }, layout: { x: 0, y: 0, w: 320, h: 160 } },
   design_set_animation: { component_id: "missing", entry: "fadeUp", duration: 0.5 },
   design_get_state: {},
   design_set_token: { category: "colors", key: "color-primary", value: "#FF5733" },

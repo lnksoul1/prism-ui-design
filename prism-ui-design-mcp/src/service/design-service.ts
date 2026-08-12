@@ -9,7 +9,7 @@
  */
 
 import { z } from "zod";
-import { stateStore, type AnimationDef } from "../state.js";
+import { stateStore, type AnimationDef, type ComponentLayout } from "../state.js";
 import { applyStyleTokenSet } from "../tokens.js";
 import { STYLE_PRESETS } from "../constants.js";
 
@@ -179,8 +179,14 @@ export function addComponent(
   return stateStore.addComponent(type, variant, props, parentId, source);
 }
 
-export function updateComponent(id: string, props: Record<string, unknown>, source: MutationSource = "user"): boolean {
-  return stateStore.updateComponent(id, props, source);
+export function updateComponent(
+  id: string,
+  props: Record<string, unknown>,
+  source: MutationSource = "user",
+  layout?: Partial<ComponentLayout>,
+  flags?: { visible?: boolean; locked?: boolean }
+): boolean {
+  return stateStore.updateComponent(id, props, source, layout, flags);
 }
 
 export function removeComponent(id: string, source: MutationSource = "user"): boolean {
@@ -255,6 +261,16 @@ export const wsMessageSchema = z.discriminatedUnion("type", [
     type: z.literal("update_component"),
     id: z.string().min(1),
     props: z.record(z.unknown()),
+    layout: z
+      .object({
+        x: z.number().optional(),
+        y: z.number().optional(),
+        w: z.number().optional(),
+        h: z.number().optional(),
+      })
+      .optional(),
+    visible: z.boolean().optional(),
+    locked: z.boolean().optional(),
   }),
   z.strictObject({
     type: z.literal("remove_component"),
@@ -332,7 +348,10 @@ export function applyClientMessage(msg: WsClientMessage): { ok: boolean; detail:
       setToken(msg.category, msg.key, msg.value, "user");
       return { ok: true, detail: `token ${msg.category}.${msg.key}` };
     case "update_component": {
-      const ok = updateComponent(msg.id, msg.props, "user");
+      const ok = updateComponent(msg.id, msg.props, "user", msg.layout, {
+        visible: msg.visible,
+        locked: msg.locked,
+      });
       return { ok, detail: ok ? `component ${msg.id}` : `component ${msg.id} not found` };
     }
     case "remove_component": {

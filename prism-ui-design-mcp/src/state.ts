@@ -23,6 +23,9 @@ export interface ComponentNode {
   type: string;
   variant?: string;
   props: Record<string, unknown>;
+  layout?: ComponentLayout;
+  visible?: boolean;
+  locked?: boolean;
   children: ComponentNode[];
   animation?: AnimationDef;
 }
@@ -35,6 +38,13 @@ export interface AnimationDef {
   delay?: number;
   curve?: string;
   stagger?: number;
+}
+
+export interface ComponentLayout {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
 }
 
 export interface ActivityLogEntry {
@@ -391,11 +401,25 @@ class DesignStateStore extends EventEmitter {
   updateComponent(
     id: string,
     props: Record<string, unknown>,
-    source: "ai" | "user" = "ai"
+    source: "ai" | "user" = "ai",
+    layout?: Partial<ComponentLayout>,
+    flags?: { visible?: boolean; locked?: boolean }
   ): boolean {
     const node = this.findComponent(id);
     if (!node) return false;
     node.props = { ...node.props, ...props };
+    if (layout) {
+      node.layout = {
+        x: layout.x ?? node.layout?.x ?? 0,
+        y: layout.y ?? node.layout?.y ?? 0,
+        w: layout.w ?? node.layout?.w ?? 0,
+        h: layout.h ?? node.layout?.h ?? 0,
+      };
+    }
+    if (flags) {
+      if (typeof flags.visible === "boolean") node.visible = flags.visible;
+      if (typeof flags.locked === "boolean") node.locked = flags.locked;
+    }
     this.logActivity("update_component", node.type, `Updated ${node.type} (${id})`, source);
     this.commit({ type: "updateComponent", id, props });
     return true;

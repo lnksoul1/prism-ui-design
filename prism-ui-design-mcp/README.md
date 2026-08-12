@@ -150,6 +150,11 @@ and an HTTP + WebSocket integration chain (**229 tests passing**).
   tokens / navbar / hero / footer in one call.
 - **Presence**: the dashboard shows how many clients are online, and the
   active preview platform syncs between server state and every client.
+- **Freeform canvas**: toggle between flow layout and free positioning —
+  drag components anywhere, resize with 8 handles, edit X/Y/W/H in the
+  inspector, and auto-arrange into a clean vertical stack.
+  Layouts are stored on the component (`layout`, `visible`, `locked`) and
+  updated through `design_update_component` / WebSocket.
 
 ## Agent context (MCP Resources & Prompts)
 

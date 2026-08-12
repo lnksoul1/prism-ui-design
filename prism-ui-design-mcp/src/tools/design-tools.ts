@@ -1189,12 +1189,27 @@ export function registerDesignUpdateComponentTool(server: McpServer): void {
 Args:
   - id (string): Component ID (from design_add_component response)
   - props (object): Properties to update (merges with existing)
+  - layout (object, optional): Freeform layout { x, y, w, h } (merges with existing)
+  - visible (boolean, optional): Toggle visibility
+  - locked (boolean, optional): Lock/unlock the component
 
 Example:
-  - design_update_component(id="comp_12345", props={"title": "新标题", "button_text": "点击这里"})`,
+  - design_update_component(id="comp_12345", props={"title": "新标题", "button_text": "点击这里"})
+  - design_update_component(id="comp_12345", layout={"x": 120, "y": 240, "w": 480, "h": 320})`,
       inputSchema: {
         id: z.string().describe("Component ID"),
         props: z.record(z.unknown()).describe("Properties to update"),
+        layout: z
+          .object({
+            x: z.number().optional(),
+            y: z.number().optional(),
+            w: z.number().optional(),
+            h: z.number().optional(),
+          })
+          .optional()
+          .describe("Freeform layout (x/y/w/h)"),
+        visible: z.boolean().optional().describe("Show/hide the component"),
+        locked: z.boolean().optional().describe("Lock/unlock the component"),
       },
       annotations: {
         readOnlyHint: false,
@@ -1205,7 +1220,10 @@ Example:
     },
     async (params) => {
       try {
-        const success = stateStore.updateComponent(params.id, params.props, "ai");
+        const success = stateStore.updateComponent(params.id, params.props, "ai", params.layout, {
+          visible: params.visible,
+          locked: params.locked,
+        });
         if (!success) {
           return {
             content: [{ type: "text", text: `Error: Component with ID "${params.id}" not found.` }],

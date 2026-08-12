@@ -77,6 +77,9 @@
 >   - 服务端状态新增 `canvasDraws` 队列（每页独立，含 activity log 与撤销历史）；`shapesToComponents` 支持 prism-block 映射
 >   - 测试：268 项单测/集成测试全绿 + e2e 3/3；浏览器实测模板→7 彩色块、AI 绘制→实时 +2 形状、零 console 错误
 > - ✅ **方案A 第三轮（组件库拖拽直接落画布）**：设计库组件直接拖到画布编辑器（真实鼠标拖拽实测通过）——落点经 `editor.screenToPage` 换算为画布坐标，生成令牌着色 prism-block 形状并自动保存；e2e 新增合成拖拽断言（形状数 +1）
+> - ✅ **缺陷修复（侧栏滚动 + Agent 指令回执）**：
+>   - 左右侧栏 `overflow:hidden` 改为整列 `overflow-y:auto`，取消内部嵌套滚动区（layer/library/version/comment/activity/token 列表恢复自然流），实测 scrollTop 可滚动、无 console 错误
+>   - 指令闭环可见化：发送后提示栏显示“指令已排队，等待 Agent 处理…”；Agent 通过 `design_check_prompts` 消费指令时，服务端广播 `prompt_accepted` + 记录 `prompt_accepted` 活动，Dashboard 显示“Agent 已接收指令 ✓”；WS 断开时指令自动回退 `POST /api/prompt`
 > - 🔄 待办：C6 完整智能体、F9 更多框架、规格 Phase 2 截图转 UI（依赖视觉模型）、数据库/多项目工作区、画布多端实时协作编辑（当前为保存级同步）
 > - 🔄 待办：C6 完整智能体、F9 更多框架、规格 Phase 2 截图转 UI（依赖视觉模型）、数据库/多项目工作区
 

@@ -181,6 +181,8 @@ const I18N = {
     canvasDrawsApplied: "已应用 {n} 条 AI 绘制",
     canvasAutoLayoutDone: "已自动排列 {n} 个形状",
     canvasComponentDropped: "已将 {name} 添加到画布",
+    promptQueued: "指令已排队，等待 Agent 处理…",
+    promptAccepted: "Agent 已接收指令 ✓",
   },
   en: {
     connected: "Connected",
@@ -303,6 +305,8 @@ const I18N = {
     canvasDrawsApplied: "Applied {n} AI drawings",
     canvasAutoLayoutDone: "Arranged {n} shapes",
     canvasComponentDropped: "Added {name} to the canvas",
+    promptQueued: "Prompt queued, waiting for the agent…",
+    promptAccepted: "Agent accepted the prompt ✓",
   },
 };
 
@@ -517,6 +521,9 @@ function handleMessage(msg) {
       break;
     case "conflict":
       showConflictWarning(msg);
+      break;
+    case "prompt_accepted":
+      setPromptStatus(t("promptAccepted"), "accepted");
       break;
   }
 }
@@ -3259,6 +3266,19 @@ function getCanvasInlineStyles() {
 
 // ===== AI Prompt Bar =====
 
+let promptStatusTimer = null;
+
+function setPromptStatus(text, cls) {
+  const status = $("prompt-status");
+  if (!status) return;
+  status.textContent = text;
+  status.className = "prompt-status show" + (cls ? " " + cls : "");
+  clearTimeout(promptStatusTimer);
+  promptStatusTimer = setTimeout(() => {
+    status.className = "prompt-status";
+  }, cls === "accepted" ? 4000 : 20000);
+}
+
 function setupPromptBar() {
   const input = $("prompt-input");
   const sendBtn = $("prompt-send");
@@ -3267,7 +3287,21 @@ function setupPromptBar() {
   const sendPrompt = () => {
     const text = input.value.trim();
     if (!text) return;
-    send({ type: "prompt", prompt: text });
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      send({ type: "prompt", prompt: text });
+    } else {
+      // WebSocket unavailable: fall back to the REST prompt endpoint so the
+      // instruction still reaches the agent queue.
+      fetch("/api/prompt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: text }),
+      }).catch((err) => {
+        console.error("Prompt fallback failed:", err);
+        setPromptStatus(t("promptQueued") + " (WS↓)", "queued");
+      });
+    }
+    setPromptStatus(t("promptQueued"), "queued");
     input.value = "";
     // Visual feedback
     sendBtn.classList.add("sent");

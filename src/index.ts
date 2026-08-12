@@ -923,6 +923,15 @@ function broadcastPromptQueued(prompt: string): void {
   });
 }
 
+function broadcastPromptAccepted(prompt: string): void {
+  const message = JSON.stringify({ type: "prompt_accepted", prompt });
+  wss.clients.forEach((client: WebSocket) => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(message);
+    }
+  });
+}
+
 // ===== Broadcast state changes to all WebSocket clients =====
 
 stateStore.on("change", (change: unknown) => {
@@ -948,6 +957,12 @@ stateStore.on("activity", (entry: unknown) => {
       client.send(message);
     }
   });
+});
+
+// When the agent consumes a queued prompt, tell every dashboard so the
+// "waiting for agent" status flips to "accepted".
+stateStore.on("prompt_accepted", (prompt: unknown) => {
+  broadcastPromptAccepted(String(prompt));
 });
 
 // ===== Start Everything =====

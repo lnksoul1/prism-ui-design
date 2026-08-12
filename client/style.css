@@ -3653,3 +3653,49 @@ body[data-theme="dark"] .canvas-editor-wrap {
 .prism-toast.toast-error {
   background: rgba(190, 40, 60, 0.94);
 }
+
+/* ===== Panel scrolling fix (left/right columns) ===== */
+.panel {
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.panel .activity-list,
+.panel .library-list,
+.panel .token-list,
+.panel .layer-tree,
+.panel .version-list,
+.panel .comment-list {
+  flex: 0 0 auto;
+  max-height: none;
+  overflow-y: visible;
+}
+
+/* Prompt delivery status (agent communication feedback) */
+.prompt-status {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateY(2px);
+  transition: opacity 0.25s var(--ease), transform 0.25s var(--ease);
+}
+.prompt-status.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+.prompt-status.queued {
+  color: var(--accent-bright);
+  border-color: var(--border-accent);
+  background: var(--accent-bg);
+}
+.prompt-status.accepted {
+  color: #16a34a;
+  border-color: rgba(22, 163, 74, 0.35);
+  background: rgba(22, 163, 74, 0.1);
+}

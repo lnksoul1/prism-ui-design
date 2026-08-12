@@ -203,6 +203,22 @@ test("canvas draw queue: add, read, clear per page", () => {
   assert.equal(stateStore.getCanvasDraws(pageId).length, 0);
 });
 
+test("consumePendingPrompt returns the prompt and emits acceptance", () => {
+  let accepted: unknown = null;
+  stateStore.once("prompt_accepted", (prompt) => {
+    accepted = prompt;
+  });
+  stateStore.setPendingPrompt("make it blue");
+
+  assert.equal(stateStore.getPendingPrompt(), "make it blue");
+  const consumed = stateStore.consumePendingPrompt();
+  assert.equal(consumed, "make it blue");
+  assert.equal(accepted, "make it blue");
+  assert.equal(stateStore.getPendingPrompt(), null);
+  // A second consume finds nothing and emits nothing.
+  assert.equal(stateStore.consumePendingPrompt(), null);
+});
+
 test("canvasShapeCount counts shape records only", () => {
   const doc = docWithShapes([
     { id: "shape:a", typeName: "shape", type: "geo", x: 0, y: 0, props: { w: 1, h: 1 } },

@@ -76,6 +76,12 @@ test("dashboard loads with the premium empty state", async ({ page }: { page: Pa
   await expect(page.locator(".placeholder-guide")).toBeVisible();
   await expect(page.locator("#prompt-input")).toBeVisible();
   await expect(page.locator("#project-btn")).toBeVisible();
+
+  // Sending a prompt shows a delivery status chip (queued for the agent)
+  await page.fill("#prompt-input", "hello agent");
+  await page.click("#prompt-send");
+  await expect(page.locator("#prompt-status")).toHaveClass(/show/);
+  await expect(page.locator("#prompt-status")).not.toBeEmpty();
   expect(errors).toEqual([]);
 });
 

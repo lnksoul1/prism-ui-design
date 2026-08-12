@@ -2068,9 +2068,9 @@ No arguments required.`,
     },
     async () => {
       try {
-        const prompt = store.getPendingPrompt();
+        const prompt = store.consumePendingPrompt();
         if (prompt) {
-          store.clearPendingPrompt();
+          store.recordPromptAccepted(prompt);
           return {
             content: [{ type: "text", text: `# User Prompt Found\n\nThe user sent the following instruction via the client dashboard:\n\n"${prompt}"\n\nThe prompt has been cleared. Consider acting on it now.` }],
             structuredContent: { success: true, has_prompt: true, prompt },

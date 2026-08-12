@@ -177,6 +177,8 @@ Dashboard 顶部"预览 / 画布"切换。**画布模式**内置 tldraw 无限�
 - 模板优先：空白画布自动弹出模板选择（SaaS/电商/博客/作品集/看板/空白画布），一键生成后继续手绘
 - 自动保存：绘制变更防抖自动保存到 `/api/canvas`；"写回页面文件"把整张画布导出为真实 HTML（`client/canvas-page.html`）
 - AI 可感知：`design_get_canvas`（查看用户画了什么）、`design_apply_canvas`（把画布采纳为组件）
+- 指令状态可见：发送指令后显示“排队中”，Agent 经 `design_check_prompts` 接收时显示“已接收 ✓”（WS 断开自动回退 REST）
+- 左右侧栏可滚动：图层/设计库/版本/评论/令牌/活动日志随侧栏整列滚动
 
 ### 实时画布
 

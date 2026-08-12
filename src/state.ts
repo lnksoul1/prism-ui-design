@@ -856,6 +856,24 @@ class DesignStateStore extends EventEmitter {
     this.pendingPrompt = null;
   }
 
+  /**
+   * Consume the pending prompt (called when the agent polls via
+   * `design_check_prompts`) and emit an event so the server can broadcast
+   * an "accepted" acknowledgment back to the dashboard.
+   */
+  consumePendingPrompt(): string | null {
+    const prompt = this.pendingPrompt;
+    if (!prompt) return null;
+    this.pendingPrompt = null;
+    this.emit("prompt_accepted", prompt);
+    return prompt;
+  }
+
+  /** Log that the agent accepted a user prompt (does not mutate design). */
+  recordPromptAccepted(prompt: string): void {
+    this.logActivity("prompt_accepted", "prompt", `Agent accepted prompt: ${prompt}`, "ai");
+  }
+
   // ===== Canvas Documents (方案A canvas-first editing) =====
 
   /** Save a tldraw snapshot for a page. Stored opaquely as JSON. */

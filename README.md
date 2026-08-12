@@ -272,6 +272,27 @@ loop:
 Every queued prompt is also written to the activity log and broadcast over
 WebSocket as `{ type: "prompt_queued", prompt }`.
 
+## Dashboard shortcuts & quick actions
+
+The dashboard follows common design-tool interaction patterns (inspired by
+Figma / Linear / Penpot):
+
+| Shortcut | Action |
+|---|---|
+| `?` | Toggle the keyboard-shortcut help overlay |
+| `Ctrl+K` | Open the command palette (type to filter, ↑↓ to select, Enter to run) |
+| `/` | Focus the AI instruction input |
+| `P` | Toggle canvas editor / preview mode |
+| `Ctrl+Z` / `Ctrl+Shift+Z` | Undo / redo |
+| `Del` | Delete the selected component |
+
+The prompt bar also shows one-click instruction chips (dark mode, light mode,
+SaaS/e-commerce templates, clear). Instructions run locally through the built-in
+prompt executor when they match, and are queued for the agent otherwise.
+The drawing-canvas template picker renders each built-in template with a
+semantic miniature thumbnail (hero + feature grid, product grid, dashboard
+stats + chart, etc.) so non-designers can pick a starting point visually.
+
 ## Configuration (environment)
 
 | Variable | Default | Effect |

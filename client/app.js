@@ -184,6 +184,38 @@ const I18N = {
     promptQueued: "指令已排队，等待 Agent 处理…",
     promptAccepted: "Agent 已接收指令 ✓",
     promptExecuted: "已执行：{summary}",
+    helpTitle: "快捷键",
+    helpGeneral: "常用",
+    helpEdit: "编辑",
+    scHelp: "打开快捷键帮助",
+    scPalette: "打开命令面板",
+    scPrompt: "聚焦指令输入",
+    scCanvas: "画布 / 预览切换",
+    scUndo: "撤销",
+    scRedo: "重做",
+    scDelete: "删除选中组件",
+    cmdPlaceholder: "搜索命令或直接输入指令…",
+    cmdHint: "↑↓ 选择 · Enter 执行 · Esc 关闭",
+    cmdNoResults: "没有匹配的命令",
+    cmdAddPage: "新建页面",
+    cmdThemeDark: "切换深色模式",
+    cmdThemeLight: "切换浅色模式",
+    cmdTplSaaS: "应用 SaaS 模板",
+    cmdTplEcommerce: "应用电商模板",
+    cmdClear: "清空画布",
+    cmdProject: "打开项目",
+    cmdSaveProject: "保存项目",
+    cmdExport: "导出代码",
+    cmdCanvas: "打开画布编辑器",
+    cmdScreenshot: "下载 PNG 截图",
+    cmdHelp: "快捷键帮助",
+    cmdUndo: "撤销",
+    cmdRedo: "重做",
+    chipDark: "🌙 深色模式",
+    chipLight: "☀️ 浅色模式",
+    chipSaaS: "🚀 SaaS 模板",
+    chipEcommerce: "🛍️ 电商模板",
+    chipClear: "🗑️ 清空",
   },
   en: {
     connected: "Connected",
@@ -309,6 +341,38 @@ const I18N = {
     promptQueued: "Prompt queued, waiting for the agent…",
     promptAccepted: "Agent accepted the prompt ✓",
     promptExecuted: "Executed: {summary}",
+    helpTitle: "Keyboard shortcuts",
+    helpGeneral: "General",
+    helpEdit: "Editing",
+    scHelp: "Open shortcut help",
+    scPalette: "Open command palette",
+    scPrompt: "Focus the prompt input",
+    scCanvas: "Toggle canvas / preview",
+    scUndo: "Undo",
+    scRedo: "Redo",
+    scDelete: "Delete selected component",
+    cmdPlaceholder: "Search commands or type an instruction…",
+    cmdHint: "↑↓ navigate · Enter run · Esc close",
+    cmdNoResults: "No matching commands",
+    cmdAddPage: "New page",
+    cmdThemeDark: "Switch to dark mode",
+    cmdThemeLight: "Switch to light mode",
+    cmdTplSaaS: "Apply SaaS template",
+    cmdTplEcommerce: "Apply e-commerce template",
+    cmdClear: "Clear canvas",
+    cmdProject: "Open projects",
+    cmdSaveProject: "Save project",
+    cmdExport: "Export code",
+    cmdCanvas: "Open canvas editor",
+    cmdScreenshot: "Download PNG screenshot",
+    cmdHelp: "Keyboard shortcut help",
+    cmdUndo: "Undo",
+    cmdRedo: "Redo",
+    chipDark: "🌙 Dark mode",
+    chipLight: "☀️ Light mode",
+    chipSaaS: "🚀 SaaS template",
+    chipEcommerce: "🛍️ E-commerce template",
+    chipClear: "🗑️ Clear",
   },
 };
 
@@ -355,6 +419,8 @@ function setupI18n() {
         // ignore storage errors
       }
       applyI18n();
+      setupPromptChips();
+      renderHelpShortcuts();
       if (canvasEditorMode && $("canvas-editor-hint")) {
         $("canvas-editor-hint").textContent = t("canvasEditorHint");
       }
@@ -3290,39 +3356,323 @@ function setupPromptBar() {
   const sendBtn = $("prompt-send");
   if (!input || !sendBtn) return;
 
-  const sendPrompt = () => {
-    const text = input.value.trim();
-    if (!text) return;
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      send({ type: "prompt", prompt: text });
-    } else {
-      // WebSocket unavailable: fall back to the REST prompt endpoint so the
-      // instruction still reaches the agent queue.
-      fetch("/api/prompt", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: text }),
-      }).catch((err) => {
-        console.error("Prompt fallback failed:", err);
-        setPromptStatus(t("promptQueued") + " (WS↓)", "queued");
-      });
-    }
-    setPromptStatus(t("promptQueued"), "queued");
-    input.value = "";
-    // Visual feedback
-    sendBtn.classList.add("sent");
-    sendBtn.textContent = "已发送";
-    setTimeout(() => {
-      sendBtn.classList.remove("sent");
-      sendBtn.textContent = "发送";
-    }, 1200);
-  };
-
-  sendBtn.addEventListener("click", sendPrompt);
+  sendBtn.addEventListener("click", () => sendPrompt());
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
       sendPrompt();
+    }
+  });
+}
+
+function sendPrompt(text) {
+  const input = $("prompt-input");
+  const sendBtn = $("prompt-send");
+  const value = (text !== undefined ? String(text) : input ? input.value : "").trim();
+  if (!value) return;
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    send({ type: "prompt", prompt: value });
+  } else {
+    // WebSocket unavailable: fall back to the REST prompt endpoint so the
+    // instruction still reaches the agent queue.
+    fetch("/api/prompt", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: value }),
+    }).catch((err) => {
+      console.error("Prompt fallback failed:", err);
+      setPromptStatus(t("promptQueued") + " (WS↓)", "queued");
+    });
+  }
+  setPromptStatus(t("promptQueued"), "queued");
+  if (input) input.value = "";
+  // Visual feedback
+  if (sendBtn) {
+    sendBtn.classList.add("sent");
+    sendBtn.textContent = t("sent");
+    setTimeout(() => {
+      sendBtn.classList.remove("sent");
+      sendBtn.textContent = t("send");
+    }, 1200);
+  }
+}
+
+// ===== Quick actions: prompt chips, shortcuts help, command palette =====
+
+const QUICK_CHIP_PROMPTS = [
+  { key: "chipDark", prompt: "深色模式" },
+  { key: "chipLight", prompt: "浅色模式" },
+  { key: "chipSaaS", prompt: "应用 SaaS 模板" },
+  { key: "chipEcommerce", prompt: "应用电商模板" },
+  { key: "chipClear", prompt: "清空" },
+];
+
+function setupPromptChips() {
+  const container = $("prompt-chips");
+  if (!container) return;
+  container.innerHTML = "";
+  QUICK_CHIP_PROMPTS.forEach((chip) => {
+    const btn = el("button", "prompt-chip", t(chip.key));
+    btn.type = "button";
+    btn.addEventListener("click", () => sendPrompt(chip.prompt));
+    container.appendChild(btn);
+  });
+}
+
+function renderHelpShortcuts() {
+  const grid = $("help-grid");
+  if (!grid) return;
+  grid.innerHTML = "";
+  const groups = [
+    {
+      title: t("helpGeneral"),
+      items: [
+        { keys: ["?"], labelKey: "scHelp" },
+        { keys: ["Ctrl", "K"], labelKey: "scPalette" },
+        { keys: ["/"], labelKey: "scPrompt" },
+        { keys: ["P"], labelKey: "scCanvas" },
+      ],
+    },
+    {
+      title: t("helpEdit"),
+      items: [
+        { keys: ["Ctrl", "Z"], labelKey: "scUndo" },
+        { keys: ["Ctrl", "Shift", "Z"], labelKey: "scRedo" },
+        { keys: ["Del"], labelKey: "scDelete" },
+      ],
+    },
+  ];
+  groups.forEach((group) => {
+    const section = el("div", "help-section");
+    section.appendChild(el("div", "help-section-title", group.title));
+    group.items.forEach((item) => {
+      const row = el("div", "help-row");
+      const kbdWrap = el("div", "help-keys");
+      item.keys.forEach((k, i) => {
+        if (i > 0) kbdWrap.appendChild(el("span", "help-key-plus", "+"));
+        kbdWrap.appendChild(el("kbd", "help-key", k));
+      });
+      row.appendChild(kbdWrap);
+      row.appendChild(el("span", "help-row-label", t(item.labelKey)));
+      section.appendChild(row);
+    });
+    grid.appendChild(section);
+  });
+}
+
+function toggleHelp(force) {
+  const overlay = $("help-overlay");
+  if (!overlay) return false;
+  const show = force !== undefined ? force : overlay.style.display !== "flex";
+  overlay.style.display = show ? "flex" : "none";
+  return show;
+}
+
+function buildCommands() {
+  const pageCount = currentState && currentState.pages ? currentState.pages.length + 1 : 1;
+  return [
+    {
+      id: "add_page",
+      label: t("cmdAddPage"),
+      icon: "📄",
+      run: () => send({ type: "add_page", name: "页面 " + pageCount }),
+    },
+    { id: "theme_dark", label: t("cmdThemeDark"), icon: "🌙", run: () => send({ type: "set_theme", mode: "dark" }) },
+    { id: "theme_light", label: t("cmdThemeLight"), icon: "☀️", run: () => send({ type: "set_theme", mode: "light" }) },
+    { id: "tpl_saas", label: t("cmdTplSaaS"), icon: "🚀", run: () => sendPrompt("应用 SaaS 模板") },
+    { id: "tpl_ecommerce", label: t("cmdTplEcommerce"), icon: "🛍️", run: () => sendPrompt("应用电商模板") },
+    { id: "clear", label: t("cmdClear"), icon: "🗑️", run: () => sendPrompt("清空") },
+    { id: "project", label: t("cmdProject"), icon: "🗂️", run: () => { const b = $("project-btn"); if (b) b.click(); } },
+    { id: "save", label: t("cmdSaveProject"), icon: "💾", run: saveCurrentProject },
+    { id: "export", label: t("cmdExport"), icon: "📤", run: () => { const b = $("export-btn"); if (b) b.click(); } },
+    { id: "canvas", label: t("cmdCanvas"), icon: "✏️", run: () => setCanvasEditorMode(true) },
+    { id: "screenshot", label: t("cmdScreenshot"), icon: "📸", run: takeScreenshot },
+    { id: "help", label: t("cmdHelp"), icon: "❓", run: () => toggleHelp(true) },
+    { id: "undo", label: t("cmdUndo"), icon: "↩️", run: () => send({ type: "undo" }) },
+    { id: "redo", label: t("cmdRedo"), icon: "↪️", run: () => send({ type: "redo" }) },
+  ];
+}
+
+function saveCurrentProject() {
+  const projectBtn = $("project-btn");
+  const saveBtn = $("project-save-btn");
+  if (projectBtn) projectBtn.click();
+  if (saveBtn) saveBtn.click();
+}
+
+let commandActiveIndex = -1;
+let commandItems = [];
+
+function commandPaletteOpen() {
+  const overlay = $("command-overlay");
+  return overlay && overlay.style.display === "flex";
+}
+
+function closeCommandPalette() {
+  const overlay = $("command-overlay");
+  const input = $("command-input");
+  if (overlay) overlay.style.display = "none";
+  if (input) input.blur();
+}
+
+function toggleCommandPalette() {
+  const overlay = $("command-overlay");
+  const input = $("command-input");
+  if (!overlay) return;
+  const open = overlay.style.display !== "flex";
+  overlay.style.display = open ? "flex" : "none";
+  if (open) {
+    commandActiveIndex = -1;
+    if (input) input.value = "";
+    renderCommandList("");
+    if (input) setTimeout(() => input.focus(), 0);
+  } else if (input) {
+    input.blur();
+  }
+}
+
+function runCommandItem(item) {
+  closeCommandPalette();
+  try {
+    item.run();
+  } catch (err) {
+    console.error("Command failed:", err);
+    showToastMsg(err.message || t("cmdNoResults"), true);
+  }
+}
+
+function renderCommandList(filter) {
+  const list = $("command-list");
+  if (!list) return;
+  const q = (filter || "").trim().toLowerCase();
+  let items = buildCommands().filter(
+    (c) => !q || c.label.toLowerCase().includes(q) || c.id.includes(q)
+  );
+  if (q) {
+    const raw = filter.trim();
+    items = [
+      { id: "run_prompt", label: raw, icon: "⚡", run: () => sendPrompt(raw) },
+      ...items,
+    ];
+  }
+  commandItems = items;
+  list.innerHTML = "";
+  if (items.length === 0) {
+    list.appendChild(el("div", "command-empty", t("cmdNoResults")));
+    return;
+  }
+  items.forEach((item, i) => {
+    const row = el("button", "command-row" + (i === commandActiveIndex ? " active" : ""));
+    row.type = "button";
+    row.appendChild(el("span", "command-row-icon", item.icon || ""));
+    row.appendChild(el("span", "command-row-label", item.label));
+    row.addEventListener("click", () => runCommandItem(item));
+    row.addEventListener("mousemove", () => {
+      commandActiveIndex = i;
+      updateCommandActive();
+    });
+    list.appendChild(row);
+  });
+}
+
+function moveCommandActive(delta) {
+  if (commandItems.length === 0) return;
+  commandActiveIndex = (commandActiveIndex + delta + commandItems.length) % commandItems.length;
+  updateCommandActive();
+}
+
+function updateCommandActive() {
+  const list = $("command-list");
+  if (!list) return;
+  Array.from(list.children).forEach((row, i) => {
+    row.classList.toggle("active", i === commandActiveIndex);
+  });
+  const active = list.children[commandActiveIndex];
+  if (active && active.scrollIntoView) active.scrollIntoView({ block: "nearest" });
+}
+
+function setupCommandPalette() {
+  const overlay = $("command-overlay");
+  const input = $("command-input");
+  if (!overlay || !input) return;
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) closeCommandPalette();
+  });
+  input.addEventListener("input", () => {
+    commandActiveIndex = -1;
+    renderCommandList(input.value);
+  });
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      moveCommandActive(1);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      moveCommandActive(-1);
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      const item = commandItems[commandActiveIndex] || commandItems[0];
+      if (item) runCommandItem(item);
+    } else if (e.key === "Escape") {
+      e.stopPropagation();
+      closeCommandPalette();
+    }
+  });
+}
+
+function setupQuickActions() {
+  setupPromptChips();
+  renderHelpShortcuts();
+  const helpOverlay = $("help-overlay");
+  const helpClose = $("help-close");
+  if (helpClose) helpClose.addEventListener("click", () => toggleHelp(false));
+  if (helpOverlay) {
+    helpOverlay.addEventListener("click", (e) => {
+      if (e.target === helpOverlay) toggleHelp(false);
+    });
+  }
+
+  document.addEventListener("keydown", (e) => {
+    const tag = e.target && e.target.tagName;
+    const typing =
+      tag === "INPUT" ||
+      tag === "SELECT" ||
+      tag === "TEXTAREA" ||
+      (e.target && e.target.contentEditable === "true");
+    const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
+    const ctrlKey = isMac ? e.metaKey : e.ctrlKey;
+
+    if (ctrlKey && e.key.toLowerCase() === "k") {
+      e.preventDefault();
+      toggleCommandPalette();
+      return;
+    }
+    if (e.key === "Escape") {
+      if (commandPaletteOpen()) {
+        closeCommandPalette();
+        return;
+      }
+      if (helpOverlay && helpOverlay.style.display === "flex") {
+        toggleHelp(false);
+        return;
+      }
+      return;
+    }
+    if (typing) return;
+    if (e.key === "?") {
+      e.preventDefault();
+      toggleHelp();
+      return;
+    }
+    if (e.key === "/") {
+      e.preventDefault();
+      const input = $("prompt-input");
+      if (input) input.focus();
+      return;
+    }
+    if (e.key.toLowerCase() === "p") {
+      e.preventDefault();
+      setCanvasEditorMode(!canvasEditorMode);
     }
   });
 }
@@ -4443,11 +4793,85 @@ function renderCanvasTemplateCards() {
   cards.forEach((card) => {
     const node = el("button", "template-card");
     node.type = "button";
-    const desc = card.descKey ? `<span class="tc-desc">${t(card.descKey)}</span>` : "";
-    node.innerHTML = `<span class="tc-icon">${card.icon}</span><span class="tc-name">${t(card.nameKey)}</span>${desc}`;
+    node.appendChild(renderTplThumb(card.id));
+    node.appendChild(el("span", "tc-name", t(card.nameKey)));
+    if (card.descKey) {
+      node.appendChild(el("span", "tc-desc", t(card.descKey)));
+    }
     node.addEventListener("click", () => applyTemplateForCanvas(card.id));
     container.appendChild(node);
   });
+}
+
+function renderTplThumb(id) {
+  const thumb = el("span", "tpl-thumb");
+  thumb.dataset.tpl = id;
+  tplThumbBlocks(id).forEach((b) => {
+    const block = el("i", "th");
+    block.style.top = b.top;
+    block.style.left = b.left;
+    block.style.width = b.width;
+    block.style.height = b.height;
+    block.style.background = b.bg;
+    block.style.borderRadius = (b.radius || 3) + "px";
+    thumb.appendChild(block);
+  });
+  return thumb;
+}
+
+function tplThumbBlocks(id) {
+  const B = (top, left, width, height, bg, radius) => ({ top, left, width, height, bg, radius });
+  const soft = "var(--surface-hover)";
+  const softBorder = "var(--border-strong)";
+  const brand = "linear-gradient(135deg, var(--spectrum-1), var(--spectrum-3))";
+  const nav = "linear-gradient(90deg, var(--accent) 0 26%, " + soft + " 26% 52%, " + softBorder + " 56% 100%)";
+  const map = {
+    saas_landing: [
+      B("6px", "7%", "86%", "7px", nav),
+      B("21px", "7%", "46%", "25px", brand, 5),
+      B("30px", "7%", "17%", "5px", "rgba(255,255,255,.6)"),
+      B("56px", "7%", "25%", "21px", soft, 4),
+      B("56px", "37%", "25%", "21px", soft, 4),
+      B("56px", "67%", "25%", "21px", soft, 4),
+    ],
+    ecommerce_home: [
+      B("6px", "7%", "86%", "7px", nav),
+      B("21px", "7%", "86%", "18px", "linear-gradient(135deg, var(--spectrum-2), var(--spectrum-4))", 5),
+      B("48px", "7%", "25%", "30px", soft, 4),
+      B("48px", "37%", "25%", "30px", soft, 4),
+      B("48px", "67%", "25%", "30px", soft, 4),
+    ],
+    blog_post: [
+      B("6px", "7%", "86%", "7px", nav),
+      B("22px", "7%", "62%", "7px", "var(--accent-bright)", 3),
+      B("34px", "7%", "34%", "5px", softBorder, 3),
+      B("47px", "7%", "86%", "24px", "linear-gradient(135deg, rgba(255,255,255,.16), rgba(255,255,255,.05))", 5),
+      B("79px", "7%", "86%", "4px", soft, 3),
+    ],
+    portfolio: [
+      B("6px", "7%", "86%", "7px", nav),
+      B("22px", "7%", "22%", "22px", brand, "50%"),
+      B("34px", "34%", "30%", "6px", "var(--accent-bright)", 3),
+      B("45px", "34%", "22%", "5px", softBorder, 3),
+      B("60px", "7%", "25%", "18px", soft, 4),
+      B("60px", "37%", "25%", "18px", soft, 4),
+      B("60px", "67%", "25%", "18px", soft, 4),
+    ],
+    dashboard: [
+      B("6px", "7%", "86%", "7px", nav),
+      B("21px", "7%", "25%", "17px", soft, 4),
+      B("21px", "37%", "25%", "17px", soft, 4),
+      B("21px", "67%", "25%", "17px", soft, 4),
+      B("47px", "7%", "86%", "30px", "linear-gradient(135deg, rgba(255,255,255,.12), rgba(255,255,255,.04))", 5),
+      B("52px", "12%", "9%", "19px", "var(--accent-bright)", 2),
+      B("64px", "25%", "9%", "8px", "var(--spectrum-2)", 2),
+      B("58px", "38%", "9%", "13px", "var(--spectrum-3)", 2),
+      B("70px", "51%", "9%", "5px", "var(--spectrum-4)", 2),
+      B("62px", "64%", "9%", "10px", "var(--spectrum-2)", 2),
+    ],
+    blank: [],
+  };
+  return map[id] || [];
 }
 
 function setupCanvasEditor() {
@@ -4842,6 +5266,8 @@ function init() {
   setupActivityFilter();
   setupScreenshot();
   setupPromptBar();
+  setupCommandPalette();
+  setupQuickActions();
   setupConflictCheck();
   setupDesignLibrary();
   setupCanvasEditor();

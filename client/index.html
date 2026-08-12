@@ -209,9 +209,36 @@
 
 <!-- Prompt Bar (fixed at bottom) -->
 <div class="prompt-bar">
-  <input type="text" class="prompt-input" id="prompt-input" data-i18n-placeholder="promptPlaceholder" placeholder="输入指令给 AI，如：把主色改成蓝色">
-  <button class="prompt-send" id="prompt-send" data-i18n="send">发送</button>
-  <span class="prompt-status" id="prompt-status"></span>
+  <div class="prompt-chips" id="prompt-chips" role="list" aria-label="快捷指令"></div>
+  <div class="prompt-bar-main">
+    <input type="text" class="prompt-input" id="prompt-input" data-i18n-placeholder="promptPlaceholder" placeholder="输入指令给 AI，如：把主色改成蓝色">
+    <button class="prompt-send" id="prompt-send" data-i18n="send">发送</button>
+    <span class="prompt-status" id="prompt-status"></span>
+  </div>
+</div>
+
+<!-- Shortcut Help Overlay -->
+<div class="overlay-help" id="help-overlay" style="display:none">
+  <div class="help-modal">
+    <div class="modal-header">
+      <h3 data-i18n="helpTitle">快捷键</h3>
+      <button class="modal-close" id="help-close">×</button>
+    </div>
+    <div class="help-grid" id="help-grid"></div>
+  </div>
+</div>
+
+<!-- Command Palette -->
+<div class="overlay-command" id="command-overlay" style="display:none">
+  <div class="command-palette">
+    <div class="command-search-row">
+      <span class="command-search-icon">⌘</span>
+      <input type="text" id="command-input" data-i18n-placeholder="cmdPlaceholder" placeholder="搜索命令或直接输入指令…" autocomplete="off">
+      <span class="command-esc-hint">Esc</span>
+    </div>
+    <div class="command-list" id="command-list"></div>
+    <div class="command-hint" id="command-hint" data-i18n="cmdHint">↑↓ 选择 · Enter 执行 · Esc 关闭</div>
+  </div>
 </div>
 
 <!-- Project Modal -->

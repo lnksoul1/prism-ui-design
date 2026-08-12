@@ -150,3 +150,42 @@ test("start-from-template creates a page", async ({ page }: { page: Page }) => {
   await page.locator("#empty-template").click();
   await expect(page.locator(".comp-wrapper").first()).toBeVisible({ timeout: 10000 });
 });
+
+test("quick actions: prompt chips, ? help, Ctrl+K palette, template thumbnails", async ({ page }: { page: Page }) => {
+  const errors: string[] = [];
+  page.on("console", (msg) => {
+    if (msg.type() === "error") errors.push(msg.text());
+  });
+  page.on("pageerror", (err) => errors.push(String(err)));
+
+  await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "domcontentloaded", timeout: 60000 });
+  await expect(page.locator(".topbar")).toBeVisible();
+
+  // Prompt chips render and one-click instructions execute via the built-in engine
+  await expect(page.locator(".prompt-chip")).toHaveCount(5);
+  await page.locator(".prompt-chip").first().click();
+  await expect(page.locator("#prompt-status")).toContainText("已执行", { timeout: 5000 });
+
+  // Help overlay toggles with "?" and lists shortcuts
+  await page.keyboard.press("?");
+  await expect(page.locator("#help-overlay")).toBeVisible();
+  await expect(page.locator(".help-row").first()).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#help-overlay")).not.toBeVisible();
+
+  // Command palette via Ctrl+K filters and executes the first match
+  await page.keyboard.press("Control+K");
+  await expect(page.locator("#command-overlay")).toBeVisible();
+  await page.fill("#command-input", "深色");
+  await expect(page.locator(".command-row").first()).toBeVisible();
+  await page.keyboard.press("Enter");
+  await expect(page.locator("#command-overlay")).not.toBeVisible();
+  await expect(page.locator("#prompt-status")).toContainText("已执行", { timeout: 5000 });
+
+  // Drawing canvas template picker shows semantic thumbnails
+  await page.locator("#canvas-mode-design").click();
+  await expect(page.locator("#canvas-template-modal")).toBeVisible({ timeout: 10000 });
+  await expect(page.locator(".tpl-thumb")).toHaveCount(6);
+
+  expect(errors).toEqual([]);
+});

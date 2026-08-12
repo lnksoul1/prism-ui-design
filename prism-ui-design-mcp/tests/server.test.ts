@@ -263,6 +263,22 @@ test(
         assert.equal(pngRes.status, 501);
       }
 
+      // Capture the live dashboard itself as a reference image in the canvas
+      const captureRes = await fetch(`${base}/api/capture-client`, { method: "POST" });
+      if (playwrightAvailable) {
+        const capture = (await captureRes.json()) as { success: boolean; file: string; component_id: string };
+        assert.equal(capture.success, true);
+        assert.ok(capture.file.endsWith(".png"));
+        const preview = await fetch(`${base}/previews/${capture.file}`);
+        assert.equal(preview.status, 200);
+        const capturedState = (await (await fetch(`${base}/api/state`)).json()) as {
+          components: Array<{ type: string }>;
+        };
+        assert.ok(capturedState.components.some((c) => c.type === "image"), "capture adds an image component");
+      } else {
+        assert.equal(captureRes.status, 501);
+      }
+
       const change = await Promise.race([
         changePromise,
         new Promise<never>((_, reject) =>

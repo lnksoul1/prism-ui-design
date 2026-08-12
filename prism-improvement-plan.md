@@ -5,7 +5,7 @@
 > 依据：源码审计（28 个 MCP 工具、REST/WS 双通道、客户端渲染引擎）+ 2026-08 外部调研
 
 > **实施进度（2026-08-12 更新）**
-> - ✅ Phase A1 测试体系：255 项测试全绿 + Playwright e2e 冒烟 2/2
+> - ✅ Phase A1 测试体系：256 项测试全绿 + Playwright e2e 冒烟 2/2
 > - ✅ Phase A2 持久化：`design_save_project` / `design_load_project` / `design_list_projects` + REST 端点 + 自动保存/启动恢复 + Dashboard 保存/加载按钮
 > - ✅ Phase A3 双通道收敛：`src/service/design-service.ts` 共享服务层 + WS 消息 zod 严格校验（拒绝未知类型/非法字段）
 > - ✅ Phase A4 修复：`getState()` 返回 canUndo/canRedo；阴影令牌纳入风格预设与客户端阴影 Tab；组件选中机制（动效应用目标）；新增缩放/图层面板/属性检查器
@@ -58,6 +58,7 @@
 > - ✅ 服务可打开客户端界面文件：`parseClientShell` 解析 `client/index.html` 外壳（顶栏/侧栏/标签/画布/指令栏/令牌），`POST /api/import-client` + 空状态"打开客户端界面"入口，导入后套用品牌令牌
 > - ✅ 画布滚动修复：移除嵌套 `flex:1 + overflow:hidden` 压缩，滚动容器随内容增高（流式与自由模式均可滚动）
 > - ✅ 自由调整修复：自由模式拖拽不再被 `.comp-overlay` 拦截（整块组件可拖动），切换时给出操作提示
+> - ✅ 实际界面参照：`POST /api/capture-client` 用 Playwright 自截图真实 Dashboard，`/previews` 静态服务，截图以 image 组件落入画布作为参考
 > - 🔄 待办：C6 完整智能体、F9 更多框架、规格 Phase 2 截图转 UI（依赖视觉模型）、数据库/多项目工作区
 
 ---

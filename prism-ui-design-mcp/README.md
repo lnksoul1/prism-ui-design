@@ -193,6 +193,9 @@ optional Playwright browser smoke (`npm run test:e2e`).
 - **Open client UI**: the canvas empty state includes "打开客户端界面", which
   imports the dashboard's own shell (`client/index.html`) as a design page
   (`POST /api/import-client`) so the service can adjust this project's UI.
+- **Capture actual UI**: "截取实际界面" screenshots the live dashboard with
+  Playwright (`POST /api/capture-client`) and drops the image into the canvas
+  as a faithful reference next to the structural components.
 - **Prompt queue visibility**: queued user prompts appear in the activity log
   and are broadcast as `prompt_queued` for connected agents/gateways.
 - **Canvas fixes**: the preview canvas now scrolls when content overflows, and

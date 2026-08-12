@@ -73,7 +73,7 @@ import { createVersion, diffVersions, listVersions, restoreVersion } from "./ver
 // Phase B capabilities: token interop, a11y audit, render preview, resources, prompts
 import { registerTokenInteropTools } from "./tools/token-interop.js";
 import { registerAuditTool } from "./tools/design-audit.js";
-import { registerRenderTool } from "./tools/design-render.js";
+import { previewsDir, registerRenderTool } from "./tools/design-render.js";
 import { registerTemplateTools } from "./tools/template-tools.js";
 import { registerVersionTools } from "./tools/version-tools.js";
 import { registerDesignMdTool } from "./tools/design-md.js";
@@ -176,6 +176,7 @@ const wsClients = new Map<WebSocket, { id: string; joinedAt: string; cursor?: { 
 const clientDir = path.resolve(__dirname, "../client");
 app.use(express.json());
 app.use(express.static(clientDir));
+app.use("/previews", express.static(previewsDir()));
 
 // API: Get current state
 app.get("/api/state", (_req, res) => {
@@ -418,6 +419,29 @@ app.post("/api/import-client", (req, res) => {
     res.json({ success: true, ...result });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+// API: Capture the live dashboard itself with Playwright and drop the
+// screenshot into the canvas as a reference image.
+app.post("/api/capture-client", async (_req, res) => {
+  try {
+    const { captureUrlPng } = await import("./tools/design-render.js");
+    const url = `http://127.0.0.1:${PORT}/`;
+    const png = await captureUrlPng(url, "desktop");
+    const file = `capture-${Date.now()}.png`;
+    const { writeFileSync } = await import("fs");
+    writeFileSync(path.join(previewsDir(), file), png);
+    const node = stateStore.addComponent(
+      "image",
+      undefined,
+      { src: `/previews/${file}`, alt: "Prism 实际界面" },
+      null,
+      "user"
+    );
+    res.json({ success: true, file, url, component_id: node.id, bytes: png.length });
+  } catch (error) {
+    res.status(501).json({ error: error instanceof Error ? error.message : String(error) });
   }
 });
 

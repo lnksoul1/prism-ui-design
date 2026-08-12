@@ -18,7 +18,7 @@ const VIEWPORTS: Record<string, { width: number; height: number; label: string }
   mobile: { width: 390, height: 844, label: "Mobile" },
 };
 
-function previewsDir(): string {
+export function previewsDir(): string {
   const dir = process.env.PRISM_PREVIEWS_DIR || path.join(process.cwd(), ".prism-previews");
   mkdirSync(dir, { recursive: true });
   return dir;
@@ -72,6 +72,35 @@ export async function renderHtmlToPng(
     const page = await browser.newPage({ viewport: { width: viewport.width, height: viewport.height } });
     await page.setContent(html, { waitUntil: "networkidle" });
     return await page.screenshot({ fullPage: false });
+  } finally {
+    await browser.close();
+  }
+}
+
+/**
+ * Open a live URL in headless Chromium and return a PNG buffer of the page.
+ * Throws when Playwright/Chromium are unavailable.
+ */
+export async function captureUrlPng(url: string, viewportName: string = "desktop"): Promise<Buffer> {
+  const viewport = VIEWPORTS[viewportName] || VIEWPORTS.desktop;
+  const { chromium } = (await import("playwright" as string)) as {
+    chromium: {
+      launch(): Promise<{
+        newPage(options?: { viewport?: { width: number; height: number } }): Promise<{
+          goto(url: string, options?: { waitUntil?: string; timeout?: number }): Promise<unknown>;
+          waitForTimeout(ms: number): Promise<void>;
+          screenshot(options?: { fullPage?: boolean }): Promise<Buffer>;
+        }>;
+        close(): Promise<void>;
+      }>;
+    };
+  };
+  const browser = await chromium.launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: viewport.width, height: viewport.height } });
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20000 });
+    await page.waitForTimeout(600);
+    return await page.screenshot();
   } finally {
     await browser.close();
   }

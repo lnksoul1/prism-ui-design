@@ -144,6 +144,8 @@ const I18N = {
     openClientUi: "打开客户端界面",
     openClientUiDesc: "把 Prism 客户端 UI 导入画布进行调整",
     freeformHint: "拖动组件调整位置，拖边角调整大小",
+    captureActualUi: "截取实际界面",
+    captureActualUiDesc: "截取真实运行的 Dashboard 作为参考图",
   },
   en: {
     connected: "Connected",
@@ -229,6 +231,8 @@ const I18N = {
     openClientUi: "Open client UI",
     openClientUiDesc: "Import the Prism client UI into the canvas to adjust it",
     freeformHint: "Drag components to move, drag corners to resize",
+    captureActualUi: "Capture actual UI",
+    captureActualUiDesc: "Screenshot the live dashboard as a reference",
   },
 };
 
@@ -603,6 +607,10 @@ function renderCanvas() {
               <span class="pa-icon">◈</span>
               <span><span class="pa-title">${t("openClientUi")}</span><br><span class="pa-desc">${t("openClientUiDesc")}</span></span>
             </button>
+            <button class="placeholder-action" id="empty-capture">
+              <span class="pa-icon">📷</span>
+              <span><span class="pa-title">${t("captureActualUi")}</span><br><span class="pa-desc">${t("captureActualUiDesc")}</span></span>
+            </button>
           </div>
         </div>
       </div>
@@ -658,6 +666,22 @@ function renderCanvas() {
           }
         } catch (err) {
           console.error("Client UI import failed:", err);
+        }
+      });
+    }
+    const captureBtn = $("empty-capture");
+    if (captureBtn) {
+      captureBtn.addEventListener("click", async () => {
+        try {
+          const response = await fetch("/api/capture-client", { method: "POST" });
+          if (response.ok) {
+            await fetchInitialState();
+          } else {
+            const data = await response.json().catch(() => ({}));
+            alert(data.error || "截取失败");
+          }
+        } catch (err) {
+          console.error("Capture failed:", err);
         }
       });
     }

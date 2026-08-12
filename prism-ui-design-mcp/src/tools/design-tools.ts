@@ -320,6 +320,110 @@ function componentToHTML(node: ComponentNode): string {
       html = `<div class="avatar${v}">${src ? `<img src="${escapeHTML(src)}" alt="${name}"/>` : `<span>${name.charAt(0)}</span>`}</div>`;
       break;
     }
+    // Spec 3.4 — new component types
+    case "input": {
+      const label = p.label ? `<label class="input__label">${escapeHTML(String(p.label))}</label>` : "";
+      html = `<div class="input${v}">${label}<input type="${escapeHTML(String(p.type ?? "text"))}" placeholder="${escapeHTML(String(p.placeholder ?? ""))}" value="${escapeHTML(String(p.value ?? ""))}"/></div>`;
+      break;
+    }
+    case "grid": {
+      const items = Array.isArray(p.items)
+        ? (p.items as (string | Record<string, unknown>)[])
+            .map((it) => {
+              const title = typeof it === "string" ? it : String(it.title ?? "");
+              const desc = typeof it === "object" ? String(it.description ?? "") : "";
+              return `<div class="grid__cell"><h3>${escapeHTML(title)}</h3>${desc ? `<p>${escapeHTML(desc)}</p>` : ""}</div>`;
+            })
+            .join("")
+        : "";
+      html = `<div class="grid${v}">${items}</div>`;
+      break;
+    }
+    case "table": {
+      const columns = Array.isArray(p.columns)
+        ? (p.columns as unknown[]).map((c) => `<th>${escapeHTML(String(c))}</th>`).join("")
+        : "";
+      const rows = Array.isArray(p.rows)
+        ? (p.rows as unknown[][])
+            .map((row) => `<tr>${row.map((cell) => `<td>${escapeHTML(String(cell))}</td>`).join("")}</tr>`)
+            .join("")
+        : "";
+      html = `<table class="table${v}"><thead><tr>${columns}</tr></thead><tbody>${rows}</tbody></table>`;
+      break;
+    }
+    case "alert": {
+      const type = node.variant || String(p.type ?? "info");
+      html = `<div class="alert alert--${escapeHTML(type)}"><strong>${escapeHTML(String(p.title ?? ""))}</strong><p>${escapeHTML(String(p.text ?? ""))}</p></div>`;
+      break;
+    }
+    case "tooltip": {
+      html = `<span class="tooltip${v}">${escapeHTML(String(p.trigger ?? "?"))}<span class="tooltip__bubble">${escapeHTML(String(p.text ?? ""))}</span></span>`;
+      break;
+    }
+    case "bento_grid": {
+      const items = Array.isArray(p.items)
+        ? (p.items as Record<string, unknown>[])
+            .map(
+              (it) =>
+                `<div class="bento__tile bento__${escapeHTML(String(it.size ?? "medium"))}"><h3>${escapeHTML(String(it.title ?? ""))}</h3>${it.text ? `<p>${escapeHTML(String(it.text))}</p>` : ""}</div>`
+            )
+            .join("")
+        : "";
+      html = `<div class="bento${v}">${items}</div>`;
+      break;
+    }
+    case "skeleton": {
+      const rows = Number(p.rows ?? 3);
+      html = `<div class="skeleton${v}">${Array.from({ length: rows }, (_, i) => `<div class="skeleton__line" style="width:${92 - i * 14}%"></div>`).join("")}</div>`;
+      break;
+    }
+    case "command_palette": {
+      const items = Array.isArray(p.items)
+        ? (p.items as (string | Record<string, unknown>)[])
+            .map((it) => `<div class="command__item">${escapeHTML(typeof it === "string" ? it : String(it.label ?? ""))}</div>`)
+            .join("")
+        : "";
+      html = `<div class="command${v}"><div class="command__search">⌘ ${escapeHTML(String(p.placeholder ?? ""))}</div>${items}</div>`;
+      break;
+    }
+    case "glass_card": {
+      html = `<div class="glass-card${v}"><h3>${escapeHTML(String(p.title ?? ""))}</h3><p>${escapeHTML(String(p.text ?? ""))}</p></div>`;
+      break;
+    }
+    case "fab": {
+      html = `<button class="fab${v}" title="${escapeHTML(String(p.hint ?? ""))}">${escapeHTML(String(p.label ?? "+"))}</button>`;
+      break;
+    }
+    case "marquee": {
+      const items = Array.isArray(p.items)
+        ? (p.items as (string | Record<string, unknown>)[])
+            .map((it) => `<span class="marquee__item">${escapeHTML(typeof it === "string" ? it : String(it.title ?? ""))}</span>`)
+            .join("")
+        : "";
+      html = `<div class="marquee${v}">${items}</div>`;
+      break;
+    }
+    case "feature_grid": {
+      const items = Array.isArray(p.items)
+        ? (p.items as Record<string, unknown>[])
+            .map(
+              (it) =>
+                `<div class="feature-grid__cell"><span class="feature-grid__icon">${escapeHTML(String(it.icon ?? "✦"))}</span><h3>${escapeHTML(String(it.title ?? ""))}</h3><p>${escapeHTML(String(it.description ?? ""))}</p></div>`
+            )
+            .join("")
+        : "";
+      html = `<div class="feature-grid${v}">${items}</div>`;
+      break;
+    }
+    case "cookie_banner": {
+      html = `<div class="cookie-banner${v}"><span>🍪 ${escapeHTML(String(p.text ?? ""))}</span><button class="btn">${escapeHTML(String(p.accept_text ?? "接受"))}</button><button class="btn btn--ghost">${escapeHTML(String(p.decline_text ?? "拒绝"))}</button></div>`;
+      break;
+    }
+    case "toggle": {
+      const checked = p.checked ? " checked" : "";
+      html = `<label class="toggle${v}"><span class="toggle__track${checked}"><span class="toggle__thumb"></span></span><span>${escapeHTML(String(p.label ?? ""))}</span></label>`;
+      break;
+    }
     default: {
       const text = escapeHTML(JSON.stringify(p));
       html = `<div class="component component--${escapeHTML(node.type)}">${text}</div>`;
@@ -349,9 +453,9 @@ function htmlToJSX(html: string): string {
     .replace(/<br([^>]*?)(?<!\/)>/g, "<br$1 />");
 }
 
-function exportToHTML(state: DesignState): string {
+function exportToHTML(state: DesignState, components: ComponentNode[] = state.components): string {
   const cssVars = tokensToCSSVariables(state.tokens);
-  const componentsHTML = state.components
+  const componentsHTML = components
     .map((c) => `  ${componentToHTML(c)}`)
     .join("\n");
 
@@ -436,6 +540,99 @@ ${cssVars}
 </head>
 <body>
 ${componentsHTML}
+</body>
+</html>`;
+}
+
+/** Full standalone HTML for a single page (used by the presentation export). */
+function exportPageHTML(state: DesignState, page: { id: string; name: string; components: ComponentNode[] }): string {
+  return exportToHTML({ ...state, projectName: `${state.projectName} — ${page.name}` }, page.components);
+}
+
+/**
+ * Export all pages as a navigable HTML slide deck (functional plan F9).
+ * Each page becomes a slide; arrow keys navigate, Print renders all slides.
+ */
+function exportPresentationHTML(state: DesignState): string {
+  const cssVars = tokensToCSSVariables(state.tokens);
+  const slides = state.pages
+    .map(
+      (page) =>
+        `<section class="slide" data-page="${escapeHTML(page.name)}">
+  <header class="slide__header"><span class="slide__title">${escapeHTML(page.name)}</span></header>
+  <main class="slide__body">${page.components.map((c) => componentToHTML(c)).join("\n")}</main>
+</section>`
+    )
+    .join("\n");
+
+  return `<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeHTML(state.projectName)} — 演示</title>
+  <style>
+${cssVars}
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; }
+    body { font-family: var(--font-body, sans-serif); background: var(--color-bg, #0b0a0f); color: var(--color-text, #f2f0f8); overflow: hidden; }
+    .deck { height: 100vh; position: relative; }
+    .slide {
+      position: absolute; inset: 0;
+      display: none;
+      flex-direction: column;
+      padding: 2.5rem 3rem;
+      overflow-y: auto;
+      background: var(--color-bg, #0b0a0f);
+    }
+    .slide.active { display: flex; }
+    .slide__header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 1rem; border-bottom: 1px solid var(--color-border, rgba(255,255,255,0.1)); }
+    .slide__title { font-family: var(--font-display, sans-serif); font-size: var(--text-xl, 1.25rem); font-weight: 700; }
+    .slide__body { flex: 1; padding-top: 2rem; }
+    .deck__nav { position: fixed; bottom: 1.25rem; right: 1.25rem; display: flex; gap: 0.5rem; z-index: 10; }
+    .deck__nav button { padding: 0.55rem 1.1rem; border: 1px solid var(--color-border, rgba(255,255,255,0.15)); border-radius: var(--radius-md, 8px); background: var(--color-surface, rgba(255,255,255,0.08)); color: var(--color-text, #fff); cursor: pointer; font-size: 0.9rem; }
+    .deck__counter { position: fixed; bottom: 1.5rem; left: 1.5rem; font-size: 0.8rem; color: var(--color-text-muted, #9ca3af); z-index: 10; }
+    @media print {
+      body { overflow: visible; }
+      .slide { position: relative; display: flex !important; page-break-after: always; height: auto; min-height: 100vh; }
+      .deck__nav, .deck__counter { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="deck" id="deck">
+${slides}
+  </div>
+  <div class="deck__counter" id="deck-counter">1 / ${state.pages.length}</div>
+  <div class="deck__nav">
+    <button onclick="PrismDeck.go(-1)">←</button>
+    <button onclick="PrismDeck.go(1)">→</button>
+    <button onclick="window.print()">打印</button>
+  </div>
+  <script>
+    (function () {
+      const slides = document.querySelectorAll('.slide');
+      let index = 0;
+      const counter = document.getElementById('deck-counter');
+      function render() {
+        slides.forEach((s, i) => s.classList.toggle('active', i === index));
+        counter.textContent = (index + 1) + ' / ' + slides.length;
+      }
+      window.PrismDeck = {
+        go: function (delta) {
+          index = Math.max(0, Math.min(slides.length - 1, index + delta));
+          render();
+        }
+      };
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); window.PrismDeck.go(1); }
+        if (e.key === 'ArrowLeft') { e.preventDefault(); window.PrismDeck.go(-1); }
+        if (e.key === 'Home') { index = 0; render(); }
+        if (e.key === 'End') { index = slides.length - 1; render(); }
+      });
+      render();
+    })();
+  </script>
 </body>
 </html>`;
 }
@@ -527,8 +724,259 @@ function tokensToFigmaJSON(tokens: DesignTokens): string {
   return JSON.stringify(result, null, 2);
 }
 
+/** React TypeScript export: typed props + embedded design tokens. */
+function exportToReactTs(state: DesignState): string {
+  const cssVars = tokensToCSSVariables(state.tokens);
+  const componentsJSX = state.components
+    .map((c) => `      ${htmlToJSX(componentToHTML(c))}`)
+    .join("\n");
+
+  return `import React from 'react';
+
+/**
+ * ${escapeHTML(state.projectName)}
+ * Style: ${escapeHTML(state.style)}
+ * Generated by UI Design MCP Server
+ */
+export interface DesignPageProps {
+  /** Page title shown in the document head */
+  title?: string;
+}
+
+const TOKENS = \`${cssVars}\`;
+
+export default function DesignPage({ title }: DesignPageProps): React.JSX.Element {
+  return (
+    <div className="design-page" data-testid="design-page">
+      <style>{TOKENS}</style>
+      <style>{String.raw\`
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: var(--font-body, sans-serif); background: var(--color-bg, #ffffff); color: var(--color-text, #1a1a1a); }
+      \`}</style>
+      <title>{title ?? ${JSON.stringify(state.projectName)}}</title>
+${componentsJSX}
+    </div>
+  );
+}`;
+}
+
+/** Standalone CSS export: design tokens as custom properties + base component styles. */
+function exportToCss(state: DesignState): string {
+  const cssVars = tokensToCSSVariables(state.tokens);
+  return `${cssVars}
+
+/* Prism generated component styles */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: var(--font-body, sans-serif); background: var(--color-bg, #ffffff); color: var(--color-text, #1a1a1a); line-height: var(--line-height-normal, 1.5); }
+.navbar { display: flex; justify-content: space-between; align-items: center; padding: 1rem 2rem; background: var(--color-surface); border-bottom: 1px solid var(--color-border); }
+.hero { text-align: center; padding: 4rem 2rem; }
+.hero h1 { font-family: var(--font-display, sans-serif); font-size: var(--text-4xl); }
+.btn { display: inline-block; padding: 0.75rem 2rem; border: none; border-radius: var(--radius-md); background: var(--color-primary); color: #fff; cursor: pointer; }
+.btn--secondary { background: transparent; border: 1px solid var(--color-border); color: var(--color-primary); }
+.btn--ghost { background: transparent; color: var(--color-primary); }
+.btn--danger { background: var(--color-error, #ef4444); }
+.card { padding: 1.5rem; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); }
+.card--elevated { box-shadow: 0 12px 28px rgba(0,0,0,0.14); }
+.card--outlined { background: transparent; border-width: 2px; box-shadow: none; }
+/* Tokens are consumed by components; component classes above are a minimal base set. */`;
+}
+
+/** Extract a hex color from a color token value (falls back to a default). */
+function tokenHex(value: string | undefined, fallback: string): string {
+  if (value && /^#[0-9A-Fa-f]{6}$/.test(value)) return value.slice(1).toUpperCase();
+  return fallback.replace("#", "").toUpperCase();
+}
+
+/** Flutter export: MaterialApp with token-derived theme + widget list. */
+function exportToFlutter(state: DesignState): string {
+  const colors = state.tokens.colors;
+  const primary = tokenHex(colors["color-primary"]?.value, "#7C3AED");
+  const bg = tokenHex(colors["color-bg"]?.value, "#FFFFFF");
+  const surface = tokenHex(colors["color-surface"]?.value, "#F5F5F5");
+  const text = tokenHex(colors["color-text"]?.value, "#1A1A1A");
+
+  const widgets = state.components.map((c) => `      ${componentToFlutter(c, text)}`).join("\n");
+
+  return `// ${escapeHTML(state.projectName)} — generated by UI Design MCP Server
+import 'package:flutter/material.dart';
+
+const Color kPrimary = Color(0xFF${primary});
+const Color kBackground = Color(0xFF${bg});
+const Color kSurface = Color(0xFF${surface});
+const Color kText = Color(0xFF${text});
+
+void main() => runApp(const PrismApp());
+
+class PrismApp extends StatelessWidget {
+  const PrismApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: ${JSON.stringify(state.projectName)},
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        useMaterial3: true,
+        colorSchemeSeed: kPrimary,
+        scaffoldBackgroundColor: kBackground,
+      ),
+      home: Scaffold(
+        body: SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: const [
+${widgets}
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+`;
+}
+
+function componentToFlutter(node: ComponentNode, textColor: string): string {
+  const p = node.props;
+  switch (node.type) {
+    case "navbar": {
+      const brand = escapeHTML(String(p.brand ?? "Logo"));
+      return `Text(${JSON.stringify(brand)}, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: kPrimary)),`;
+    }
+    case "hero": {
+      const title = escapeHTML(String(p.title ?? ""));
+      const subtitle = escapeHTML(String(p.subtitle ?? ""));
+      const btn = p.button_text ? `FilledButton(onPressed: () {}, child: Text(${JSON.stringify(escapeHTML(String(p.button_text)))})),` : "";
+      return `Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Text(${JSON.stringify(title)}, style: Theme.of(context).textTheme.headlineMedium),
+        const SizedBox(height: 8),
+        Text(${JSON.stringify(subtitle)}, style: TextStyle(color: kText.withValues(alpha: 0.7))),
+        const SizedBox(height: 16),
+        ${btn || "const SizedBox.shrink()"},
+      ]),`;
+    }
+    case "button": {
+      return `FilledButton(onPressed: () {}, child: Text(${JSON.stringify(escapeHTML(String(p.text ?? p.label ?? "Button")))})),`;
+    }
+    case "card": {
+      return `Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(${JSON.stringify(escapeHTML(String(p.title ?? "")))}, style: const TextStyle(fontWeight: FontWeight.w600)),
+        if (${JSON.stringify(p.description ? escapeHTML(String(p.description)) : "")} != "")
+          Text(${JSON.stringify(escapeHTML(String(p.description ?? "")))}, style: const TextStyle(fontSize: 13)),
+      ]))),`;
+    }
+    case "stats": {
+      const items = Array.isArray(p.items) ? (p.items as Record<string, unknown>[]) : [];
+      return `Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
+        ${items.map((it) => `Expanded(child: Column(children: [Text(${JSON.stringify(escapeHTML(String(it.value ?? "")))}, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: kPrimary)), Text(${JSON.stringify(escapeHTML(String(it.label ?? "")))}),]))`).join(", ")}
+      ]),`;
+    }
+    case "footer": {
+      return `Text(${JSON.stringify(escapeHTML(String(p.copyright ?? "© 2026")))}, textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey)),`;
+    }
+    case "text_section": {
+      return `Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(${JSON.stringify(escapeHTML(String(p.title ?? "")))}, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        Text(${JSON.stringify(escapeHTML(String(p.text ?? p.body ?? "")))}),
+      ]),`;
+    }
+    default: {
+      return `Card(child: Padding(padding: const EdgeInsets.all(16), child: Text(${JSON.stringify(escapeHTML(String(p.title ?? p.text ?? node.type)))}, style: const TextStyle(color: Colors.grey)))),`;
+    }
+  }
+}
+
+/** SwiftUI export: token-derived colors + component view list. */
+function exportToSwiftUI(state: DesignState): string {
+  const colors = state.tokens.colors;
+  const primary = tokenHex(colors["color-primary"]?.value, "#7C3AED");
+  const bg = tokenHex(colors["color-bg"]?.value, "#FFFFFF");
+  const text = tokenHex(colors["color-text"]?.value, "#1A1A1A");
+  const views = state.components.map((c) => `      ${componentToSwiftUI(c)}`).join("\n");
+
+  return `// ${escapeHTML(state.projectName)} — generated by UI Design MCP Server
+import SwiftUI
+
+extension Color {
+  init(hex: UInt32) {
+    self.init(
+      .sRGB,
+      red: Double((hex >> 16) & 0xFF) / 255,
+      green: Double((hex >> 8) & 0xFF) / 255,
+      blue: Double(hex & 0xFF) / 255,
+      opacity: 1
+    )
+  }
+}
+
+struct DesignPage: View {
+  private let primary = Color(hex: 0x${primary})
+  private let background = Color(hex: 0x${bg})
+  private let textColor = Color(hex: 0x${text})
+
+  var body: some View {
+    ScrollView {
+      VStack(alignment: .leading, spacing: 16) {
+${views}
+      }
+      .padding(16)
+      .frame(maxWidth: .infinity)
+    }
+    .background(background)
+    .foregroundStyle(textColor)
+  }
+}
+`;
+}
+
+function componentToSwiftUI(node: ComponentNode): string {
+  const p = node.props;
+  switch (node.type) {
+    case "navbar": {
+      return `Text(${JSON.stringify(escapeHTML(String(p.brand ?? "Logo")))}).font(.title2.bold()).foregroundStyle(primary)`;
+    }
+    case "hero": {
+      const title = escapeHTML(String(p.title ?? ""));
+      const subtitle = escapeHTML(String(p.subtitle ?? ""));
+      const btn = p.button_text
+        ? `Button(${JSON.stringify(escapeHTML(String(p.button_text)))}) { }.buttonStyle(.borderedProminent)`
+        : "";
+      return `VStack(alignment: .leading, spacing: 8) {
+        Text(${JSON.stringify(title)}).font(.largeTitle.bold())
+        Text(${JSON.stringify(subtitle)}).foregroundStyle(.secondary)
+        ${btn}
+      }`;
+    }
+    case "button": {
+      return `Button(${JSON.stringify(escapeHTML(String(p.text ?? p.label ?? "Button")))}) { }.buttonStyle(.borderedProminent)`;
+    }
+    case "card": {
+      return `VStack(alignment: .leading, spacing: 4) {
+        Text(${JSON.stringify(escapeHTML(String(p.title ?? "")))}).font(.headline)
+        Text(${JSON.stringify(escapeHTML(String(p.description ?? "")))}).font(.subheadline).foregroundStyle(.secondary)
+      }
+      .padding()
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))`;
+    }
+    case "stats": {
+      const items = Array.isArray(p.items) ? (p.items as Record<string, unknown>[]) : [];
+      return `HStack {
+        ${items.map((it) => `VStack { Text(${JSON.stringify(escapeHTML(String(it.value ?? "")))}).font(.title.bold()).foregroundStyle(primary); Text(${JSON.stringify(escapeHTML(String(it.label ?? "")))}).font(.caption) }.frame(maxWidth: .infinity)`).join("\n        ")}
+      }`;
+    }
+    case "footer": {
+      return `Text(${JSON.stringify(escapeHTML(String(p.copyright ?? "© 2026")))}).font(.footnote).frame(maxWidth: .infinity).foregroundStyle(.secondary)`;
+    }
+    default: {
+      return `Text(${JSON.stringify(escapeHTML(String(p.title ?? p.text ?? node.type)))}).foregroundStyle(.secondary)`;
+    }
+  }
+}
+
 export function exportDesign(
-  format: "html" | "react" | "vue" | "figma_tokens"
+  format: "html" | "react" | "vue" | "figma_tokens" | "react-ts" | "css" | "presentation" | "flutter" | "swiftui"
 ): string {
   const state = stateStore.getState();
   switch (format) {
@@ -540,6 +988,16 @@ export function exportDesign(
       return exportToVue(state);
     case "figma_tokens":
       return tokensToFigmaJSON(state.tokens);
+    case "react-ts":
+      return exportToReactTs(state);
+    case "css":
+      return exportToCss(state);
+    case "presentation":
+      return exportPresentationHTML(state);
+    case "flutter":
+      return exportToFlutter(state);
+    case "swiftui":
+      return exportToSwiftUI(state);
     default:
       return "";
   }
@@ -559,7 +1017,8 @@ The client dashboard will update in real-time when this is called.
 
 Args:
   - project_name (string): Name for this design project
-  - style (string): Design style — 'minimal', 'bold', 'playful', 'dark', 'editorial', 'tech'
+  - style (string): Design style — one of the 14 presets: minimal, bold, playful, dark, editorial, tech,
+    glassmorphism, neumorphism, claymorphism, aurora, brutalism, cyberpunk, organic, luxury
   - base_color (string, optional): Override the preset base color (hex like "#6366F1")
 
 Examples:
@@ -568,7 +1027,22 @@ Examples:
       inputSchema: {
         project_name: z.string().describe("Project name"),
         style: z
-          .enum(["minimal", "bold", "playful", "dark", "editorial", "tech"])
+          .enum([
+            "minimal",
+            "bold",
+            "playful",
+            "dark",
+            "editorial",
+            "tech",
+            "glassmorphism",
+            "neumorphism",
+            "claymorphism",
+            "aurora",
+            "brutalism",
+            "cyberpunk",
+            "organic",
+            "luxury",
+          ])
           .describe("Design style preset"),
         base_color: z
           .string()
@@ -759,26 +1233,30 @@ export function registerDesignAnimationTool(server: McpServer): void {
       title: "Set Component Animation",
       description: `Set animation for a component. The client dashboard will play the animation in real-time.
 
-Animation entries: fadeUp, fadeIn, scaleIn, slideRight, slideLeft, slideUp, spring
+Animation entries (13): fadeUp, fadeIn, scaleIn, slideLeft, slideRight, slideUp, spring,
+bounceIn, flipIn, cinematic, shimmer, glitch, morphBlob
+Hover animations (7): scaleUp, lift, glow, ripple, spotlight, magnetic, tilt
 Curves: ease, easeOut, easeInOut, spring, linear, bounce
 
 Args:
   - component_id (string): Component to animate
   - entry (string, optional): Entry animation type
-  - hover (string, optional): Hover animation type (scaleUp, lift, glow)
+  - hover (string, optional): Hover animation type
   - duration (number, optional): Duration in seconds (0.1 - 3.0). Default: 0.3
   - delay (number, optional): Delay in seconds (0 - 3.0). Default: 0
   - curve (string, optional): Easing curve. Default: 'easeOut'
+  - stagger (number, optional): Child stagger delay in seconds (0 - 1.0). Default: 0
 
 Example:
-  - design_set_animation(component_id="comp_123", entry="fadeUp", duration=0.5, delay=0.2, curve="spring")`,
+  - design_set_animation(component_id="comp_123", entry="bounceIn", duration=0.5, stagger=0.08, curve="spring")`,
       inputSchema: {
         component_id: z.string().describe("Component ID"),
-        entry: z.string().optional().describe("Entry animation (fadeUp, fadeIn, scaleIn, slideRight, etc.)"),
-        hover: z.string().optional().describe("Hover animation (scaleUp, lift, glow)"),
+        entry: z.string().optional().describe("Entry animation (13 types: fadeUp, fadeIn, scaleIn, slideLeft, slideRight, slideUp, spring, bounceIn, flipIn, cinematic, shimmer, glitch, morphBlob)"),
+        hover: z.string().optional().describe("Hover animation (7 types: scaleUp, lift, glow, ripple, spotlight, magnetic, tilt)"),
         duration: z.number().min(0.1).max(3.0).optional().describe("Duration in seconds"),
         delay: z.number().min(0).max(3.0).optional().describe("Delay in seconds"),
         curve: z.string().optional().describe("Easing curve (ease, easeOut, spring, etc.)"),
+        stagger: z.number().min(0).max(1.0).optional().describe("Child stagger delay in seconds"),
       },
       annotations: {
         readOnlyHint: false,
@@ -795,6 +1273,7 @@ Example:
           duration: params.duration,
           delay: params.delay,
           curve: params.curve,
+          stagger: params.stagger,
         }, "ai");
 
         if (!success) {
@@ -1332,15 +1811,20 @@ Supported formats:
   - react: React JSX component code
   - vue: Vue Single File Component (SFC) code
   - figma_tokens: Design tokens in Figma token JSON format
+  - react-ts: React + TypeScript component with typed props interface
+  - css: Design tokens as CSS custom properties + base component styles
+  - presentation: All pages as a navigable HTML slide deck (arrow keys / print)
+  - flutter: Flutter MaterialApp + widget list with token-derived theme
+  - swiftui: SwiftUI view with token-derived colors
 
 Args:
-  - format (string): Export format — 'html', 'react', 'vue', 'figma_tokens'
+  - format (string): Export format — 'html', 'react', 'vue', 'figma_tokens', 'react-ts', 'css', 'presentation', 'flutter', 'swiftui'
 
 Example:
   - design_export(format="html")`,
       inputSchema: {
         format: z
-          .enum(["html", "react", "vue", "figma_tokens"])
+          .enum(["html", "react", "vue", "figma_tokens", "react-ts", "css", "presentation", "flutter", "swiftui"])
           .describe("Export format"),
       },
       annotations: {

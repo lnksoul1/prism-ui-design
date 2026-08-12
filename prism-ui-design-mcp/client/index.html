@@ -26,6 +26,8 @@
     <button class="toolbar-btn" id="undo-btn" title="撤销 (Ctrl+Z)">↶</button>
     <button class="toolbar-btn" id="redo-btn" title="重做 (Ctrl+Shift+Z)">↷</button>
     <button class="toolbar-btn" id="screenshot-btn" title="截图">📸</button>
+    <button class="toolbar-btn" id="save-btn" title="保存项目">💾 保存</button>
+    <button class="toolbar-btn" id="load-btn" title="加载最近保存的项目">📂 加载</button>
     <button class="toolbar-btn" id="import-btn" title="导入项目">📥 导入</button>
     <button class="toolbar-btn" id="export-btn" title="导出代码">📤 导出</button>
     <button class="theme-toggle" id="theme-toggle" title="切换主题">🌙</button>
@@ -78,19 +80,19 @@
     <div class="canvas-toolbar">
       <div class="canvas-toolbar-left">
         <span class="canvas-label">实时预览画布</span>
-        <div class="platform-switcher" id="platform-switcher">
+        <div class="platform-switcher" id="platform-switcher" role="group" aria-label="平台切换">
           <div class="platform-group">
-            <button class="platform-btn active" data-platform="web-desktop" title="Web 桌面">🖥️</button>
-            <button class="platform-btn" data-platform="web-tablet" title="Web 平板">📱</button>
-            <button class="platform-btn" data-platform="web-mobile" title="Web 手机">📲</button>
+            <button class="platform-btn active" data-platform="web-desktop" title="Web 桌面">🖥️ 桌面</button>
+            <button class="platform-btn" data-platform="web-tablet" title="Web 平板">📱 平板</button>
+            <button class="platform-btn" data-platform="web-mobile" title="Web 手机">📲 手机</button>
           </div>
           <div class="platform-group">
-            <button class="platform-btn" data-platform="desktop-macos" title="macOS 应用"></button>
-            <button class="platform-btn" data-platform="desktop-windows" title="Windows 应用">⊞</button>
+            <button class="platform-btn" data-platform="desktop-macos" title="macOS 应用"> macOS</button>
+            <button class="platform-btn" data-platform="desktop-windows" title="Windows 应用">⊞ Windows</button>
           </div>
           <div class="platform-group">
-            <button class="platform-btn" data-platform="mobile-ios" data-icon="ios" title="iOS 应用"></button>
-            <button class="platform-btn" data-platform="mobile-android" data-icon="android" title="Android 应用">🤖</button>
+            <button class="platform-btn" data-platform="mobile-ios" title="iOS 应用"> iOS</button>
+            <button class="platform-btn" data-platform="mobile-android" title="Android 应用">🤖 Android</button>
           </div>
         </div>
       </div>
@@ -105,14 +107,17 @@
     </div>
     <div class="canvas-scroll-wrap" id="canvas-scroll-wrap">
       <div class="canvas-frame" id="canvas-frame">
-        <div class="platform-chrome" id="platform-chrome"></div>
-        <div class="canvas" id="canvas">
-          <div class="canvas-placeholder">
-            <div class="placeholder-icon">◈</div>
-            <p>等待 AI Agent 创建设计</p>
-            <p class="placeholder-hint">AI 会通过 MCP 工具调用在此画布上构建 UI</p>
-            <p class="placeholder-hint">你的调整会实时同步回 AI</p>
+        <div class="platform-chrome" id="platform-chrome">
+          <div class="chrome-top" id="chrome-top"></div>
+          <div class="canvas" id="canvas">
+            <div class="canvas-placeholder">
+              <div class="placeholder-icon">◈</div>
+              <p>等待 AI Agent 创建设计</p>
+              <p class="placeholder-hint">AI 会通过 MCP 工具调用在此画布上构建 UI</p>
+              <p class="placeholder-hint">你的调整会实时同步回 AI</p>
+            </div>
           </div>
+          <div class="chrome-bottom" id="chrome-bottom"></div>
         </div>
       </div>
     </div>
@@ -145,6 +150,7 @@
       <button class="tab-btn active" data-tab="colors">色彩</button>
       <button class="tab-btn" data-tab="typography">字体</button>
       <button class="tab-btn" data-tab="spacing">间距</button>
+      <button class="tab-btn" data-tab="shadows">阴影</button>
       <button class="tab-btn" data-tab="radii">圆角</button>
     </div>
     <div class="token-list" id="token-list">

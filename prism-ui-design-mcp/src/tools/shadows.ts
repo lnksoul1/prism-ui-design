@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { ShadowSystem, ShadowItem } from "../types.js";
 import { formatCssVariables, markdownTable } from "../utils/formatter.js";
+import { SHADOW_SYSTEM_PRESETS } from "../tokens.js";
 
 export function registerShadowTool(server: McpServer): void {
   server.registerTool(
@@ -41,32 +42,8 @@ Examples:
     },
     async (params) => {
       try {
-        const presets: Record<string, { shadow: string; usage: string }[]> = {
-          subtle: [
-            { shadow: "0 1px 2px 0 rgba(0,0,0,0.05)", usage: "Buttons, inputs, small cards" },
-            { shadow: "0 2px 4px 0 rgba(0,0,0,0.06)", usage: "Cards, dropdowns, popovers" },
-            { shadow: "0 4px 8px -1px rgba(0,0,0,0.08)", usage: "Hovered cards, sticky headers" },
-            { shadow: "0 8px 16px -2px rgba(0,0,0,0.10)", usage: "Modals, floating panels" },
-            { shadow: "0 16px 32px -4px rgba(0,0,0,0.12)", usage: "Full-screen overlays, dialogs" },
-          ],
-          medium: [
-            { shadow: "0 1px 3px 0 rgba(0,0,0,0.12), 0 1px 2px 0 rgba(0,0,0,0.06)", usage: "Buttons, inputs, small cards" },
-            { shadow: "0 4px 6px -1px rgba(0,0,0,0.12), 0 2px 4px 0 rgba(0,0,0,0.06)", usage: "Cards, dropdowns, popovers" },
-            { shadow: "0 10px 15px -3px rgba(0,0,0,0.12), 0 4px 6px 0 rgba(0,0,0,0.06)", usage: "Hovered cards, sticky headers" },
-            { shadow: "0 20px 25px -5px rgba(0,0,0,0.15), 0 8px 10px 0 rgba(0,0,0,0.06)", usage: "Modals, floating panels" },
-            { shadow: "0 25px 50px -12px rgba(0,0,0,0.25)", usage: "Full-screen overlays, dialogs" },
-          ],
-          sharp: [
-            { shadow: "0 0 0 1px rgba(0,0,0,0.05)", usage: "Borders, outlined elements" },
-            { shadow: "0 1px 3px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05)", usage: "Cards, dropdowns, popovers" },
-            { shadow: "0 4px 6px rgba(0,0,0,0.20), 0 0 0 1px rgba(0,0,0,0.05)", usage: "Hovered cards, sticky headers" },
-            { shadow: "0 10px 15px rgba(0,0,0,0.25), 0 0 0 1px rgba(0,0,0,0.05)", usage: "Modals, floating panels" },
-            { shadow: "0 20px 30px rgba(0,0,0,0.35), 0 0 0 1px rgba(0,0,0,0.05)", usage: "Full-screen overlays, dialogs" },
-          ],
-        };
-
         const names = ["sm", "md", "lg", "xl", "2xl"];
-        const preset = presets[params.style];
+        const preset = SHADOW_SYSTEM_PRESETS[params.style];
 
         const shadows: ShadowItem[] = names.map((name, i) => ({
           name: `shadow-${name}`,

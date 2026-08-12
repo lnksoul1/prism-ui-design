@@ -34,9 +34,11 @@ import http from "http";
 import path from "path";
 import { fileURLToPath } from "url";
 import { WebSocketServer, WebSocket } from "ws";
-import { SERVER_NAME, SERVER_VERSION, STYLE_PRESETS } from "./constants.js";
-import { stateStore, type AnimationDef } from "./state.js";
-import { applyStyleTokenSet } from "./tokens.js";
+import { SERVER_NAME, SERVER_VERSION } from "./constants.js";
+import { stateStore } from "./state.js";
+
+// Shared mutation layer (used by both REST and WebSocket channels)
+import * as designService from "./service/design-service.js";
 
 // Existing design generation tools
 import { registerColorPaletteTool } from "./tools/color-palette.js";
@@ -54,6 +56,37 @@ import { registerAllDesignTools, exportDesign } from "./tools/design-tools.js";
 
 // Project import module
 import { scanProject, type ExtractedPage } from "./import-project.js";
+
+// Project persistence (save / load / autosave)
+import { registerProjectTools } from "./tools/project-tools.js";
+import {
+  autosavePath,
+  enableAutoSave,
+  loadProject,
+  listProjects,
+  saveProject,
+} from "./project-store.js";
+
+// Phase B capabilities: token interop, a11y audit, render preview, resources, prompts
+import { registerTokenInteropTools } from "./tools/token-interop.js";
+import { registerAuditTool } from "./tools/design-audit.js";
+import { registerRenderTool } from "./tools/design-render.js";
+import { registerTemplateTools } from "./tools/template-tools.js";
+import { registerVersionTools } from "./tools/version-tools.js";
+import { registerDesignMdTool } from "./tools/design-md.js";
+import { registerStyleGuideTools } from "./tools/style-guide-tools.js";
+import { registerSemanticStyleTool } from "./tools/semantic-tools.js";
+import { registerCapabilitiesTool } from "./tools/capabilities.js";
+import { registerWebpageImportTool } from "./tools/webpage-import.js";
+import { registerSpecTools } from "./tools/spec-tools.js";
+import {
+  registerSuggestTool,
+  registerBrandStyleTool,
+  registerReflowTool,
+  registerAutoImproveTool,
+} from "./tools/design-review.js";
+import { registerResources } from "./resources/index.js";
+import { registerPrompts } from "./prompts/index.js";
 
 // ===== Server Initialization =====
 
@@ -78,12 +111,53 @@ registerDesignTokensTool(server);
 // New real-time design tools (init, add_component, set_token, etc.)
 registerAllDesignTools(server);
 
+// Project persistence tools (save / load / list)
+registerProjectTools(server);
+
+// Token interchange (DTCG / CSS / Style Dictionary / Figma Tokens)
+registerTokenInteropTools(server);
+
+// Accessibility audit
+registerAuditTool(server);
+
+// Visual verification (HTML always, PNG when Playwright is installed)
+registerRenderTool(server);
+
+// Templates (C3) and version snapshots (C4)
+registerTemplateTools(server);
+registerVersionTools(server);
+
+// DESIGN.md interop, webpage import, style guides, semantic styling
+registerDesignMdTool(server);
+registerWebpageImportTool(server);
+registerStyleGuideTools(server);
+registerSemanticStyleTool(server);
+
+// Self-describing capability manifest
+registerCapabilitiesTool(server);
+
+// Spec §8.2 alignment tools (list presets/components/pages, token get/batch/delete, project name)
+registerSpecTools(server);
+
+// Design review: suggestions, brand style learning, reflow
+registerSuggestTool(server);
+registerBrandStyleTool(server);
+registerReflowTool(server);
+registerAutoImproveTool(server);
+
+// MCP Resources + Prompts for agent context
+registerResources(server);
+registerPrompts(server);
+
 // ===== HTTP + WebSocket Server (for browser client) =====
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const httpServer = http.createServer(app);
 const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
+
+// Connected dashboard clients (presence tracking)
+const wsClients = new Map<WebSocket, { id: string; joinedAt: string }>();
 
 // Serve static client files
 const clientDir = path.resolve(__dirname, "../client");
@@ -102,8 +176,12 @@ app.post("/api/token", (req, res) => {
     res.status(400).json({ error: "Missing category, key, or value" });
     return;
   }
-  stateStore.setToken(category, key, value, "user");
-  res.json({ success: true });
+  try {
+    designService.setToken(category, key, value, "user");
+    res.json({ success: true });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
+  }
 });
 
 // API: Reorder component (from client drag-and-drop)
@@ -114,7 +192,7 @@ app.post("/api/component/reorder", (req, res) => {
     res.status(400).json({ error: "Missing from_id, to_id, or position" });
     return;
   }
-  const success = stateStore.reorderComponent(from_id, to_id, position, "user");
+  const success = designService.reorderComponent(from_id, to_id, position, "user");
   res.json({ success });
 });
 
@@ -122,26 +200,26 @@ app.post("/api/component/reorder", (req, res) => {
 app.post("/api/component/:id", (req, res) => {
   const { id } = req.params;
   const { props } = req.body;
-  const success = stateStore.updateComponent(id, props, "user");
+  const success = designService.updateComponent(id, props, "user");
   res.json({ success });
 });
 
 // API: Remove component (from client)
 app.delete("/api/component/:id", (req, res) => {
   const { id } = req.params;
-  const success = stateStore.removeComponent(id, "user");
+  const success = designService.removeComponent(id, "user");
   res.json({ success });
 });
 
 // API: Undo
 app.post("/api/undo", (_req, res) => {
-  const success = stateStore.undo();
+  const success = designService.undo();
   res.json({ success, canUndo: stateStore.canUndo(), canRedo: stateStore.canRedo() });
 });
 
 // API: Redo
 app.post("/api/redo", (_req, res) => {
-  const success = stateStore.redo();
+  const success = designService.redo();
   res.json({ success, canUndo: stateStore.canUndo(), canRedo: stateStore.canRedo() });
 });
 
@@ -152,21 +230,21 @@ app.post("/api/page", (req, res) => {
     res.status(400).json({ error: "Missing page name" });
     return;
   }
-  const page = stateStore.addPage(name, "user");
+  const page = designService.addPage(name, "user");
   res.json({ success: true, page_id: page.id, name: page.name });
 });
 
 // API: Switch page
 app.post("/api/page/:id/switch", (req, res) => {
   const { id } = req.params;
-  const success = stateStore.switchPage(id, "user");
+  const success = designService.switchPage(id, "user");
   res.json({ success });
 });
 
 // API: Remove page
 app.delete("/api/page/:id", (req, res) => {
   const { id } = req.params;
-  const success = stateStore.removePage(id, "user");
+  const success = designService.removePage(id, "user");
   res.json({ success });
 });
 
@@ -178,7 +256,7 @@ app.post("/api/page/:id/rename", (req, res) => {
     res.status(400).json({ error: "Missing page name" });
     return;
   }
-  const success = stateStore.renamePage(id, name, "user");
+  const success = designService.renamePage(id, name, "user");
   res.json({ success });
 });
 
@@ -189,7 +267,7 @@ app.post("/api/theme", (req, res) => {
     res.status(400).json({ error: "Mode must be 'light' or 'dark'" });
     return;
   }
-  stateStore.setThemeMode(mode, "user");
+  designService.setTheme(mode, "user");
   res.json({ success: true, mode });
 });
 
@@ -202,8 +280,8 @@ app.get("/api/conflicts", (_req, res) => {
 // API: Export design as code
 app.post("/api/export", (req, res) => {
   const { format } = req.body;
-  if (!["html", "react", "vue", "figma_tokens"].includes(format)) {
-    res.status(400).json({ error: "Invalid format. Must be 'html', 'react', 'vue', or 'figma_tokens'" });
+  if (!["html", "react", "vue", "figma_tokens", "react-ts", "css", "presentation", "flutter", "swiftui"].includes(format)) {
+    res.status(400).json({ error: "Invalid format. Must be 'html', 'react', 'vue', 'figma_tokens', 'react-ts', 'css', 'presentation', 'flutter', or 'swiftui'" });
     return;
   }
   try {
@@ -221,7 +299,7 @@ app.post("/api/prompt", (req, res) => {
     res.status(400).json({ error: "Missing prompt string" });
     return;
   }
-  stateStore.setPendingPrompt(prompt);
+  designService.setPendingPrompt(prompt);
   res.json({ success: true });
 });
 
@@ -321,31 +399,8 @@ app.post("/api/init", (req, res) => {
     return;
   }
   try {
-    stateStore.clearAll("ai");
-    stateStore.setProjectName(project_name, "ai");
-    stateStore.setStyle(style, "ai");
-
-    const preset = STYLE_PRESETS[style];
-    if (!preset) {
-      res.status(400).json({ error: `Unknown style: ${style}` });
-      return;
-    }
-
-    const tokens = applyStyleTokenSet(stateStore, style, base_color, "ai");
-
-    res.json({
-      success: true,
-      project_name,
-      style,
-      base_color: tokens.baseHex,
-      font: `${tokens.font.display.name} + ${tokens.font.body.name}`,
-      token_count:
-        Object.keys(tokens.colors).length +
-        Object.keys(tokens.typography).length +
-        Object.keys(tokens.spacing).length +
-        Object.keys(tokens.radii).length +
-        Object.keys(tokens.transitions).length,
-    });
+    const result = designService.initProject(project_name, style, base_color);
+    res.json(result);
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
   }
@@ -359,14 +414,55 @@ app.post("/api/component", (req, res) => {
     return;
   }
   try {
-    const node = stateStore.addComponent(
-      type,
-      variant,
-      props || {},
-      parent_id || null,
-      "ai"
-    );
+    const node = designService.addComponent(type, variant, props || {}, parent_id || null, "ai");
     res.json({ success: true, id: node.id, type: node.type });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+// API: Save project to disk
+app.post("/api/project/save", (req, res) => {
+  const { name, file } = req.body || {};
+  try {
+    const result = saveProject(typeof name === "string" ? name : undefined, typeof file === "string" ? file : undefined);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+// API: Load project from disk
+app.post("/api/project/load", (req, res) => {
+  const { file } = req.body || {};
+  if (!file || typeof file !== "string") {
+    res.status(400).json({ error: "Missing 'file' field (path to .prism.json)" });
+    return;
+  }
+  try {
+    const result = loadProject(file);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+// API: List saved projects
+app.get("/api/projects", (_req, res) => {
+  try {
+    const projects = listProjects();
+    res.json({ success: true, count: projects.length, projects });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+// API: Render the current design as standalone HTML (screenshot when Playwright available)
+app.get("/api/render", async (_req, res) => {
+  try {
+    const { exportDesign } = await import("./tools/design-tools.js");
+    const html = exportDesign("html");
+    res.json({ success: true, html, code_length: html.length });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
   }
@@ -385,146 +481,55 @@ app.get("/health", (_req, res) => {
 // ===== WebSocket: Real-time sync =====
 
 wss.on("connection", (ws: WebSocket) => {
+  const clientId = `client_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  wsClients.set(ws, { id: clientId, joinedAt: new Date().toISOString() });
+
   // Send current state on connect
   ws.send(JSON.stringify({
     type: "init",
     state: stateStore.getState(),
   }));
+  broadcastPresence();
 
   // Listen for client adjustments
   ws.on("message", (data: Buffer) => {
     try {
-      const msg = JSON.parse(data.toString());
-      handleClientMessage(msg);
-    } catch {
-      // Ignore malformed messages
+      const raw = JSON.parse(data.toString());
+      const parsed = designService.wsMessageSchema.safeParse(raw);
+      if (!parsed.success) {
+        const issues = parsed.error.issues
+          .map((i) => `${i.path.join(".") || "message"}: ${i.message}`)
+          .join("; ");
+        ws.send(JSON.stringify({ type: "error", message: `Invalid client message — ${issues}` }));
+        return;
+      }
+      const result = designService.applyClientMessage(parsed.data);
+      if (!result.ok) {
+        ws.send(JSON.stringify({ type: "error", message: result.detail }));
+      }
+    } catch (error) {
+      ws.send(JSON.stringify({ type: "error", message: `Malformed message: ${error instanceof Error ? error.message : String(error)}` }));
     }
+  });
+
+  ws.on("close", () => {
+    wsClients.delete(ws);
+    broadcastPresence();
   });
 });
 
-function handleClientMessage(msg: { type: string; [key: string]: unknown }): void {
-  switch (msg.type) {
-    case "set_token": {
-      const { category, key, value } = msg;
-      if (typeof category === "string" && typeof key === "string" && typeof value === "string") {
-        stateStore.setToken(category as "colors", key, value, "user");
-      }
-      break;
+function broadcastPresence(): void {
+  const clients = [...wsClients.values()];
+  const message = JSON.stringify({
+    type: "presence",
+    count: clients.length,
+    clients,
+  });
+  wss.clients.forEach((client: WebSocket) => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(message);
     }
-    case "update_component": {
-      const { id, props } = msg;
-      if (typeof id === "string" && props) {
-        stateStore.updateComponent(id, props as Record<string, unknown>, "user");
-      }
-      break;
-    }
-    case "remove_component": {
-      const { id } = msg;
-      if (typeof id === "string") {
-        stateStore.removeComponent(id, "user");
-      }
-      break;
-    }
-    case "undo": {
-      stateStore.undo();
-      break;
-    }
-    case "redo": {
-      stateStore.redo();
-      break;
-    }
-    case "add_page": {
-      const { name } = msg;
-      if (typeof name === "string") {
-        stateStore.addPage(name, "user");
-      }
-      break;
-    }
-    case "switch_page": {
-      const { pageId } = msg;
-      if (typeof pageId === "string") {
-        stateStore.switchPage(pageId, "user");
-      }
-      break;
-    }
-    case "remove_page": {
-      const { pageId } = msg;
-      if (typeof pageId === "string") {
-        stateStore.removePage(pageId, "user");
-      }
-      break;
-    }
-    case "rename_page": {
-      const { pageId, name } = msg;
-      if (typeof pageId === "string" && typeof name === "string") {
-        stateStore.renamePage(pageId, name, "user");
-      }
-      break;
-    }
-    case "reorder_component": {
-      const { fromId, toId, position } = msg;
-      if (typeof fromId === "string" && typeof toId === "string" && (position === "before" || position === "after")) {
-        stateStore.reorderComponent(fromId, toId, position, "user");
-      }
-      break;
-    }
-    case "set_theme": {
-      const { mode } = msg;
-      if (mode === "light" || mode === "dark") {
-        stateStore.setThemeMode(mode, "user");
-      }
-      break;
-    }
-    case "prompt": {
-      const { prompt } = msg;
-      if (typeof prompt === "string") {
-        stateStore.setPendingPrompt(prompt);
-      }
-      break;
-    }
-    case "add_component": {
-      const { component_type, variant, props } = msg;
-      if (typeof component_type === "string") {
-        stateStore.addComponent(
-          component_type,
-          typeof variant === "string" ? variant : undefined,
-          (props as Record<string, unknown>) || {},
-          null,
-          "user"
-        );
-      }
-      break;
-    }
-    case "set_animation": {
-      const { component_id, entry, hover, duration, delay, curve } = msg;
-      if (typeof component_id === "string") {
-        const animation: AnimationDef = {};
-        if (typeof entry === "string") animation.entry = entry;
-        if (typeof hover === "string") animation.hover = hover;
-        if (typeof duration === "number") animation.duration = duration;
-        if (typeof delay === "number") animation.delay = delay;
-        if (typeof curve === "string") animation.curve = curve;
-        stateStore.setAnimation(component_id, animation, "user");
-      }
-      break;
-    }
-    case "apply_style": {
-      const { style } = msg;
-      if (typeof style === "string" && STYLE_PRESETS[style]) {
-        applyStylePreset(style);
-      }
-      break;
-    }
-  }
-}
-
-// ===== Helper: Apply style preset and generate all tokens =====
-
-function applyStylePreset(styleName: string): void {
-  if (!STYLE_PRESETS[styleName]) return;
-
-  stateStore.setStyle(styleName, "user");
-  applyStyleTokenSet(stateStore, styleName, undefined, "user");
+  });
 }
 
 // ===== Broadcast state changes to all WebSocket clients =====
@@ -626,13 +631,30 @@ async function main(): Promise<void> {
   await server.connect(transport);
   console.error(`[${SERVER_NAME} v${SERVER_VERSION}] MCP stdio transport ready for AI agent`);
 
-  // 2. Auto-import existing project pages
-  await autoImportProjectPages();
+  // 2. Restore the most recent project (autosave checkpoint), otherwise auto-import
+  const fs = await import("fs");
+  if (process.env.PRISM_AUTOLOAD !== "off" && fs.existsSync(autosavePath())) {
+    try {
+      const result = loadProject(autosavePath());
+      console.error(
+        `[${SERVER_NAME}] Restored autosaved project "${result.project_name}" (${result.component_count} components)`
+      );
+    } catch (error) {
+      console.error(`[${SERVER_NAME}] Autosave restore failed:`, error instanceof Error ? error.message : String(error));
+      await autoImportProjectPages();
+    }
+  } else {
+    await autoImportProjectPages();
+  }
 
-  // 3. Start HTTP + WebSocket server (for browser client)
+  // 3. Rolling autosave on every state change
+  enableAutoSave();
+
+  // 4. Start HTTP + WebSocket server (for browser client)
   httpServer.listen(PORT, () => {
     console.error(`[${SERVER_NAME}] Dashboard: http://localhost:${PORT}`);
     console.error(`[${SERVER_NAME}] WebSocket: ws://localhost:${PORT}/ws`);
+    console.error(`[${SERVER_NAME}] Project autosave enabled`);
     console.error(`[${SERVER_NAME}] Configure your AI agent to use this MCP server via stdio`);
     console.error(`[${SERVER_NAME}] Open the dashboard URL in your browser to monitor in real-time`);
   });

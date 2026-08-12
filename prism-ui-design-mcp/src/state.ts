@@ -34,6 +34,7 @@ export interface AnimationDef {
   duration?: number;
   delay?: number;
   curve?: string;
+  stagger?: number;
 }
 
 export interface ActivityLogEntry {
@@ -60,6 +61,7 @@ export interface DesignState {
   pages: PageDef[];
   currentPageId: string | null;
   themeMode: "light" | "dark";
+  activePlatform: string;
 }
 
 // ===== State Store (Singleton) =====
@@ -99,6 +101,7 @@ class DesignStateStore extends EventEmitter {
       pages: [defaultPage],
       currentPageId: defaultPage.id,
       themeMode: "light",
+      activePlatform: "web-desktop",
     };
     // Initialize history with the initial state
     this.history = [JSON.parse(JSON.stringify(this.state))];
@@ -178,7 +181,12 @@ class DesignStateStore extends EventEmitter {
   // ===== State Access =====
 
   getState(): DesignState {
-    return JSON.parse(JSON.stringify(this.state));
+    const copy = JSON.parse(JSON.stringify(this.state)) as DesignState;
+    // Expose undo/redo capability so the client dashboard can enable/disable
+    // the undo/redo buttons (see improvement plan A4 / defect C1).
+    copy.canUndo = this.canUndo();
+    copy.canRedo = this.canRedo();
+    return copy;
   }
 
   // ===== Project / Style =====
@@ -201,22 +209,38 @@ class DesignStateStore extends EventEmitter {
     this.commit({ type: "setTheme", mode });
   }
 
+  setPlatform(platform: string, source: "ai" | "user" = "user"): void {
+    this.state.activePlatform = platform;
+    this.logActivity("set_platform", "platform", `Preview platform set to ${platform}`, source);
+    this.commit({ type: "setPlatform", platform });
+  }
+
   // ===== Tokens =====
 
   setToken(
     category: keyof DesignTokens,
     key: string,
     value: string,
-    source: "ai" | "user" = "ai",
+    source: "ai" | "user" | "preset" = "ai",
     description?: string
   ): void {
     this.state.tokens[category][key] = { value, source, description };
-    this.logActivity("set_token", `${category}.${key}`, `${category}.${key} = ${value}`, source);
+    this.logActivity(
+      "set_token",
+      `${category}.${key}`,
+      `${category}.${key} = ${value}`,
+      source === "preset" ? "user" : source
+    );
 
     // Check for token conflicts
     const conflict = this.checkTokenConflict(category as string, key, value);
     if (conflict.hasConflict) {
-      this.logActivity("token_conflict", `${category}.${key}`, conflict.message, source);
+      this.logActivity(
+        "token_conflict",
+        `${category}.${key}`,
+        conflict.message,
+        source === "preset" ? "user" : source
+      );
     }
 
     this.commit({ type: "token", category, key, value });
@@ -225,13 +249,42 @@ class DesignStateStore extends EventEmitter {
   setTokenBatch(
     category: keyof DesignTokens,
     tokens: Record<string, string>,
-    source: "ai" | "user" = "ai"
+    source: "ai" | "user" | "preset" = "ai"
   ): void {
     Object.entries(tokens).forEach(([key, value]) => {
       this.state.tokens[category][key] = { value, source };
     });
-    this.logActivity("set_token_batch", category, `Updated ${Object.keys(tokens).length} ${category} tokens`, source);
+    this.logActivity(
+      "set_token_batch",
+      category,
+      `Updated ${Object.keys(tokens).length} ${category} tokens`,
+      source === "preset" ? "user" : source
+    );
     this.commit({ type: "tokenBatch", category, tokens });
+  }
+
+  clearTokenCategory(category: keyof DesignTokens, source: "ai" | "user" | "preset" = "user"): void {
+    this.state.tokens[category] = {};
+    this.logActivity(
+      "clear_token_category",
+      category,
+      `Cleared ${category} tokens`,
+      source === "preset" ? "user" : source
+    );
+    this.commit({ type: "clearTokenCategory", category });
+  }
+
+  deleteToken(category: keyof DesignTokens, key: string, source: "ai" | "user" | "preset" = "user"): boolean {
+    if (!this.state.tokens[category] || !(key in this.state.tokens[category])) return false;
+    delete this.state.tokens[category][key];
+    this.logActivity(
+      "delete_token",
+      `${category}.${key}`,
+      `Deleted ${category}.${key}`,
+      source === "preset" ? "user" : source
+    );
+    this.commit({ type: "deleteToken", category, key });
+    return true;
   }
 
   getTokenConflicts(): Array<{ key: string; message: string }> {
@@ -390,6 +443,33 @@ class DesignStateStore extends EventEmitter {
     return true;
   }
 
+  /**
+   * Replace the current page's component order with the given ID sequence
+   * (components not in the list keep their relative order at the end).
+   * Used by the reflow tool; recorded in undo history like any mutation.
+   */
+  setComponentsOrder(orderedIds: string[], source: "ai" | "user" = "user"): boolean {
+    const byId = new Map(this.state.components.map((c) => [c.id, c]));
+    const next: ComponentNode[] = [];
+    for (const id of orderedIds) {
+      const comp = byId.get(id);
+      if (comp) next.push(comp);
+    }
+    const idSet = new Set(orderedIds);
+    const remaining = this.state.components.filter((c) => !idSet.has(c.id));
+    const newOrder = [...next, ...remaining];
+    if (
+      newOrder.length !== this.state.components.length ||
+      newOrder.some((c, i) => c.id !== this.state.components[i].id)
+    ) {
+      this.state.components = newOrder;
+      this.logActivity("reorder_page", "page", "Reflowed page to canonical section order", source);
+      this.commit({ type: "reorderPage", ids: newOrder.map((c) => c.id) });
+      return true;
+    }
+    return false;
+  }
+
   private checkComponentDependency(type: string): { hasWarning: boolean; message: string } {
     const components = this.state.components;
     const hasType = (t: string) => components.some((c) => c.type === t);
@@ -487,6 +567,115 @@ class DesignStateStore extends EventEmitter {
 
     this.logActivity("clear_all", "system", "Cleared all design state", source);
     this.commit({ type: "clearAll" });
+  }
+
+  // ===== Snapshot Restore (persistence) =====
+
+  /**
+   * Replace the current state with a previously saved snapshot (from
+   * `getState()` or a `.prism.json` project file). Undo/redo history is
+   * reset so the restore itself becomes the new baseline.
+   */
+  restoreSnapshot(snapshot: Partial<DesignState>): void {
+    const pages =
+      Array.isArray(snapshot.pages) && snapshot.pages.length > 0
+        ? snapshot.pages
+        : [this.makeDefaultPage()];
+
+    const currentPageId =
+      typeof snapshot.currentPageId === "string" &&
+      pages.some((p) => p.id === snapshot.currentPageId)
+        ? snapshot.currentPageId
+        : pages[0].id;
+
+    const tokens: DesignTokens = snapshot.tokens || {
+      colors: {},
+      typography: {},
+      spacing: {},
+      shadows: {},
+      radii: {},
+      transitions: {},
+    };
+    this.state = {
+      projectName:
+        typeof snapshot.projectName === "string" ? snapshot.projectName : "Untitled Project",
+      style: typeof snapshot.style === "string" ? snapshot.style : "minimal",
+      tokens: {
+        colors: tokens.colors || {},
+        typography: tokens.typography || {},
+        spacing: tokens.spacing || {},
+        shadows: tokens.shadows || {},
+        radii: tokens.radii || {},
+        transitions: tokens.transitions || {},
+      },
+      components: [],
+      activityLog: Array.isArray(snapshot.activityLog)
+        ? snapshot.activityLog.slice(0, 100)
+        : [],
+      pages,
+      currentPageId,
+      themeMode: snapshot.themeMode === "dark" ? "dark" : "light",
+      activePlatform:
+        typeof snapshot.activePlatform === "string" ? snapshot.activePlatform : "web-desktop",
+    };
+    this.fixComponentsReference();
+
+    // Reset undo/redo history and pending prompt to the restored baseline.
+    this.history = [JSON.parse(JSON.stringify(this.state))];
+    this.historyIndex = 0;
+    this.pendingPrompt = null;
+
+    // Record the load in the activity log (does not become part of history).
+    this.logActivity(
+      "load_project",
+      "project",
+      `Loaded project "${this.state.projectName}"`,
+      "user"
+    );
+    // Re-baseline history AFTER the activity entry so undo starts fresh.
+    this.history = [JSON.parse(JSON.stringify(this.state))];
+    this.historyIndex = 0;
+    this.emit("change", { type: "loadProject", project_name: this.state.projectName });
+  }
+
+  private makeDefaultPage(): PageDef {
+    return {
+      id: `page_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      name: "Home",
+      components: [],
+    };
+  }
+
+  // ===== Test Support =====
+
+  /**
+   * Reset the singleton to its initial empty state (state, undo/redo history,
+   * and pending prompt). Intended for unit tests only; it is not part of the
+   * MCP tool surface.
+   */
+  resetForTests(): void {
+    const defaultPage = this.makeDefaultPage();
+    this.state = {
+      projectName: "Untitled Project",
+      style: "minimal",
+      tokens: {
+        colors: {},
+        typography: {},
+        spacing: {},
+        shadows: {},
+        radii: {},
+        transitions: {},
+      },
+      components: defaultPage.components,
+      activityLog: [],
+      pages: [defaultPage],
+      currentPageId: defaultPage.id,
+      themeMode: "light",
+      activePlatform: "web-desktop",
+    };
+    this.history = [JSON.parse(JSON.stringify(this.state))];
+    this.historyIndex = 0;
+    this.pendingPrompt = null;
   }
 
   // ===== Pending Prompt (AI communication channel) =====

@@ -8,6 +8,7 @@
 
 import fs from "fs";
 import path from "path";
+import { stateStore } from "./state.js";
 
 // ===== Types =====
 
@@ -71,6 +72,30 @@ export function scanProject(folderPath: string): ImportResult {
     totalComponents,
     scannedFiles: files.length,
   };
+}
+
+/**
+ * Import a raw HTML string into the state store as a new page, reusing the
+ * same extraction pipeline as `scanProject`. Used by `design_import_webpage`
+ * (URL fetch or pasted HTML).
+ */
+export function importHtmlString(
+  html: string,
+  sourceName: string,
+  clearExisting: boolean
+): { pageName: string; pageId: string; imported: number } {
+  const components = parseHTML(html);
+  if (components.length === 0) {
+    throw new Error(`No recognizable UI components found in "${sourceName}"`);
+  }
+  if (clearExisting) {
+    stateStore.clearAll("ai");
+  }
+  const page = stateStore.addPage(sourceName, "ai");
+  for (const comp of components) {
+    stateStore.addComponent(comp.type, comp.variant, comp.props, null, "ai");
+  }
+  return { pageName: page.name, pageId: page.id, imported: components.length };
 }
 
 function findSupportedFiles(rootDir: string): string[] {

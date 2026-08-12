@@ -16,10 +16,23 @@ const MAX_RECONNECT = 10;
 const RECONNECT_DELAY = 3000;
 
 // New feature state
-let currentDevice = "desktop";
+let currentPlatform = "web-desktop";
+
+// Platform presets: preview form factor + device chrome per platform
+const PLATFORMS = {
+  "web-desktop":     { name: "Web 桌面",   frame: "browser", device: "desktop", url: "https://prism.studio/preview" },
+  "web-tablet":      { name: "Web 平板",   frame: "browser", device: "tablet",  url: "https://prism.studio/preview" },
+  "web-mobile":      { name: "Web 手机",   frame: "browser", device: "mobile",  url: "https://prism.studio/preview" },
+  "desktop-macos":   { name: "macOS 应用",  frame: "macos",   device: "desktop", title: "Prism Studio" },
+  "desktop-windows": { name: "Windows 应用", frame: "windows", device: "desktop", title: "Prism Studio" },
+  "mobile-ios":      { name: "iOS 应用",    frame: "ios",     device: "mobile",  url: "https://prism.studio" },
+  "mobile-android":  { name: "Android 应用", frame: "android", device: "mobile",  url: "https://prism.studio" },
+};
 let draggedComponentId = null;
 let currentExportFormat = "html";
 let conflictCheckInterval = null;
+let selectedComponentId = null;
+let canvasZoom = 100;
 
 // ===== DOM Helpers =====
 
@@ -81,6 +94,9 @@ function updateStatus(status) {
   if (status === "connected") {
     dot.className = "status-dot connected";
     text.textContent = "已连接";
+  } else if (typeof status === "number") {
+    dot.className = "status-dot connected";
+    text.textContent = status + " 人在线";
   } else if (status === "disconnected") {
     dot.className = "status-dot disconnected";
     text.textContent = "已断开";
@@ -104,6 +120,9 @@ function handleMessage(msg) {
       break;
     case "activity":
       addActivityEntry(msg.entry);
+      break;
+    case "presence":
+      updateStatus(typeof msg.count === "number" ? msg.count : "connected");
       break;
   }
 }
@@ -171,6 +190,9 @@ function handleChange(change) {
 function renderAll() {
   if (!currentState) return;
 
+  // Keep the canvas platform in sync with the server state (C2 seed)
+  syncPlatformFromState();
+
   // Header
   $("project-name").textContent = currentState.projectName || "Untitled";
   $("style-badge").textContent = currentState.style || "--";
@@ -180,6 +202,12 @@ function renderAll() {
 
   // Canvas
   renderCanvas();
+
+  // Layers + inspector (skip inspector rebuild while the user is editing it)
+  renderLayerPanel();
+  if (!isInspectorFocused()) {
+    renderInspector();
+  }
 
   // Tokens
   renderTokenPanel();
@@ -198,6 +226,17 @@ function renderAll() {
 
   // Check conflicts
   checkConflicts();
+}
+
+function syncPlatformFromState() {
+  if (!currentState || typeof currentState.activePlatform !== "string") return;
+  if (currentState.activePlatform === currentPlatform) return;
+  currentPlatform = currentState.activePlatform;
+  const btn = document.querySelector(`.platform-btn[data-platform="${CSS.escape(currentPlatform)}"]`);
+  if (btn) {
+    document.querySelectorAll(".platform-btn").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+  }
 }
 
 // Helper: get current page's components (with backward compat)
@@ -233,13 +272,13 @@ function renderCanvas() {
       </div>
     `;
     meta.textContent = "0 个组件";
-    // Apply device class even on placeholder
-    applyDeviceClass(canvas);
+    // Apply platform class even on placeholder
+    applyPlatform(canvas);
     return;
   }
 
   canvas.innerHTML = "";
-  applyDeviceClass(canvas);
+  applyPlatform(canvas);
   const count = countComponents(components);
   meta.textContent = `${count} 个组件`;
 
@@ -248,10 +287,51 @@ function renderCanvas() {
   });
 }
 
-// Apply device width class to canvas
-function applyDeviceClass(canvas) {
+// Apply platform width class + device chrome to canvas
+function applyPlatform(canvas) {
+  const pf = PLATFORMS[currentPlatform] || PLATFORMS["web-desktop"];
+  const deviceClass = `device-${pf.device}`;
   canvas.classList.remove("device-desktop", "device-tablet", "device-mobile");
-  canvas.classList.add(`device-${currentDevice}`);
+  canvas.classList.add(deviceClass);
+  const chrome = $("platform-chrome");
+  if (chrome) {
+    chrome.classList.remove("device-desktop", "device-tablet", "device-mobile");
+    chrome.classList.add(deviceClass);
+    chrome.dataset.chrome = pf.frame;
+    const top = $("chrome-top");
+    const bottom = $("chrome-bottom");
+    if (top) top.innerHTML = buildChromeTop(pf);
+    if (bottom) bottom.innerHTML = buildChromeBottom(pf);
+  }
+}
+
+function buildChromeTop(pf) {
+  if (pf.frame === "browser") {
+    return `<span class="chrome-dot dot-r"></span><span class="chrome-dot dot-y"></span><span class="chrome-dot dot-g"></span><span class="chrome-url">${pf.url}</span>`;
+  }
+  if (pf.frame === "macos") {
+    return `<span class="chrome-dot dot-r"></span><span class="chrome-dot dot-y"></span><span class="chrome-dot dot-g"></span><span class="chrome-title">${pf.title}</span>`;
+  }
+  if (pf.frame === "windows") {
+    return `<span class="chrome-title">${pf.title}</span><span class="chrome-win-controls"><span>—</span><span>☐</span><span class="win-close">✕</span></span>`;
+  }
+  if (pf.frame === "ios") {
+    return `<span class="chrome-status-time">9:41</span><span class="chrome-status-icons">● ●● ●</span>`;
+  }
+  if (pf.frame === "android") {
+    return `<span class="chrome-status-time">9:41</span><span class="chrome-status-icons">📶 100%</span>`;
+  }
+  return "";
+}
+
+function buildChromeBottom(pf) {
+  if (pf.frame === "ios") {
+    return `<span class="chrome-home-indicator"></span>`;
+  }
+  if (pf.frame === "android") {
+    return `<span class="chrome-nav-btn">◯</span><span class="chrome-nav-btn">◻</span><span class="chrome-nav-btn">△</span>`;
+  }
+  return "";
 }
 
 function countComponents(components) {
@@ -266,6 +346,12 @@ function countComponents(components) {
 function renderComponent(comp) {
   const wrapper = el("div", "comp-wrapper");
   wrapper.dataset.id = comp.id;
+  wrapper.addEventListener("click", (e) => {
+    // Ignore clicks on overlay controls and active inline editing
+    if (e.target.closest(".comp-delete") || e.target.closest(".comp-drag-handle")) return;
+    if (e.target.closest("[contenteditable='true']")) return;
+    selectComponent(comp.id);
+  });
 
   // Overlay with badge, drag handle, and delete button
   const overlay = el("div", "comp-overlay");
@@ -309,7 +395,249 @@ function renderComponent(comp) {
   // Setup inline editing for data-editable elements
   setupInlineEditing(wrapper, comp.id);
 
+  if (comp.id === selectedComponentId) {
+    wrapper.classList.add("selected");
+  }
+
   return wrapper;
+}
+
+// ===== Selection / Inspector / Layers / Zoom =====
+
+function getSelectedComp() {
+  if (!selectedComponentId || !currentState) return null;
+  return getCurrentComponents().find((c) => c.id === selectedComponentId) || null;
+}
+
+function selectComponent(id) {
+  selectedComponentId = id;
+  document.querySelectorAll(".comp-wrapper.selected").forEach((w) => w.classList.remove("selected"));
+  const wrapper = document.querySelector(`.comp-wrapper[data-id="${CSS.escape(id)}"]`);
+  if (wrapper) wrapper.classList.add("selected");
+  renderInspector();
+  renderLayerPanel();
+}
+
+function deselectAll() {
+  selectedComponentId = null;
+  document.querySelectorAll(".comp-wrapper.selected").forEach((w) => w.classList.remove("selected"));
+  renderInspector();
+  renderLayerPanel();
+}
+
+function isInspectorFocused() {
+  const active = document.activeElement;
+  return !!active && !!active.closest && !!active.closest("#inspector-body");
+}
+
+function renderInspector() {
+  const panel = $("inspector-body");
+  if (!panel) return;
+  const comp = getSelectedComp();
+
+  if (!comp) {
+    panel.innerHTML = `
+      <div class="inspector-empty">
+        <div class="inspector-empty-icon">◈</div>
+        <p>点击画布上的组件</p>
+        <p class="inspector-empty-hint">查看并编辑属性</p>
+      </div>`;
+    return;
+  }
+
+  panel.innerHTML = "";
+  const props = comp.props || {};
+
+  // Header
+  const header = el("div", "inspector-section");
+  const title = el("div", "inspector-section-title");
+  title.textContent = `${comp.type}${comp.variant ? " / " + comp.variant : ""}`;
+  header.appendChild(title);
+  const idLine = el("div", "inspector-id", `ID: ${comp.id}`);
+  header.appendChild(idLine);
+  panel.appendChild(header);
+
+  // Content (string props)
+  const contentSection = el("div", "inspector-section");
+  contentSection.appendChild(el("div", "inspector-section-title", "内容"));
+  let textRows = 0;
+  Object.entries(props).forEach(([key, value]) => {
+    if (typeof value !== "string") return;
+    const row = el("div", "prop-row");
+    row.appendChild(el("div", "prop-label", key));
+    if (isColorValue(value)) {
+      const group = el("div", "prop-color-row");
+      const swatch = el("div", "prop-color-swatch");
+      swatch.style.background = value;
+      const input = el("input", "prop-text-input");
+      input.value = value;
+      input.spellcheck = false;
+      input.addEventListener("change", () => sendUpdateComponent(comp.id, { [key]: input.value }));
+      group.appendChild(swatch);
+      group.appendChild(input);
+      row.appendChild(group);
+    } else {
+      const input = el("input", "prop-text-input");
+      input.value = value;
+      input.addEventListener("change", () => sendUpdateComponent(comp.id, { [key]: input.value }));
+      row.appendChild(input);
+    }
+    contentSection.appendChild(row);
+    textRows++;
+  });
+  if (textRows === 0) {
+    contentSection.appendChild(el("div", "inspector-hint", "无文本属性"));
+  }
+  panel.appendChild(contentSection);
+
+  // Animation
+  const animSection = el("div", "inspector-section");
+  animSection.appendChild(el("div", "inspector-section-title", "动效"));
+  const anim = comp.animation || {};
+
+  const entryRow = el("div", "prop-row");
+  entryRow.appendChild(el("div", "prop-label", "入场"));
+  const entrySelect = el("select", "prop-select");
+  entrySelect.innerHTML = '<option value="">无</option>' +
+    LIBRARY_ANIMATIONS.filter((a) => a.entry).map((a) => `<option value="${a.entry}" ${anim.entry === a.entry ? "selected" : ""}>${a.name}</option>`).join("");
+  entrySelect.addEventListener("change", () => {
+    sendSetAnimation(comp.id, { entry: entrySelect.value || undefined });
+  });
+  entryRow.appendChild(entrySelect);
+  animSection.appendChild(entryRow);
+
+  const hoverRow = el("div", "prop-row");
+  hoverRow.appendChild(el("div", "prop-label", "悬停"));
+  const hoverSelect = el("select", "prop-select");
+  hoverSelect.innerHTML = '<option value="">无</option>' +
+    LIBRARY_ANIMATIONS.filter((a) => a.hover).map((a) => `<option value="${a.hover}" ${anim.hover === a.hover ? "selected" : ""}>${a.name}</option>`).join("");
+  hoverSelect.addEventListener("change", () => {
+    sendSetAnimation(comp.id, { hover: hoverSelect.value || undefined });
+  });
+  hoverRow.appendChild(hoverSelect);
+  animSection.appendChild(hoverRow);
+
+  const durRow = el("div", "prop-row");
+  durRow.appendChild(el("div", "prop-label", "时长"));
+  const durGroup = el("div", "prop-input-group");
+  const durSlider = el("input", "prop-slider");
+  durSlider.type = "range";
+  durSlider.min = "0.1";
+  durSlider.max = "2";
+  durSlider.step = "0.05";
+  durSlider.value = String(anim.duration || 0.4);
+  const durInput = el("input", "prop-num-input");
+  durInput.type = "number";
+  durInput.min = "0.1";
+  durInput.max = "2";
+  durInput.step = "0.05";
+  durInput.value = String(anim.duration || 0.4);
+  const applyDuration = () => {
+    const v = Math.min(2, Math.max(0.1, parseFloat(durSlider.value) || 0.4));
+    sendSetAnimation(comp.id, { duration: v });
+  };
+  durSlider.addEventListener("change", () => {
+    durInput.value = durSlider.value;
+    applyDuration();
+  });
+  durInput.addEventListener("change", () => {
+    durSlider.value = durInput.value;
+    applyDuration();
+  });
+  durGroup.appendChild(durSlider);
+  durGroup.appendChild(durInput);
+  durRow.appendChild(durGroup);
+  animSection.appendChild(durRow);
+  panel.appendChild(animSection);
+
+  // Actions
+  const actions = el("div", "inspector-section");
+  const delBtn = el("button", "inspector-delete-btn", "删除组件");
+  delBtn.addEventListener("click", () => {
+    handleDeleteComponent(comp.id);
+    deselectAll();
+  });
+  actions.appendChild(delBtn);
+  panel.appendChild(actions);
+}
+
+function sendUpdateComponent(id, props) {
+  send({ type: "update_component", id, props });
+}
+
+function sendSetAnimation(id, patch) {
+  send({ type: "set_animation", component_id: id, ...patch });
+}
+
+function renderLayerPanel() {
+  const list = $("layer-tree");
+  if (!list) return;
+  const components = getCurrentComponents();
+  if (components.length === 0) {
+    list.innerHTML = '<div class="layer-empty">组件图层将显示在这里</div>';
+    return;
+  }
+  list.innerHTML = "";
+  [...components].reverse().forEach((comp) => {
+    const item = el("div", "layer-item" + (comp.id === selectedComponentId ? " selected" : ""));
+    item.dataset.id = comp.id;
+    item.appendChild(el("span", "layer-icon", "◈"));
+    item.appendChild(el("span", "layer-name", `${comp.type}${comp.variant ? "/" + comp.variant : ""}`));
+    item.addEventListener("click", () => selectComponent(comp.id));
+    const del = el("button", "layer-del", "✕");
+    del.title = "删除组件";
+    del.addEventListener("click", (e) => {
+      e.stopPropagation();
+      handleDeleteComponent(comp.id);
+      if (selectedComponentId === comp.id) deselectAll();
+    });
+    item.appendChild(del);
+    list.appendChild(item);
+  });
+}
+
+function setupZoom() {
+  const zoomOut = $("zoom-out");
+  const zoomIn = $("zoom-in");
+  const reset = $("zoom-reset");
+  const apply = (z) => {
+    canvasZoom = Math.max(25, Math.min(200, z));
+    const valueEl = $("zoom-value");
+    if (valueEl) valueEl.textContent = canvasZoom + "%";
+    const wrap = $("canvas-scroll-wrap");
+    if (wrap) wrap.style.zoom = canvasZoom / 100;
+  };
+  if (zoomOut) zoomOut.addEventListener("click", () => apply(canvasZoom - 10));
+  if (zoomIn) zoomIn.addEventListener("click", () => apply(canvasZoom + 10));
+  if (reset) reset.addEventListener("click", () => apply(100));
+  document.addEventListener("keydown", (e) => {
+    if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT" || e.target.tagName === "TEXTAREA") return;
+    if (e.key === "=" || e.key === "+") { e.preventDefault(); apply(canvasZoom + 10); }
+    else if (e.key === "-") { e.preventDefault(); apply(canvasZoom - 10); }
+    else if (e.key === "0" && !e.ctrlKey && !e.metaKey) { e.preventDefault(); apply(100); }
+  });
+  apply(100);
+}
+
+function setupCanvasShortcuts() {
+  document.addEventListener("keydown", (e) => {
+    if (
+      e.target.tagName === "INPUT" ||
+      e.target.tagName === "SELECT" ||
+      e.target.tagName === "TEXTAREA" ||
+      e.target.contentEditable === "true"
+    ) {
+      return;
+    }
+    if ((e.key === "Delete" || e.key === "Backspace") && selectedComponentId) {
+      e.preventDefault();
+      const comp = getSelectedComp();
+      if (comp) {
+        handleDeleteComponent(comp.id);
+        deselectAll();
+      }
+    }
+  });
 }
 
 // ===== Inline Property Editing =====
@@ -508,6 +836,35 @@ function renderComponentContent(comp) {
       return renderBadge(props, variant);
     case "avatar":
       return renderAvatar(props);
+    // Spec 3.4 — new component types
+    case "input":
+      return renderInput(props);
+    case "grid":
+      return renderGrid(props, variant);
+    case "table":
+      return renderTable(props);
+    case "alert":
+      return renderAlert(props, variant);
+    case "tooltip":
+      return renderTooltip(props);
+    case "bento_grid":
+      return renderBentoGrid(props);
+    case "skeleton":
+      return renderSkeleton(props);
+    case "command_palette":
+      return renderCommandPalette(props);
+    case "glass_card":
+      return renderGlassCard(props);
+    case "fab":
+      return renderFab(props);
+    case "marquee":
+      return renderMarquee(props);
+    case "feature_grid":
+      return renderFeatureGrid(props, variant);
+    case "cookie_banner":
+      return renderCookieBanner(props);
+    case "toggle":
+      return renderToggle(props);
     default:
       return renderGeneric(comp);
   }
@@ -600,6 +957,14 @@ function renderCardGrid(props, variant) {
 
 function renderCard(props, variant) {
   const card = el("div", "comp-card");
+  if (variant === "elevated") {
+    card.style.boxShadow = "0 12px 28px rgba(0,0,0,0.14)";
+    card.style.transform = "translateY(-2px)";
+  } else if (variant === "outlined") {
+    card.style.background = "transparent";
+    card.style.border = "2px solid var(--border-strong)";
+    card.style.boxShadow = "none";
+  }
 
   if (props.image_url || props.image) {
     const img = el("div", "card-img");
@@ -683,6 +1048,9 @@ function renderButton(props, variant) {
   } else if (variant === "ghost") {
     btn.style.background = "transparent";
     btn.style.color = "currentColor";
+  } else if (variant === "danger") {
+    btn.style.background = "var(--danger, #EF4444)";
+    btn.style.borderColor = "transparent";
   }
   return btn;
 }
@@ -1128,6 +1496,181 @@ function renderAvatar(props) {
   return container;
 }
 
+// ===== Spec 3.4 — New Component Renderers =====
+
+function renderInput(props) {
+  const wrap = el("div", "comp-input");
+  if (props.label) wrap.appendChild(el("label", "input-label", props.label));
+  const input = el("input", "input-field");
+  input.type = props.type || "text";
+  input.placeholder = props.placeholder || "";
+  input.value = props.value || "";
+  input.readOnly = true;
+  wrap.appendChild(input);
+  if (props.hint) wrap.appendChild(el("div", "input-hint", props.hint));
+  return wrap;
+}
+
+function renderGrid(props, variant) {
+  const grid = el("div", "comp-grid");
+  const cols = variant.includes("2") ? "2" : variant.includes("4") ? "4" : "3";
+  grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+  const items = props.items || Array.from({ length: parseInt(cols, 10) }, (_, i) => ({ title: `单元格 ${i + 1}` }));
+  items.forEach((item) => {
+    const cell = el("div", "grid-cell");
+    cell.appendChild(el("div", "grid-cell-title", typeof item === "string" ? item : (item.title || "单元格")));
+    if (item && item.description) cell.appendChild(el("div", "grid-cell-desc", item.description));
+    grid.appendChild(cell);
+  });
+  return grid;
+}
+
+function renderTable(props) {
+  const container = el("div", "comp-table-wrap");
+  const table = el("table", "comp-table");
+  const columns = props.columns || ["列 1", "列 2"];
+  const rows = props.rows || [];
+  const thead = el("thead");
+  const headRow = el("tr");
+  columns.forEach((c) => headRow.appendChild(el("th", null, c)));
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+  const tbody = el("tbody");
+  rows.forEach((row) => {
+    const tr = el("tr");
+    (Array.isArray(row) ? row : []).forEach((cell) => tr.appendChild(el("td", null, String(cell))));
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  container.appendChild(table);
+  return container;
+}
+
+function renderAlert(props, variant) {
+  const type = variant || props.type || "info";
+  const alert = el("div", `comp-alert alert-${type}`);
+  const icons = { info: "ℹ️", success: "✅", warning: "⚠️", error: "⛔" };
+  alert.appendChild(el("span", "alert-icon", icons[type] || "ℹ️"));
+  const body = el("div", "alert-body");
+  if (props.title) body.appendChild(el("div", "alert-title", props.title));
+  if (props.text) body.appendChild(el("div", "alert-text", props.text));
+  alert.appendChild(body);
+  return alert;
+}
+
+function renderTooltip(props) {
+  const wrap = el("div", "comp-tooltip");
+  const trigger = el("span", "tooltip-trigger", props.trigger || "悬停查看");
+  const bubble = el("div", "tooltip-bubble", props.text || "");
+  wrap.appendChild(trigger);
+  wrap.appendChild(bubble);
+  return wrap;
+}
+
+function renderBentoGrid(props) {
+  const grid = el("div", "comp-bento");
+  const items = props.items || [{ title: "主卡片", size: "large" }, { title: "小卡片", size: "small" }];
+  items.forEach((item) => {
+    const tile = el("div", `bento-tile bento-${item.size || "medium"}`);
+    if (item.title) tile.appendChild(el("div", "bento-title", item.title));
+    if (item.text) tile.appendChild(el("div", "bento-text", item.text));
+    grid.appendChild(tile);
+  });
+  return grid;
+}
+
+function renderSkeleton(props) {
+  const wrap = el("div", "comp-skeleton");
+  const rows = props.rows || 3;
+  wrap.appendChild(el("div", "skel-line skel-avatar"));
+  for (let i = 0; i < rows; i++) {
+    const line = el("div", "skel-line");
+    line.style.width = `${92 - i * 14}%`;
+    wrap.appendChild(line);
+  }
+  return wrap;
+}
+
+function renderCommandPalette(props) {
+  const wrap = el("div", "comp-command");
+  const search = el("div", "command-search");
+  search.appendChild(el("span", null, "⌘"));
+  search.appendChild(el("span", null, props.placeholder || "搜索或输入命令…"));
+  wrap.appendChild(search);
+  const items = props.items || ["新建页面", "切换主题", "导出代码"];
+  items.forEach((item) => {
+    const row = el("div", "command-item");
+    row.appendChild(el("span", null, typeof item === "string" ? item : item.label));
+    if (typeof item === "object" && item.shortcut) row.appendChild(el("span", "command-kbd", item.shortcut));
+    wrap.appendChild(row);
+  });
+  return wrap;
+}
+
+function renderGlassCard(props) {
+  const card = el("div", "comp-glass-card");
+  if (props.title) card.appendChild(el("div", "glass-title", props.title));
+  if (props.text) card.appendChild(el("div", "glass-text", props.text));
+  if (props.button_text) card.appendChild(el("div", "btn", props.button_text));
+  return card;
+}
+
+function renderFab(props) {
+  const wrap = el("div", "comp-fab-wrap");
+  const fab = el("button", "comp-fab", props.label || "+");
+  fab.title = props.hint || "浮动操作";
+  wrap.appendChild(fab);
+  return wrap;
+}
+
+function renderMarquee(props) {
+  const wrap = el("div", "comp-marquee");
+  const track = el("div", "marquee-track");
+  const items = props.items || ["特性一", "特性二", "特性三"];
+  const doubled = [...items, ...items];
+  doubled.forEach((item) => {
+    const span = el("span", "marquee-item", typeof item === "string" ? item : item.title);
+    track.appendChild(span);
+  });
+  wrap.appendChild(track);
+  return wrap;
+}
+
+function renderFeatureGrid(props, variant) {
+  const grid = el("div", "comp-feature-grid");
+  const cols = variant.includes("2") ? "2" : variant.includes("4") ? "4" : "3";
+  grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+  const items = props.items || [];
+  items.forEach((item) => {
+    const cell = el("div", "fg-cell");
+    cell.appendChild(el("div", "fg-icon", item.icon || "✦"));
+    if (item.title) cell.appendChild(el("div", "fg-title", item.title));
+    if (item.description) cell.appendChild(el("div", "fg-desc", item.description));
+    grid.appendChild(cell);
+  });
+  return grid;
+}
+
+function renderCookieBanner(props) {
+  const banner = el("div", "comp-cookie");
+  banner.appendChild(el("span", "cookie-icon", "🍪"));
+  banner.appendChild(el("span", "cookie-text", props.text || "我们使用 Cookie 提升体验"));
+  const actions = el("div", "cookie-actions");
+  if (props.decline_text) actions.appendChild(el("span", "btn btn-ghost", props.decline_text));
+  if (props.accept_text) actions.appendChild(el("span", "btn", props.accept_text));
+  banner.appendChild(actions);
+  return banner;
+}
+
+function renderToggle(props) {
+  const wrap = el("label", "comp-toggle");
+  const track = el("span", "toggle-track" + (props.checked ? " on" : ""));
+  track.appendChild(el("span", "toggle-thumb"));
+  wrap.appendChild(track);
+  if (props.label) wrap.appendChild(el("span", "toggle-label", props.label));
+  return wrap;
+}
+
 function renderGeneric(comp) {
   const div = el("div");
   div.style.cssText = "padding:20px;border-radius:10px;border:1px dashed var(--border);";
@@ -1143,30 +1686,44 @@ function renderGeneric(comp) {
 
 function applyAnimation(element, anim) {
   if (!anim) return;
+  const duration = anim.duration || 0.3;
+  const delay = anim.delay || 0;
+  const curve = anim.curve || "ease-out";
+  const stagger = anim.stagger || 0;
 
   const entryMap = {
-    fadeUp: { name: "fadeUp", transform: "translateY(20px)" },
-    fadeIn: { name: "fadeUp", transform: "none" },
-    scaleIn: { name: "scaleIn", transform: "scale(0.9)" },
-    slideRight: { name: "slideIn", transform: "translateX(-20px)" },
-    slideLeft: { name: "slideIn", transform: "translateX(20px)" },
-    slideUp: { name: "slideIn", transform: "translateY(20px)" },
-    spring: { name: "scaleIn", transform: "scale(0.8)" },
+    fadeUp: "translateY(20px)",
+    fadeIn: "none",
+    scaleIn: "scale(0.9)",
+    slideRight: "translateX(-20px)",
+    slideLeft: "translateX(20px)",
+    slideUp: "translateY(20px)",
+    spring: "scale(0.8)",
   };
 
   if (anim.entry && entryMap[anim.entry]) {
-    const config = entryMap[anim.entry];
-    const duration = anim.duration || 0.3;
-    const delay = anim.delay || 0;
-    const curve = anim.curve || "ease-out";
-
     element.style.opacity = "0";
-    element.style.transform = config.transform;
+    element.style.transform = entryMap[anim.entry];
 
     requestAnimationFrame(() => {
       element.style.transition = `opacity ${duration}s ${curve} ${delay}s, transform ${duration}s ${curve} ${delay}s`;
       element.style.opacity = "1";
       element.style.transform = "none";
+    });
+  } else if (anim.entry) {
+    // CSS keyframe entry animations (bounceIn, flipIn, cinematic, shimmer, glitch, morphBlob)
+    element.classList.add(`anim-${anim.entry}`);
+    element.style.animationDuration = `${duration}s`;
+    element.style.animationDelay = `${delay}s`;
+    element.style.animationTimingFunction = curve === "spring" ? "cubic-bezier(0.34, 1.56, 0.64, 1)" : curve;
+  }
+
+  // Child stagger: offset each direct child's transition/animations
+  if (stagger > 0) {
+    const kids = element.querySelectorAll(":scope > *");
+    kids.forEach((kid, i) => {
+      kid.style.animationDelay = `${(i + 1) * stagger}s`;
+      kid.style.transitionDelay = `${(i + 1) * stagger}s`;
     });
   }
 
@@ -1176,13 +1733,39 @@ function applyAnimation(element, anim) {
       lift: "translateY(-4px)",
       glow: "drop-shadow(0 0 12px var(--accent))",
     };
-    const hoverTransform = hoverMap[anim.hover] || "scale(1.02)";
-    element.addEventListener("mouseenter", () => {
-      element.style.transform = hoverTransform;
-    });
-    element.addEventListener("mouseleave", () => {
-      element.style.transform = "none";
-    });
+    if (hoverMap[anim.hover]) {
+      element.addEventListener("mouseenter", () => {
+        element.style.transform = hoverMap[anim.hover];
+      });
+      element.addEventListener("mouseleave", () => {
+        element.style.transform = "none";
+      });
+    } else if (anim.hover === "magnetic") {
+      element.classList.add("anim-hover-magnetic");
+      element.addEventListener("mousemove", (e) => {
+        const r = element.getBoundingClientRect();
+        const dx = (e.clientX - (r.left + r.width / 2)) * 0.2;
+        const dy = (e.clientY - (r.top + r.height / 2)) * 0.2;
+        element.style.transform = `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px)`;
+      });
+      element.addEventListener("mouseleave", () => {
+        element.style.transform = "";
+      });
+    } else if (anim.hover === "tilt") {
+      element.classList.add("anim-hover-tilt");
+      element.addEventListener("mousemove", (e) => {
+        const r = element.getBoundingClientRect();
+        const px = (e.clientX - r.left) / r.width - 0.5;
+        const py = (e.clientY - r.top) / r.height - 0.5;
+        element.style.transform = `perspective(600px) rotateY(${(px * 8).toFixed(1)}deg) rotateX(${(-py * 8).toFixed(1)}deg)`;
+      });
+      element.addEventListener("mouseleave", () => {
+        element.style.transform = "";
+      });
+    } else {
+      // ripple / spotlight via CSS classes
+      element.classList.add(`anim-hover-${anim.hover}`);
+    }
   }
 }
 
@@ -1495,17 +2078,18 @@ function setupTabs() {
   });
 }
 
-// ===== Device Switcher =====
+// ===== Platform Switcher =====
 
-function setupDeviceSwitcher() {
-  const buttons = document.querySelectorAll(".device-btn");
+function setupPlatformSwitcher() {
+  const buttons = document.querySelectorAll(".platform-btn");
   buttons.forEach((btn) => {
     btn.addEventListener("click", () => {
       buttons.forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
-      currentDevice = btn.dataset.device;
+      currentPlatform = btn.dataset.platform;
       const canvas = $("canvas");
-      applyDeviceClass(canvas);
+      applyPlatform(canvas);
+      send({ type: "set_platform", platform: currentPlatform });
     });
   });
 }
@@ -2099,16 +2683,106 @@ function setupImportModal() {
   }
 }
 
+// ===== Project Persistence (save / load) =====
+
+function flashButton(btn, text, duration = 1500) {
+  if (!btn) return;
+  const original = btn.textContent;
+  btn.textContent = text;
+  btn.classList.add("sent");
+  setTimeout(() => {
+    btn.textContent = original;
+    btn.classList.remove("sent");
+  }, duration);
+}
+
+function setupProjectPersistence() {
+  const saveBtn = $("save-btn");
+  const loadBtn = $("load-btn");
+
+  if (saveBtn) {
+    saveBtn.addEventListener("click", async () => {
+      const name = currentState && currentState.projectName ? currentState.projectName : "Untitled Project";
+      saveBtn.disabled = true;
+      try {
+        const response = await fetch("/api/project/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name }),
+        });
+        if (response.ok) {
+          const data = await response.json();
+          flashButton(saveBtn, "已保存 ✓");
+          console.info("[Prism] Project saved:", data.file);
+        } else {
+          flashButton(saveBtn, "保存失败 ✕");
+        }
+      } catch (err) {
+        console.error("Save failed:", err);
+        flashButton(saveBtn, "保存失败 ✕");
+      } finally {
+        saveBtn.disabled = false;
+      }
+    });
+  }
+
+  if (loadBtn) {
+    loadBtn.addEventListener("click", async () => {
+      loadBtn.disabled = true;
+      try {
+        const listRes = await fetch("/api/projects");
+        if (!listRes.ok) throw new Error("list failed");
+        const list = await listRes.json();
+        const projects = list.projects || [];
+        if (projects.length === 0) {
+          flashButton(loadBtn, "无已保存项目");
+          return;
+        }
+        const latest = projects[0];
+        if (!window.confirm(`加载最近保存的项目？\n\n${latest.name}\n${latest.file}`)) {
+          return;
+        }
+        const response = await fetch("/api/project/load", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ file: latest.file }),
+        });
+        if (response.ok) {
+          const data = await response.json();
+          flashButton(loadBtn, `已加载 ${data.project_name}`);
+          // The WebSocket broadcast (or HTTP fallback) refreshes all panels.
+          await fetchInitialState();
+        } else {
+          flashButton(loadBtn, "加载失败 ✕");
+        }
+      } catch (err) {
+        console.error("Load failed:", err);
+        flashButton(loadBtn, "加载失败 ✕");
+      } finally {
+        loadBtn.disabled = false;
+      }
+    });
+  }
+}
+
 // ===== Design Library =====
 
 // Style presets data (mirrors server-side STYLE_PRESETS)
 const LIBRARY_STYLES = [
-  { id: "minimal", name: "Minimal", desc: "简洁、留白、中性色", color: "#4A6FA5", icon: "○" },
-  { id: "bold", name: "Bold", desc: "高对比、强烈视觉层级", color: "#7C3AED", icon: "◆" },
-  { id: "playful", name: "Playful", desc: "温暖、圆润、活泼", color: "#E84393", icon: "♥" },
-  { id: "dark", name: "Dark", desc: "深色优先、发光点缀", color: "#3B82F6", icon: "◐" },
-  { id: "editorial", name: "Editorial", desc: "杂志风、优雅衬线", color: "#B45309", icon: "✦" },
-  { id: "tech", name: "Tech", desc: "未来感、锐利几何", color: "#06B6D4", icon: "◇" },
+  { id: "minimal", name: "Minimal", desc: "中性灰、留白、4px 小圆角", color: "#4A6FA5", icon: "○" },
+  { id: "bold", name: "Bold", desc: "210° 蓝、无圆角、强对比", color: "#2563EB", icon: "◆" },
+  { id: "playful", name: "Playful", desc: "330° 粉、大圆角、活泼", color: "#EC4899", icon: "♥" },
+  { id: "dark", name: "Dark", desc: "260° 紫、深色优先", color: "#8B5CF6", icon: "◐" },
+  { id: "editorial", name: "Editorial", desc: "30° 棕、衬线标题、无圆角", color: "#B45309", icon: "✦" },
+  { id: "tech", name: "Tech", desc: "190° 青、等宽点缀、6px 圆角", color: "#06B6D4", icon: "◇" },
+  { id: "glassmorphism", name: "Glassmorphism", desc: "毛玻璃、半透明、柔和高光", color: "#818CF8", icon: "❄" },
+  { id: "neumorphism", name: "Neumorphism", desc: "软 UI、同色双阴影", color: "#94A3B8", icon: "◍" },
+  { id: "claymorphism", name: "Claymorphism", desc: "3D 粘土、药丸圆角", color: "#F472B6", icon: "⚱" },
+  { id: "aurora", name: "Aurora", desc: "极光渐变、紫色调", color: "#A78BFA", icon: "✧" },
+  { id: "brutalism", name: "Brutalism", desc: "硬阴影、粗边框、直角", color: "#FACC15", icon: "▣" },
+  { id: "cyberpunk", name: "Cyberpunk", desc: "霓虹 HUD、青色发光", color: "#22D3EE", icon: "◬" },
+  { id: "organic", name: "Organic", desc: "仿生形态、自然绿", color: "#4ADE80", icon: "☘" },
+  { id: "luxury", name: "Luxury", desc: "黑金 OLED、衬线奢华", color: "#D4AF37", icon: "♛" },
 ];
 
 // Animation presets
@@ -2120,9 +2794,19 @@ const LIBRARY_ANIMATIONS = [
   { id: "slideLeft", name: "左滑入场", desc: "从右侧滑入", icon: "←", entry: "slideLeft", duration: 0.4 },
   { id: "slideUp", name: "上滑入场", desc: "从底部滑入", icon: "↑", entry: "slideUp", duration: 0.4 },
   { id: "spring", name: "弹性弹出", desc: "带回弹的缩放", icon: "◆", entry: "spring", duration: 0.6 },
+  { id: "bounceIn", name: "Q 弹跳入", desc: "弹性跳跳进入", icon: "◉", entry: "bounceIn", duration: 0.6 },
+  { id: "flipIn", name: "3D 翻转进入", desc: "绕 X 轴翻转进入", icon: "⇅", entry: "flipIn", duration: 0.5 },
+  { id: "cinematic", name: "电影级入场", desc: "缩放上浮 + 模糊", icon: "🎬", entry: "cinematic", duration: 0.7 },
+  { id: "shimmer", name: "微光闪烁", desc: "骨架屏微光扫过", icon: "✨", entry: "shimmer", duration: 1.2 },
+  { id: "glitch", name: "故障色差", desc: "故障抖动色差", icon: "⚡", entry: "glitch", duration: 0.5 },
+  { id: "morphBlob", name: "流体变形", desc: "圆角形态变形进入", icon: "◒", entry: "morphBlob", duration: 0.8 },
   { id: "liftHover", name: "悬停浮起", desc: "鼠标悬停上浮", icon: "⇡", hover: "lift" },
   { id: "scaleHover", name: "悬停放大", desc: "鼠标悬停放大", icon: "⊕", hover: "scaleUp" },
   { id: "glowHover", name: "悬停发光", desc: "鼠标悬停发光", icon: "✧", hover: "glow" },
+  { id: "rippleHover", name: "涟漪波纹", desc: "点击/悬停波纹扩散", icon: "≋", hover: "ripple" },
+  { id: "spotlightHover", name: "聚光效果", desc: "径向聚光照亮", icon: "◎", hover: "spotlight" },
+  { id: "magneticHover", name: "磁吸偏移", desc: "元素跟随光标偏移", icon: "🧲", hover: "magnetic" },
+  { id: "tiltHover", name: "3D 倾斜", desc: "跟随光标 3D 倾斜", icon: "◩", hover: "tilt" },
 ];
 
 // Component presets
@@ -2157,6 +2841,20 @@ const LIBRARY_COMPONENTS = [
   { id: "progress", name: "进度条", desc: "进度展示", icon: "━", variant: "", defaultProps: { label: "进度", value: 60 } },
   { id: "badge", name: "徽章", desc: "标签徽章", icon: "●", variant: "default", defaultProps: { text: "新功能" } },
   { id: "avatar", name: "头像组", desc: "用户头像", icon: "☺", variant: "", defaultProps: { avatars: [{ name: "AB" }, { name: "CD" }] } },
+  { id: "input", name: "输入框", desc: "单行输入", icon: "⌨", variant: "", defaultProps: { label: "邮箱", placeholder: "请输入邮箱", type: "email" } },
+  { id: "grid", name: "网格布局", desc: "通用网格容器", icon: "▦", variant: "3col", defaultProps: { items: [{ title: "单元格 1" }, { title: "单元格 2" }, { title: "单元格 3" }] } },
+  { id: "table", name: "数据表格", desc: "表格数据展示", icon: "⊞", variant: "", defaultProps: { columns: ["名称", "状态", "更新时间"], rows: [["项目 A", "进行中", "2 小时前"], ["项目 B", "已完成", "昨天"]] } },
+  { id: "alert", name: "提示框", desc: "信息/警告提示", icon: "⚠", variant: "info", defaultProps: { title: "提示", text: "这是一条提示信息", type: "info" } },
+  { id: "tooltip", name: "工具提示", desc: "悬停气泡提示", icon: "◌", variant: "", defaultProps: { trigger: "悬停查看", text: "这里是提示内容" } },
+  { id: "bento_grid", name: "便当盒网格", desc: "非对称卡片网格", icon: "▤", variant: "", defaultProps: { items: [{ title: "主卡片", size: "large" }, { title: "小卡片", size: "small" }, { title: "中卡片", size: "medium" }] } },
+  { id: "skeleton", name: "骨架屏", desc: "加载占位", icon: "▭", variant: "", defaultProps: { rows: 3 } },
+  { id: "command_palette", name: "命令面板", desc: "Cmd+K 搜索", icon: "⌘", variant: "", defaultProps: { placeholder: "搜索或输入命令…", items: ["新建页面", "切换主题", "导出代码"] } },
+  { id: "glass_card", name: "玻璃卡片", desc: "毛玻璃质感卡片", icon: "❖", variant: "", defaultProps: { title: "Glass Card", text: "半透明毛玻璃卡片，用于分层内容展示。" } },
+  { id: "fab", name: "浮动按钮", desc: "悬浮操作按钮", icon: "⊕", variant: "", defaultProps: { label: "+", hint: "新建" } },
+  { id: "marquee", name: "跑马灯", desc: "滚动文字条", icon: "≫", variant: "", defaultProps: { items: ["特性一", "特性二", "特性三", "特性四"] } },
+  { id: "feature_grid", name: "功能图标网格", desc: "图标 + 文字网格", icon: "✦", variant: "3col", defaultProps: { items: [{ icon: "✦", title: "功能 1", description: "描述" }, { icon: "◈", title: "功能 2", description: "描述" }, { icon: "◆", title: "功能 3", description: "描述" }] } },
+  { id: "cookie_banner", name: "Cookie 横幅", desc: "隐私同意横幅", icon: "🍪", variant: "", defaultProps: { text: "我们使用 Cookie 提升体验", accept_text: "接受", decline_text: "拒绝" } },
+  { id: "toggle", name: "开关", desc: "切换开关", icon: "◉", variant: "", defaultProps: { label: "通知", checked: true } },
 ];
 
 let currentLibraryTab = "styles";
@@ -2260,7 +2958,8 @@ function handleLibraryItemClick(item) {
       }
       return;
     }
-    const target = components[components.length - 1];
+    const target = getAnimationTarget(components);
+    if (!target) return;
     send({
       type: "set_animation",
       component_id: target.id,
@@ -2347,12 +3046,20 @@ function buildStylePreview(item) {
 function generateStyleSwatches(styleId) {
   // Approximate color schemes for each style
   const schemes = {
-    minimal: ["#ffffff", "#f3f4f6", "#e5e7eb", "#4a6fa5", "#1a1a2e"],
-    bold: ["#fafafa", "#e9d5ff", "#a855f7", "#7c3aed", "#0d0d0d"],
-    playful: ["#fff8f6", "#fce7f3", "#ec4899", "#e84393", "#2d1b2e"],
-    dark: ["#0a0e14", "#161b22", "#2563eb", "#3b82f6", "#c9d1d9"],
+    minimal: ["#ffffff", "#f3f4f6", "#e5e7eb", "#6b8cae", "#1a1a2e"],
+    bold: ["#fafafa", "#dbeafe", "#60a5fa", "#2563eb", "#0d0d0d"],
+    playful: ["#fff8f6", "#fce7f3", "#f472b6", "#ec4899", "#2d1b2e"],
+    dark: ["#0a0e14", "#1e1b2e", "#a78bfa", "#8b5cf6", "#c9d1d9"],
     editorial: ["#fdfcfa", "#fef3c7", "#d97706", "#b45309", "#1c1917"],
-    tech: ["#080d14", "#0e1620", "#0891b2", "#06b6d4", "#cbd5e1"],
+    tech: ["#f8fafc", "#0e1620", "#22d3ee", "#06b6d4", "#cbd5e1"],
+    glassmorphism: ["#eef2ff", "rgba(255,255,255,0.55)", "#a5b4fc", "#6366f1", "#312e81"],
+    neumorphism: ["#e0e5ec", "#e0e5ec", "#b8c0cc", "#94a3b8", "#4b5563"],
+    claymorphism: ["#fff1f5", "#fce7f0", "#f9a8d4", "#f472b6", "#4c1d2b"],
+    aurora: ["#f5f0ff", "#ede9fe", "#a78bfa", "#8b5cf6", "#2e1065"],
+    brutalism: ["#ffffff", "#facc15", "#111111", "#e5e7eb", "#111111"],
+    cyberpunk: ["#0d0221", "#150a33", "#22d3ee", "#ff00c8", "#e0e7ff"],
+    organic: ["#f6fbf2", "#dcfce7", "#86efac", "#4ade80", "#1c2b1a"],
+    luxury: ["#0b0a08", "#1c1917", "#d4af37", "#f5f0e0", "#f5efe0"],
   };
   const colors = schemes[styleId] || schemes.minimal;
   return colors.map((c) => `<div class="lib-preview-swatch" style="background:${c}"></div>`).join("");
@@ -2379,6 +3086,16 @@ function buildAnimationPreview(item) {
       @keyframes demo-liftHover { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-6px); box-shadow:0 8px 16px rgba(139,92,246,0.3); } }
       @keyframes demo-scaleHover { 0%,100% { transform:scale(1); } 50% { transform:scale(1.15); } }
       @keyframes demo-glowHover { 0%,100% { filter:drop-shadow(0 0 0 var(--accent)); } 50% { filter:drop-shadow(0 0 12px var(--accent)); } }
+      @keyframes demo-bounceIn { 0% { opacity:0; transform:scale(0.3); } 50% { opacity:1; transform:scale(1.08); } 70% { transform:scale(0.96); } 100% { transform:scale(1); } }
+      @keyframes demo-flipIn { 0% { opacity:0; transform:perspective(500px) rotateX(80deg); } 100% { opacity:1; transform:perspective(500px) rotateX(0); } }
+      @keyframes demo-cinematic { 0% { opacity:0; transform:scale(1.25); filter:blur(6px); } 100% { opacity:1; transform:scale(1); filter:blur(0); } }
+      @keyframes demo-shimmer { 0% { opacity:0.5; background-position:-200% 0; } 100% { opacity:1; background-position:200% 0; } }
+      @keyframes demo-glitch { 0%,100% { transform:translate(0); text-shadow:none; } 20% { transform:translate(-2px,1px); text-shadow:2px 0 #ff00c8,-2px 0 #00f0ff; } 40% { transform:translate(2px,-1px); } 60% { transform:translate(-1px,2px); text-shadow:-2px 0 #ff00c8,2px 0 #00f0ff; } 80% { transform:translate(1px,-2px); } }
+      @keyframes demo-morphBlob { 0% { opacity:0; border-radius:60% 40% 55% 45% / 50% 60% 40% 50%; transform:scale(0.7) rotate(8deg); } 100% { opacity:1; border-radius:8px; transform:scale(1) rotate(0); } }
+      @keyframes demo-rippleHover { 0% { box-shadow:0 0 0 0 rgba(139,92,246,0.35); } 100% { box-shadow:0 0 0 14px rgba(139,92,246,0); } }
+      @keyframes demo-spotlightHover { 0% { background:radial-gradient(circle at 30% 30%, rgba(139,92,246,0.25), transparent 60%); } 50% { background:radial-gradient(circle at 70% 70%, rgba(139,92,246,0.35), transparent 60%); } 100% { background:radial-gradient(circle at 30% 30%, rgba(139,92,246,0.25), transparent 60%); } }
+      @keyframes demo-magneticHover { 0%,100% { transform:translate(0,0); } 50% { transform:translate(6px,-4px); } }
+      @keyframes demo-tiltHover { 0%,100% { transform:perspective(500px) rotateX(0) rotateY(0); } 50% { transform:perspective(500px) rotateX(6deg) rotateY(-8deg); } }
     </style>
   `;
 }
@@ -2448,7 +3165,8 @@ function handleLibraryDrop(item, libType) {
   } else if (libType === "animations") {
     const components = getCurrentComponents();
     if (components.length === 0) return;
-    const target = components[components.length - 1];
+    const target = getAnimationTarget(components);
+    if (!target) return;
     send({
       type: "set_animation",
       component_id: target.id,
@@ -2459,16 +3177,28 @@ function handleLibraryDrop(item, libType) {
   }
 }
 
+// Prefer the user-selected component; fall back to the most recent one.
+function getAnimationTarget(components) {
+  if (selectedComponentId) {
+    const selected = components.find((c) => c.id === selectedComponentId);
+    if (selected) return selected;
+  }
+  return components[components.length - 1] || null;
+}
+
 // ===== Initialize =====
 
 function init() {
   setupTabs();
-  setupDeviceSwitcher();
+  setupPlatformSwitcher();
   setupUndoRedo();
+  setupZoom();
+  setupCanvasShortcuts();
   setupThemeToggle();
   setupPageSwitcher();
   setupExportModal();
   setupImportModal();
+  setupProjectPersistence();
   setupScreenshot();
   setupPromptBar();
   setupConflictCheck();

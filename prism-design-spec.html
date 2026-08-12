@@ -1,0 +1,1519 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prism 具体设计方案 — AI 驱动的 MCP UI 设计平台</title>
+<style>
+:root {
+  /* Page tokens */
+  --page-bg: #FFFFFF;
+  --page-surface: #F5F3FF;
+  --page-surface-muted: #EDE9FE;
+  --page-text: #1E1B2E;
+  --page-text-secondary: #3F3F5F;
+  --page-text-muted: #6B7280;
+  --page-text-disabled: #9CA3AF;
+  --page-border: #E9E5FF;
+  --page-brand: #7C3AED;
+  --page-brand-hover: #6D28D9;
+  --page-brand-active: #5B21B6;
+  --page-brand-soft: #F5F3FF;
+  --page-brand-soft-strong: #EDE9FE;
+  --page-brand-text: #4C1D95;
+
+  /* Backward-compatible */
+  --bg: #FFFFFF;
+  --bg2: #F5F3FF;
+  --rule: #E9E5FF;
+  --ink: #1E1B2E;
+  --muted: #6B7280;
+  --text-secondary: #3F3F5F;
+  --text-disabled: #9CA3AF;
+  --accent: #7C3AED;
+  --accent-hover: #6D28D9;
+  --accent-active: #5B21B6;
+  --accent-soft: #F5F3FF;
+  --accent2: #A78BFA;
+
+  /* Chart tokens */
+  --chart-series-1: #7C3AED;
+  --chart-series-2: #A78BFA;
+  --chart-series-3: #C4B5FD;
+  --chart-series-4: #6D28D9;
+  --chart-other: #DDD6FE;
+  --chart-accent: #7C3AED;
+  --chart-accent-2: #A78BFA;
+  --chart-positive: #10B981;
+  --chart-warning: #F59E0B;
+  --chart-negative: #EF4444;
+  --chart-grid: rgba(30, 27, 46, 0.08);
+  --chart-axis: #6B7280;
+  --chart-label: #6B7280;
+  --chart-tooltip-bg: #FFFFFF;
+
+  /* Semantic */
+  --success: #10B981;
+  --info: #7C3AED;
+  --warning: #F59E0B;
+  --danger: #EF4444;
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+
+  /* Radius */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--page-text);
+  background: var(--page-bg);
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+strong { font-weight: 600; color: var(--page-text); }
+code {
+  font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Consolas, monospace;
+  font-size: 0.88em;
+  background: var(--page-surface-muted);
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--page-brand);
+}
+mark.key { background: none; color: var(--accent); font-weight: 600; }
+
+.report {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0 48px 120px;
+}
+
+/* ===== Hero ===== */
+.hero {
+  position: relative;
+  height: 320px;
+  margin: 0 -48px 48px;
+  overflow: hidden;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  background: linear-gradient(135deg, #1E1B4B 0%, #4C1D95 40%, #7C3AED 100%);
+}
+.hero::before {
+  content: '';
+  position: absolute; inset: 0;
+  background-image:
+    radial-gradient(circle at 20% 30%, rgba(167,139,250,0.25) 0%, transparent 50%),
+    radial-gradient(circle at 80% 70%, rgba(196,181,253,0.15) 0%, transparent 50%);
+}
+.hero-grid {
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(rgba(167,139,250,0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(167,139,250,0.06) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+.hero-content {
+  position: relative; z-index: 2;
+  height: 100%;
+  display: flex; flex-direction: column;
+  justify-content: center; align-items: center;
+  text-align: center; padding: 0 48px;
+}
+.hero-badge {
+  display: inline-block;
+  padding: 6px 16px;
+  background: rgba(255,255,255,0.12);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 20px;
+  font-size: 12px; font-weight: 600; letter-spacing: 1px;
+  color: #C4B5FD; text-transform: uppercase;
+  margin-bottom: 20px;
+}
+.hero-title {
+  font-size: 36px; font-weight: 800;
+  color: #fff; letter-spacing: -1px; line-height: 1.2;
+  margin-bottom: 12px;
+}
+.hero-subtitle {
+  font-size: 15px; color: #DDD6FE;
+  max-width: 560px; line-height: 1.6;
+}
+.hero-meta {
+  position: absolute; bottom: 20px; left: 0; right: 0;
+  display: flex; justify-content: center; gap: 32px;
+  font-size: 11px; color: rgba(255,255,255,0.4);
+}
+
+/* ===== Headings ===== */
+h2 {
+  font-size: 24px; font-weight: 700;
+  color: var(--page-brand-text);
+  margin: 56px 0 20px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid var(--page-surface-muted);
+  display: flex; align-items: center; gap: 10px;
+}
+h2 .sec-num {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px;
+  background: linear-gradient(135deg, var(--accent), var(--page-brand-hover));
+  color: #fff; border-radius: var(--radius-sm);
+  font-size: 13px; font-weight: 700; flex-shrink: 0;
+}
+h3 {
+  font-size: 18px; font-weight: 600;
+  color: var(--page-brand-text);
+  margin: 32px 0 14px;
+}
+h4 {
+  font-size: 14px; font-weight: 600;
+  color: var(--page-brand);
+  margin: 20px 0 8px;
+}
+p { margin-bottom: 14px; color: var(--page-text-secondary); }
+
+/* ===== Components ===== */
+.section-intro {
+  font-size: 15px; color: var(--muted);
+  margin-bottom: 24px; padding: 16px 20px;
+  background: var(--page-surface);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.card {
+  background: var(--page-surface);
+  border: 1px solid var(--page-border);
+  border-radius: var(--radius-md);
+  padding: 22px;
+  margin-bottom: 16px;
+}
+.card-title {
+  font-size: 15px; font-weight: 700;
+  color: var(--page-brand-text);
+  margin-bottom: 8px;
+  display: flex; align-items: center; gap: 8px;
+}
+.card-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  background: var(--page-surface-muted);
+  color: var(--page-brand);
+  border-radius: 4px;
+  font-size: 11px; font-weight: 600;
+}
+
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+
+/* ===== Tables ===== */
+table {
+  width: 100%; border-collapse: collapse;
+  margin-bottom: 24px; font-size: 13px;
+}
+th {
+  text-align: left; padding: 10px 14px;
+  background: var(--page-brand-text); color: #fff;
+  font-weight: 600; font-size: 12px;
+  letter-spacing: 0.3px;
+}
+td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--page-border);
+  color: var(--page-text-secondary);
+  vertical-align: top;
+}
+tr:nth-child(even) td { background: var(--page-surface); }
+td strong { color: var(--page-brand-text); }
+
+/* ===== Metric ===== */
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 14px; margin-bottom: 28px;
+}
+.metric-card {
+  background: var(--page-surface);
+  border: 1px solid var(--page-border);
+  border-radius: var(--radius-md);
+  padding: 20px 16px; text-align: center;
+}
+.metric-value {
+  font-size: 32px; font-weight: 800;
+  background: linear-gradient(135deg, var(--accent), var(--page-brand-hover));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 4px;
+}
+.metric-label {
+  font-size: 11px; color: var(--muted);
+  font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;
+}
+
+/* ===== Feature List ===== */
+.feature-list { list-style: none; margin-bottom: 16px; }
+.feature-list li {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--page-surface-muted);
+  display: flex; align-items: flex-start; gap: 10px;
+  font-size: 14px; color: var(--page-text-secondary);
+}
+.feature-list li:last-child { border-bottom: none; }
+.feature-list .check { color: var(--accent); font-weight: 700; flex-shrink: 0; }
+
+/* ===== Architecture Diagram (SVG container) ===== */
+.arch-block {
+  background: var(--page-surface);
+  border: 1px solid var(--page-border);
+  border-radius: var(--radius-lg);
+  padding: 28px; margin-bottom: 24px;
+}
+
+/* ===== Roadmap ===== */
+.roadmap { position: relative; padding-left: 28px; margin-bottom: 28px; }
+.roadmap::before {
+  content: ''; position: absolute;
+  left: 10px; top: 0; bottom: 0; width: 2px;
+  background: linear-gradient(180deg, var(--accent), var(--accent2), var(--page-border));
+}
+.roadmap-item {
+  position: relative; margin-bottom: 20px;
+  padding: 18px 22px;
+  background: var(--page-surface);
+  border: 1px solid var(--page-border);
+  border-radius: var(--radius-md);
+}
+.roadmap-item::before {
+  content: ''; position: absolute;
+  left: -22px; top: 22px;
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--accent);
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 2px var(--accent2);
+}
+.roadmap-item.done::before { background: var(--success); box-shadow: 0 0 0 2px #6EE7B7; }
+.roadmap-phase {
+  font-size: 11px; font-weight: 700;
+  color: var(--accent); text-transform: uppercase; letter-spacing: 1px;
+  margin-bottom: 4px;
+}
+.roadmap-item.done .roadmap-phase { color: var(--success); }
+.roadmap-title { font-size: 15px; font-weight: 700; color: var(--page-text); margin-bottom: 6px; }
+.roadmap-desc { font-size: 13px; color: var(--muted); line-height: 1.6; }
+
+/* ===== Callout ===== */
+.callout {
+  background: var(--page-surface);
+  border: 1px solid var(--accent2);
+  border-radius: var(--radius-md);
+  padding: 20px; margin: 20px 0;
+}
+.callout-title {
+  font-size: 13px; font-weight: 700;
+  color: var(--page-brand-text); margin-bottom: 6px;
+}
+.callout p { margin: 0; font-size: 14px; color: var(--page-brand-text); }
+
+/* ===== Tag Pills ===== */
+.tag-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+.tag-pill { padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+.tag-purple { background: var(--page-surface-muted); color: var(--page-brand); }
+.tag-blue { background: #DBEAFE; color: #2563EB; }
+.tag-green { background: #D1FAE5; color: #059669; }
+.tag-orange { background: #FED7AA; color: #C2410C; }
+
+/* ===== UX Flow ===== */
+.ux-flow {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  align-items: center; justify-content: center;
+  margin-bottom: 24px; padding: 20px;
+  background: var(--page-surface); border-radius: var(--radius-md);
+  border: 1px solid var(--page-border);
+}
+.ux-step {
+  background: #fff; border: 1px solid var(--accent2);
+  border-radius: var(--radius-sm);
+  padding: 8px 14px;
+  font-size: 12px; font-weight: 600;
+  color: var(--page-brand-text); text-align: center;
+  min-width: 90px;
+}
+.ux-step.user { background: var(--page-surface-muted); border-color: var(--accent); }
+.ux-step.ai { background: #DBEAFE; border-color: #2563EB; color: #1E40AF; }
+.ux-step.action { background: #D1FAE5; border-color: #059669; color: #065F46; }
+.ux-arrow { color: var(--accent2); font-size: 16px; font-weight: 700; }
+
+/* ===== Footer ===== */
+footer {
+  margin-top: 56px; padding-top: 28px;
+  border-top: 2px solid var(--page-border);
+}
+footer h2 { border: none; font-size: 18px; margin-bottom: 14px; }
+footer .sources ol { padding-left: 1.2rem; font-size: 12px; color: var(--muted); }
+footer .sources li { margin-bottom: 6px; overflow-wrap: break-word; }
+footer .sources .src-title { color: var(--text-secondary); word-break: normal; }
+footer .sources .src-url { display: block; margin-top: 2px; font-size: 11px; color: var(--accent); word-break: break-all; }
+sup a { color: var(--accent); text-decoration: none; font-size: 0.75em; font-weight: 600; }
+sup a:hover { text-decoration: underline; }
+
+/* ===== Responsive ===== */
+@media (max-width: 768px) {
+  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  .report { padding: 0 20px 60px; }
+  .hero { margin: 0 -20px 32px; height: 260px; }
+  .hero-title { font-size: 24px; }
+}
+</style>
+</head>
+<body>
+<div class="report">
+
+<!-- ===== HERO ===== -->
+<section class="hero">
+  <div class="hero-grid"></div>
+  <div class="hero-content">
+    <span class="hero-badge">PRODUCT DESIGN SPEC · V2.0</span>
+    <h1 class="hero-title">Prism 具体设计方案</h1>
+    <p class="hero-subtitle">基于 MCP 协议的 AI 驱动 UI 设计平台 — 从产品定位到功能模块、交互流程、设计系统与实施路线图的完整方案</p>
+  </div>
+  <div class="hero-meta">
+    <span>版本：v2.0</span>
+    <span>日期：2026.08</span>
+    <span>状态：方案评审</span>
+  </div>
+</section>
+
+<!-- ===== Section 1: Product Positioning ===== -->
+<section>
+  <div class="section-intro">
+    本方案基于对 15+ 顶级设计网站、6 款 AI 设计工具（v0、Figma Make、UXPin Forge、Visily 等）和设计系统最佳实践的系统性调研，结合 Prism 已有的 MCP 工具体系和客户端实现，制定完整的产品设计方案。
+  </div>
+
+  <div class="metric-grid">
+    <div class="metric-card"><div class="metric-value">29+</div><div class="metric-label">MCP 工具</div></div>
+    <div class="metric-card"><div class="metric-value">28</div><div class="metric-label">组件类型</div></div>
+    <div class="metric-card"><div class="metric-value">14</div><div class="metric-label">风格预设</div></div>
+    <div class="metric-card"><div class="metric-value">20</div><div class="metric-label">动效类型</div></div>
+    <div class="metric-card"><div class="metric-value">5</div><div class="metric-label">输入方式</div></div>
+  </div>
+
+  <h2><span class="sec-num">1</span> 产品定位与愿景</h2>
+
+  <h3>1.1 一句话定位</h3>
+  <div class="callout">
+    <div class="callout-title">核心定位</div>
+    <p>Prism 是首个基于 <strong>MCP 开放协议</strong>的本地化 AI 驱动 UI 设计平台——让非技术用户通过自然语言与 AI Agent 协作设计界面，实时可视化全过程，同时提供专业级设计令牌系统和组件库，弥合"表达鸿沟"。</p>
+  </div>
+
+  <h3>1.2 设计哲学</h3>
+  <p>Prism 的设计哲学直接来源于对 Stripe、Linear、Vercel 三家公司的深度分析<sup><a href="#cite-1">[1]</a></sup>，提炼为四条不可妥协的原则：</p>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">交互密度优先于视觉密度</div>
+      <p>每个元素都响应 hover、focus、键盘和上下文。密度在行为中，不在像素中。添加新元素前，先审计现有元素的交互完整性（六种微状态）。<sup><a href="#cite-1">[1]</a></sup></p>
+    </div>
+    <div class="card">
+      <div class="card-title">对具体案例的执着</div>
+      <p>不为"所有模态框"定义统一动画，而是为每个具体交互场景设计最优体验。通用设计系统回答抽象问题，Prism 回答具体问题。<sup><a href="#cite-1">[1]</a></sup></p>
+    </div>
+    <div class="card">
+      <div class="card-title">性能即设计</div>
+      <p>所有交互应在 100ms 内感知响应。WebSocket 同步延迟控制在 50ms 内。参照 Linear 的理念——快速响应的界面直接映射产品质量。<sup><a href="#cite-2">[2]</a></sup></p>
+    </div>
+    <div class="card">
+      <div class="card-title">色彩作为克制而非表达</div>
+      <p>客户端使用近单色 + 上下文色彩。生成的设计通过风格预设系统管理色彩。色彩用于含义（danger/success/primary），而非装饰。<sup><a href="#cite-1">[1]</a></sup></p>
+    </div>
+  </div>
+
+  <h3>1.3 目标用户</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>用户角色</th>
+        <th>核心痛点</th>
+        <th>Prism 解决方案</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>非技术创业者</strong></td>
+        <td>有产品想法但无法表达设计需求，不知道专业术语</td>
+        <td>语义中介层将自然语言翻译为设计令牌，设计库支持拖拽</td>
+      </tr>
+      <tr>
+        <td><strong>独立开发者</strong></td>
+        <td>需要快速生成 UI 界面，但 Figma 学习成本高</td>
+        <td>AI Agent 通过 MCP 自动生成组件 + 令牌，直接导出代码</td>
+      </tr>
+      <tr>
+        <td><strong>产品经理</strong></td>
+        <td>需要在会议中实时生成原型与利益相关者沟通</td>
+        <td>实时画布 + 对话式迭代，会议中即可看到可交互原型</td>
+      </tr>
+      <tr>
+        <td><strong>设计团队</strong></td>
+        <td>设计系统令牌管理分散，设计与代码不同步</td>
+        <td>三层令牌架构 + 冲突检测 + 多格式导出</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ===== Section 2: System Architecture ===== -->
+<section>
+  <h2><span class="sec-num">2</span> 系统架构设计</h2>
+
+  <h3>2.1 三层架构总览</h3>
+  <p>Prism 采用三层架构，通过 MCP 协议和 WebSocket 实现双向实时通信：</p>
+
+  <div class="arch-block">
+    <svg viewBox="0 0 880 420" width="100%" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#7C3AED"></path>
+        </marker>
+        <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#2563EB"></path>
+        </marker>
+      </defs>
+
+      <!-- Layer 1: AI Agent -->
+      <rect x="20" y="20" width="840" height="80" rx="12" fill="#F5F3FF" stroke="#C4B5FD" stroke-width="1.5"></rect>
+      <text x="440" y="45" text-anchor="middle" font-size="13" font-weight="700" fill="#4C1D95">AI Agent 层</text>
+      <rect x="60" y="58" width="160" height="32" rx="6" fill="#7C3AED"></rect>
+      <text x="140" y="78" text-anchor="middle" font-size="11" fill="#fff" font-weight="600">自然语言输入</text>
+      <rect x="250" y="58" width="160" height="32" rx="6" fill="#7C3AED"></rect>
+      <text x="330" y="78" text-anchor="middle" font-size="11" fill="#fff" font-weight="600">语义中介层</text>
+      <rect x="440" y="58" width="160" height="32" rx="6" fill="#7C3AED"></rect>
+      <text x="520" y="78" text-anchor="middle" font-size="11" fill="#fff" font-weight="600">意图解析</text>
+      <rect x="630" y="58" width="180" height="32" rx="6" fill="#7C3AED"></rect>
+      <text x="720" y="78" text-anchor="middle" font-size="11" fill="#fff" font-weight="600">MCP 工具调用</text>
+
+      <!-- Arrow down -->
+      <line x1="440" y1="105" x2="440" y2="135" stroke="#7C3AED" stroke-width="2" marker-end="url(#arrow)"></line>
+      <text x="460" y="125" font-size="10" fill="#7C3AED">MCP Protocol (stdio)</text>
+
+      <!-- Layer 2: MCP Server -->
+      <rect x="20" y="140" width="840" height="120" rx="12" fill="#ECFDF5" stroke="#6EE7B7" stroke-width="1.5"></rect>
+      <text x="440" y="165" text-anchor="middle" font-size="13" font-weight="700" fill="#065F46">MCP Server 层（本地运行）</text>
+
+      <rect x="50" y="178" width="140" height="32" rx="6" fill="#059669"></rect>
+      <text x="120" y="198" text-anchor="middle" font-size="11" fill="#fff" font-weight="600">State Store</text>
+
+      <rect x="210" y="178" width="140" height="32" rx="6" fill="#059669"></rect>
+      <text x="280" y="198" text-anchor="middle" font-size="11" fill="#fff" font-weight="600">Token 引擎</text>
+
+      <rect x="370" y="178" width="140" height="32" rx="6" fill="#059669"></rect>
+      <text x="440" y="198" text-anchor="middle" font-size="11" fill="#fff" font-weight="600">组件管理器</text>
+
+      <rect x="530" y="178" width="140" height="32" rx="6" fill="#059669"></rect>
+      <text x="600" y="198" text-anchor="middle" font-size="11" fill="#fff" font-weight="600">代码导出器</text>
+
+      <rect x="690" y="178" width="140" height="32" rx="6" fill="#059669"></rect>
+      <text x="760" y="198" text-anchor="middle" font-size="11" fill="#fff" font-weight="600">冲突检测器</text>
+
+      <rect x="200" y="222" width="480" height="28" rx="6" fill="#D1FAE5" stroke="#6EE7B7"></rect>
+      <text x="440" y="240" text-anchor="middle" font-size="11" fill="#065F46" font-weight="600">29+ MCP 工具：色彩 / 排版 / 间距 / 阴影 / 圆角 / 渐变 / 对比度 / 断点 / 令牌 / 组件 / 页面 / 导出</text>
+
+      <!-- Arrow down -->
+      <line x1="440" y1="265" x2="440" y2="295" stroke="#2563EB" stroke-width="2" marker-end="url(#arrow-blue)"></line>
+      <text x="460" y="285" font-size="10" fill="#2563EB">WebSocket (实时双向)</text>
+
+      <!-- Layer 3: Client -->
+      <rect x="20" y="300" width="840" height="100" rx="12" fill="#EFF6FF" stroke="#93C5FD" stroke-width="1.5"></rect>
+      <text x="440" y="325" text-anchor="middle" font-size="13" font-weight="700" fill="#1E40AF">浏览器客户端层</text>
+
+      <rect x="50" y="338" width="150" height="32" rx="6" fill="#2563EB"></rect>
+      <text x="125" y="358" text-anchor="middle" font-size="11" fill="#fff" font-weight="600">实时画布</text>
+
+      <rect x="220" y="338" width="150" height="32" rx="6" fill="#2563EB"></rect>
+      <text x="295" y="358" text-anchor="middle" font-size="11" fill="#fff" font-weight="600">设计库面板</text>
+
+      <rect x="390" y="338" width="150" height="32" rx="6" fill="#2563EB"></rect>
+      <text x="465" y="358" text-anchor="middle" font-size="11" fill="#fff" font-weight="600">令牌编辑面板</text>
+
+      <rect x="560" y="338" width="150" height="32" rx="6" fill="#2563EB"></rect>
+      <text x="635" y="358" text-anchor="middle" font-size="11" fill="#fff" font-weight="600">活动日志</text>
+
+      <rect x="730" y="338" width="100" height="32" rx="6" fill="#2563EB"></rect>
+      <text x="780" y="358" text-anchor="middle" font-size="11" fill="#fff" font-weight="600">代码预览</text>
+    </svg>
+  </div>
+
+  <h3>2.2 通信协议设计</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>通道</th>
+        <th>协议</th>
+        <th>方向</th>
+        <th>用途</th>
+        <th>延迟目标</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>AI → MCP</strong></td>
+        <td>MCP (stdio)</td>
+        <td>AI Agent 调用工具</td>
+        <td>生成令牌、创建组件、应用风格、导出代码</td>
+        <td>取决于 AI 模型</td>
+      </tr>
+      <tr>
+        <td><strong>MCP → Client</strong></td>
+        <td>WebSocket</td>
+        <td>服务器推送状态变更</td>
+        <td>实时更新画布、令牌面板、活动日志</td>
+        <td>&lt; 50ms</td>
+      </tr>
+      <tr>
+        <td><strong>Client → MCP</strong></td>
+        <td>WebSocket + REST</td>
+        <td>客户端发送用户操作</td>
+        <td>拖拽组件、编辑令牌、切换风格、Undo/Redo</td>
+        <td>&lt; 50ms</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>2.3 数据模型</h3>
+  <p>核心状态对象（State Store）包含以下顶层字段：</p>
+  <table>
+    <thead>
+      <tr>
+        <th>字段</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td><code>projectName</code></td><td>string</td><td>项目名称</td></tr>
+      <tr><td><code>style</code></td><td>StylePreset</td><td>当前风格预设（minimal/bold/playful/dark/editorial/tech/glassmorphism/neumorphism/claymorphism/aurora/brutalism/cyberpunk/organic/luxury）</td></tr>
+      <tr><td><code>tokens</code></td><td>TokenRegistry</td><td>三层令牌注册表（primitive → semantic → component）</td></tr>
+      <tr><td><code>pages</code></td><td>Page[]</td><td>多页面列表，每页含组件树</td></tr>
+      <tr><td><code>activePageId</code></td><td>string</td><td>当前活动页面 ID</td></tr>
+      <tr><td><code>components</code></td><td>ComponentNode[]</td><td>组件树（Hero/Card/Nav/Footer 等 17 种类型）</td></tr>
+      <tr><td><code>breakpoints</code></td><td>Breakpoint[]</td><td>响应式断点定义</td></tr>
+      <tr><td><code>history</code></td><td>HistoryStack</td><td>Undo/Redo 历史栈</td></tr>
+      <tr><td><code>activityLog</code></td><td>ActivityEntry[]</td><td>活动日志（AI 和用户操作记录）</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ===== Section 3: Core Feature Modules ===== -->
+<section>
+  <h2><span class="sec-num">3</span> 核心功能模块</h2>
+
+  <h3>3.1 五种输入方式</h3>
+  <p>基于竞品分析<sup><a href="#cite-3">[3]</a></sup><sup><a href="#cite-4">[4]</a></sup>，Prism 支持五种输入方式覆盖从灵感探索到精确构建的全流程：</p>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">1. 自然语言生成 <span class="card-tag">已有</span></div>
+      <p>用户用自然语言描述需求（"我想要一个暖色调的冥想应用着陆页"），AI Agent 通过 MCP 工具自动生成令牌、组件和完整布局。</p>
+      <p><strong>竞品参照：</strong>Figma Make、v0、UXPin Forge 均支持<sup><a href="#cite-3">[3]</a></sup><sup><a href="#cite-5">[5]</a></sup></p>
+    </div>
+    <div class="card">
+      <div class="card-title">2. 对话式迭代 <span class="card-tag">已有</span></div>
+      <p>生成后通过后续指令修改（"把侧边栏改窄一点，顶部加个搜索框"），AI 在现有布局上原地修改，不从头重新生成。</p>
+      <p><strong>竞品参照：</strong>UXPin Forge 的核心优势<sup><a href="#cite-3">[3]</a></sup></p>
+    </div>
+    <div class="card">
+      <div class="card-title">3. 截图转 UI <span class="card-tag">规划中</span></div>
+      <p>上传截图或竞品界面，AI 分析视觉布局并用 Prism 组件库重建为可编辑设计。支持从手绘草图转换。</p>
+      <p><strong>竞品参照：</strong>Visily、Uizard 的核心功能<sup><a href="#cite-4">[4]</a></sup><sup><a href="#cite-6">[6]</a></sup></p>
+    </div>
+    <div class="card">
+      <div class="card-title">4. URL 转 UI <span class="card-tag">规划中</span></div>
+      <p>粘贴 URL，AI 提取页面布局结构，用 Prism 组件库重建。结果匹配你的设计系统，而非源网站样式。</p>
+      <p><strong>竞品参照：</strong>UXPin Forge 独有能力<sup><a href="#cite-3">[3]</a></sup></p>
+    </div>
+    <div class="card">
+      <div class="card-title">5. 设计库拖拽 <span class="card-tag">已有</span></div>
+      <p>从左侧设计库面板直接拖拽组件、风格或动效到画布。悬停时预览效果演示。非技术用户无需 AI 指令即可操作。</p>
+      <p><strong>竞品参照：</strong>Prism 独创，竞品无此能力</p>
+    </div>
+    <div class="card">
+      <div class="card-title">6. 令牌手动编辑 <span class="card-tag">已有</span></div>
+      <p>右侧令牌面板直接编辑色彩、排版、间距等令牌值。实时反映在画布上。支持令牌冲突检测和 WCAG 对比度检查。</p>
+      <p><strong>竞品参照：</strong>Tokens Studio、Specify<sup><a href="#cite-7">[7]</a></sup></p>
+    </div>
+  </div>
+
+  <h3>3.2 语义中介层</h3>
+  <p>这是 Prism 弥合"表达鸿沟"的核心差异化能力。非技术用户不需要知道"暖色调 HSL 30° 饱和度 60%"，只需说"温暖、舒适"：</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>用户自然语言</th>
+        <th>语义中介层映射</th>
+        <th>生成的令牌</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>"温暖、舒适"</td>
+        <td>style=playful, hue=30°, saturation=60%, lightness=55%</td>
+        <td>暖橙色调色板，圆润字体，宽松间距</td>
+      </tr>
+      <tr>
+        <td>"科技感、未来"</td>
+        <td>style=tech, dark mode, hue=210°, monospace font</td>
+        <td>深色背景，蓝紫色调，等宽字体，紧凑间距</td>
+      </tr>
+      <tr>
+        <td>"简洁、专业"</td>
+        <td>style=minimal, neutral palette, sans-serif</td>
+        <td>中性灰色调，无衬线字体，标准间距</td>
+      </tr>
+      <tr>
+        <td>"活泼、有趣"</td>
+        <td>style=playful, multi-hue, rounded shapes</td>
+        <td>多彩调色板，圆角组件，弹性动画</td>
+      </tr>
+      <tr>
+        <td>"高端、奢侈"</td>
+        <td>style=editorial, serif font, gold accent</td>
+        <td>黑金配色，衬线字体，大间距，精致阴影</td>
+      </tr>
+      <tr>
+        <td>"大字号、易读"</td>
+        <td>font-scale=1.3x, line-height=1.75, weight=500</td>
+        <td>放大的排版系统，宽松行高</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>3.3 设计令牌系统</h3>
+  <p>采用三层令牌架构<sup><a href="#cite-8">[8]</a></sup>，这是 2025-2026 年设计系统行业的成熟标准：</p>
+
+  <div class="arch-block">
+    <svg viewBox="0 0 880 280" width="100%" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#7C3AED"></path>
+        </marker>
+      </defs>
+
+      <!-- Layer 1: Primitive -->
+      <rect x="20" y="20" width="260" height="100" rx="12" fill="#F5F3FF" stroke="#C4B5FD" stroke-width="1.5"></rect>
+      <text x="150" y="45" text-anchor="middle" font-size="13" font-weight="700" fill="#4C1D95">Layer 1: Primitive Tokens</text>
+      <text x="150" y="65" text-anchor="middle" font-size="11" fill="#6B7280">基础值，无语义含义</text>
+      <text x="150" y="85" text-anchor="middle" font-size="11" font-family="monospace" fill="#7C3AED">gray-300, blue-500, 16px</text>
+      <text x="150" y="105" text-anchor="middle" font-size="11" font-family="monospace" fill="#7C3AED">radius-md, shadow-sm</text>
+
+      <line x1="280" y1="70" x2="320" y2="70" stroke="#7C3AED" stroke-width="2" marker-end="url(#arrow2)"></line>
+
+      <!-- Layer 2: Semantic -->
+      <rect x="320" y="20" width="260" height="100" rx="12" fill="#ECFDF5" stroke="#6EE7B7" stroke-width="1.5"></rect>
+      <text x="450" y="45" text-anchor="middle" font-size="13" font-weight="700" fill="#065F46">Layer 2: Semantic Tokens</text>
+      <text x="450" y="65" text-anchor="middle" font-size="11" fill="#6B7280">语义引用，表达意图</text>
+      <text x="450" y="85" text-anchor="middle" font-size="11" font-family="monospace" fill="#059669">text-secondary → gray-300</text>
+      <text x="450" y="105" text-anchor="middle" font-size="11" font-family="monospace" fill="#059669">color-primary → blue-500</text>
+
+      <line x1="580" y1="70" x2="620" y2="70" stroke="#7C3AED" stroke-width="2" marker-end="url(#arrow2)"></line>
+
+      <!-- Layer 3: Component -->
+      <rect x="620" y="20" width="240" height="100" rx="12" fill="#EFF6FF" stroke="#93C5FD" stroke-width="1.5"></rect>
+      <text x="740" y="45" text-anchor="middle" font-size="13" font-weight="700" fill="#1E40AF">Layer 3: Component Tokens</text>
+      <text x="740" y="65" text-anchor="middle" font-size="11" fill="#6B7280">组件级引用</text>
+      <text x="740" y="85" text-anchor="middle" font-size="11" font-family="monospace" fill="#2563EB">button.bg → color-primary</text>
+      <text x="740" y="105" text-anchor="middle" font-size="11" font-family="monospace" fill="#2563EB">card.padding → spacing-lg</text>
+
+      <!-- Bottom: Export -->
+      <line x1="440" y1="125" x2="440" y2="160" stroke="#7C3AED" stroke-width="2" marker-end="url(#arrow2)"></line>
+      <rect x="120" y="165" width="640" height="44" rx="10" fill="#7C3AED"></rect>
+      <text x="440" y="192" text-anchor="middle" font-size="13" font-weight="600" fill="#fff">全链路自动同步：Figma Variables → Design Tokens → CSS Variables → Tailwind Config</text>
+
+      <text x="440" y="235" text-anchor="middle" font-size="11" fill="#6B7280">Style Dictionary 编译 → CSS / SCSS / iOS Swift / Android XML / TypeScript</text>
+      <text x="440" y="255" text-anchor="middle" font-size="11" fill="#6B7280">令牌漂移检测 → 代码库硬编码值扫描 → 自动告警</text></svg><sup><a href="#cite-9">[9]</a></sup>
+    
+  </div>
+
+  <p>组件<strong>从不包含字面值</strong>，始终消费令牌引用。当令牌变更时，所有引用该令牌的组件自动更新<sup><a href="#cite-8">[8]</a></sup>。</p>
+
+  <h4>令牌分类与 MCP 工具映射</h4>
+  <table>
+    <thead>
+      <tr>
+        <th>令牌类别</th>
+        <th>MCP 工具</th>
+        <th>生成参数</th>
+        <th>数量</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>色彩</strong></td><td>generate_color_palette</td><td>base color, harmony (monochromatic/analogous/complementary/triadic/tetradic/split-complementary)</td><td>12+ 色</td></tr>
+      <tr><td><strong>排版</strong></td><td>generate_typography_system</td><td>font pairing, scale ratio (minor third/perfect fourth/golden), weight set</td><td>6 字号 × 4 字重</td></tr>
+      <tr><td><strong>间距</strong></td><td>generate_spacing_system</td><td>base unit (4/8px), scale (linear/geometric/golden)</td><td>11 级</td></tr>
+      <tr><td><strong>阴影</strong></td><td>generate_shadow_system</td><td>elevation levels, color tint, blur radius</td><td>6 级</td></tr>
+      <tr><td><strong>圆角</strong></td><td>generate_border_radius_system</td><td>base radius, scale strategy</td><td>7 级</td></tr>
+      <tr><td><strong>渐变</strong></td><td>generate_gradient</td><td>color stops, angle, type (linear/radial/conic)</td><td>按需</td></tr>
+      <tr><td><strong>对比度</strong></td><td>check_contrast</td><td>foreground, background, WCAG level (AA/AAA)</td><td>实时检测</td></tr>
+      <tr><td><strong>断点</strong></td><td>generate_breakpoints</td><td>strategy (mobile-first/desktop-first), custom sizes</td><td>5 断点</td></tr>
+      <tr><td><strong>完整令牌集</strong></td><td>generate_design_tokens</td><td>one-shot 生成所有上述令牌</td><td>全量</td></tr>
+    </tbody>
+  </table>
+
+  <h3>3.4 组件系统</h3>
+  <p>28 种组件类型，采用 Atomic Design 方法论<sup><a href="#cite-10">[10]</a></sup>组织，涵盖经典组件与 2026 前沿 UI 模式：</p>
+
+  <div class="grid-4">
+    <div class="card" style="padding:14px"><div class="card-title" style="font-size:13px">Hero</div><p style="font-size:12px;margin:0">页面顶部横幅</p></div>
+    <div class="card" style="padding:14px"><div class="card-title" style="font-size:13px">Navigation</div><p style="font-size:12px;margin:0">导航栏</p></div>
+    <div class="card" style="padding:14px"><div class="card-title" style="font-size:13px">Card</div><p style="font-size:12px;margin:0">内容卡片</p></div>
+    <div class="card" style="padding:14px"><div class="card-title" style="font-size:13px">Button</div><p style="font-size:12px;margin:0">按钮</p></div>
+    <div class="card" style="padding:14px"><div class="card-title" style="font-size:13px">Input</div><p style="font-size:12px;margin:0">输入框</p></div>
+    <div class="card" style="padding:14px"><div class="card-title" style="font-size:13px">Footer</div><p style="font-size:12px;margin:0">页脚</p></div>
+    <div class="card" style="padding:14px"><div class="card-title" style="font-size:13px">Grid</div><p style="font-size:12px;margin:0">网格布局</p></div>
+    <div class="card" style="padding:14px"><div class="card-title" style="font-size:13px">Modal</div><p style="font-size:12px;margin:0">模态框</p></div>
+    <div class="card" style="padding:14px"><div class="card-title" style="font-size:13px">Table</div><p style="font-size:12px;margin:0">表格</p></div>
+    <div class="card" style="padding:14px"><div class="card-title" style="font-size:13px">Tabs</div><p style="font-size:12px;margin:0">标签页</p></div>
+    <div class="card" style="padding:14px"><div class="card-title" style="font-size:13px">Badge</div><p style="font-size:12px;margin:0">徽章</p></div>
+    <div class="card" style="padding:14px"><div class="card-title" style="font-size:13px">Avatar</div><p style="font-size:12px;margin:0">头像</p></div>
+    <div class="card" style="padding:14px"><div class="card-title" style="font-size:13px">Alert</div><p style="font-size:12px;margin:0">提示框</p></div>
+    <div class="card" style="padding:14px"><div class="card-title" style="font-size:13px">Accordion</div><p style="font-size:12px;margin:0">手风琴</p></div>
+    <div class="card" style="padding:14px"><div class="card-title" style="font-size:13px">Carousel</div><p style="font-size:12px;margin:0">轮播</p></div>
+    <div class="card" style="padding:14px"><div class="card-title" style="font-size:13px">Progress</div><p style="font-size:12px;margin:0">进度条</p></div>
+    <div class="card" style="padding:14px"><div class="card-title" style="font-size:13px">Tooltip</div><p style="font-size:12px;margin:0">工具提示</p></div>
+    <div class="card" style="padding:14px"><div class="card-title" style="font-size:13px">Breadcrumb</div><p style="font-size:12px;margin:0">面包屑导航</p></div>
+    <div class="card" style="padding:14px"><div class="card-title" style="font-size:13px">Pagination</div><p style="font-size:12px;margin:0">分页控件</p></div>
+    <div class="card" style="padding:14px"><div class="card-title" style="font-size:13px">Sidebar</div><p style="font-size:12px;margin:0">侧边栏</p></div>
+    <div class="card" style="padding:14px"><div class="card-title" style="font-size:13px">Bento Grid</div><p style="font-size:12px;margin:0">便当盒网格</p></div>
+    <div class="card" style="padding:14px"><div class="card-title" style="font-size:13px">Skeleton</div><p style="font-size:12px;margin:0">骨架屏加载</p></div>
+    <div class="card" style="padding:14px"><div class="card-title" style="font-size:13px">Command Palette</div><p style="font-size:12px;margin:0">Cmd+K 命令面板</p></div>
+    <div class="card" style="padding:14px"><div class="card-title" style="font-size:13px">Glass Card</div><p style="font-size:12px;margin:0">玻璃质感卡片</p></div>
+    <div class="card" style="padding:14px"><div class="card-title" style="font-size:13px">FAB</div><p style="font-size:12px;margin:0">浮动操作按钮</p></div>
+    <div class="card" style="padding:14px"><div class="card-title" style="font-size:13px">Marquee</div><p style="font-size:12px;margin:0">跑马灯滚动</p></div>
+    <div class="card" style="padding:14px"><div class="card-title" style="font-size:13px">Feature Grid</div><p style="font-size:12px;margin:0">功能图标网格</p></div>
+    <div class="card" style="padding:14px"><div class="card-title" style="font-size:13px">Stats Bar</div><p style="font-size:12px;margin:0">数据统计条</p></div>
+    <div class="card" style="padding:14px"><div class="card-title" style="font-size:13px">Cookie Banner</div><p style="font-size:12px;margin:0">Cookie 同意横幅</p></div>
+    <div class="card" style="padding:14px"><div class="card-title" style="font-size:13px">Toggle</div><p style="font-size:12px;margin:0">开关切换</p></div>
+    <div class="card" style="padding:14px"><div class="card-title" style="font-size:13px">Timeline</div><p style="font-size:12px;margin:0">时间线</p></div>
+  </div>
+
+  <p>每种组件支持多种变体（variant），例如 Button 有 primary/secondary/ghost/danger 四种变体，Card 有 default/elevated/outlined 三种变体。组件属性全部消费语义令牌引用。</p>
+
+  <h3>3.5 风格预设系统</h3>
+  <p>14 种内置风格预设，每种预设一键生成完整令牌集（色彩 + 排版 + 间距 + 阴影 + 圆角 + 过渡）。涵盖从经典到 2026 前沿设计趋势的完整光谱：</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>风格</th>
+        <th>色相</th>
+        <th>饱和度/明度</th>
+        <th>字体配对</th>
+        <th>间距比例</th>
+        <th>圆角策略</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>Minimal</strong></td><td>中性灰</td><td>10% / 50%</td><td>Inter / Inter</td><td>线性 8px</td><td>小圆角 4px</td></tr>
+      <tr><td><strong>Bold</strong></td><td>210° 蓝</td><td>80% / 50%</td><td>Inter / Inter</td><td>几何 1.25x</td><td>无圆角 0px</td></tr>
+      <tr><td><strong>Playful</strong></td><td>330° 粉</td><td>70% / 60%</td><td>Poppins / Nunito</td><td>黄金 1.618x</td><td>大圆角 16px</td></tr>
+      <tr><td><strong>Dark</strong></td><td>260° 紫</td><td>60% / 40%</td><td>Inter / JetBrains Mono</td><td>线性 8px</td><td>中圆角 8px</td></tr>
+      <tr><td><strong>Editorial</strong></td><td>30° 棕</td><td>30% / 40%</td><td>Playfair Display / Source Sans</td><td>几何 1.25x</td><td>无圆角 0px</td></tr>
+      <tr><td><strong>Tech</strong></td><td>190° 青</td><td>70% / 50%</td><td>Space Grotesk / JetBrains Mono</td><td>线性 4px</td><td>小圆角 6px</td></tr>
+      <tr><td><strong>Glassmorphism</strong></td><td>240° 蓝</td><td>40% / 55%</td><td>Outfit / Inter</td><td>线性 8px</td><td>中圆角 12px</td></tr>
+      <tr><td><strong>Neumorphism</strong></td><td>220° 灰</td><td>8% / 65%</td><td>Nunito Sans / Nunito Sans</td><td>线性 8px</td><td>中圆角 12px</td></tr>
+      <tr><td><strong>Claymorphism</strong></td><td>320° 粉</td><td>50% / 70%</td><td>Quicksand / Nunito</td><td>线性 8px</td><td>药丸 999px</td></tr>
+      <tr><td><strong>Aurora</strong></td><td>270° 紫</td><td>70% / 50%</td><td>Space Grotesk / Inter</td><td>线性 8px</td><td>中圆角 12px</td></tr>
+      <tr><td><strong>Brutalism</strong></td><td>50° 黄</td><td>90% / 50%</td><td>Archivo Black / Space Mono</td><td>线性 4px</td><td>无圆角 0px</td></tr>
+      <tr><td><strong>Cyberpunk</strong></td><td>180° 青</td><td>100% / 50%</td><td>Orbitron / Share Tech Mono</td><td>线性 4px</td><td>无圆角 0px</td></tr>
+      <tr><td><strong>Organic</strong></td><td>90° 绿</td><td>30% / 50%</td><td>Fraunces / DM Sans</td><td>线性 8px</td><td>药丸 999px</td></tr>
+      <tr><td><strong>Luxury</strong></td><td>45° 金</td><td>35% / 50%</td><td>Cormorant Garamond / Jost</td><td>线性 8px</td><td>小圆角 4px</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <div class="callout-title">2026 设计趋势对齐</div>
+    <p>新增 8 种风格基于 Awwwards、CSS Design Awards、Figma 趋势库等权威来源的系统性调研，覆盖 Glassmorphism（Apple Liquid Glass 回潮）、Aurora（Stripe 风格网格渐变）、Brutalism（反设计美学）、Cyberpunk（霓虹 HUD）、Organic（仿生形态）、Luxury（OLED 奢华）、Neumorphism（软 UI）、Claymorphism（3D 粘土质惑）等 2025-2026 年最热门设计方向。</p>
+  </div>
+
+  <h3>3.6 动效系统</h3>
+  <div class="grid-2">
+    <div>
+      <h4>入场动画（13 种）</h4>
+      <ul class="feature-list">
+        <li><span class="check">✓</span> fadeUp — 淡入上浮</li>
+        <li><span class="check">✓</span> fadeIn — 纯淡入</li>
+        <li><span class="check">✓</span> scaleIn — 缩放进入</li>
+        <li><span class="check">✓</span> slideLeft — 从右滑入</li>
+        <li><span class="check">✓</span> slideRight — 从左滑入</li>
+        <li><span class="check">✓</span> slideUp — 从下滑入</li>
+        <li><span class="check">✓</span> spring — 弹簧缩放</li>
+        <li><span class="check">✓</span> bounceIn — Q 弹跳跳进入</li>
+        <li><span class="check">✓</span> flipIn — 3D 翻转进入</li>
+        <li><span class="check">✓</span> cinematic — 电影级缩放上浮</li>
+        <li><span class="check">✓</span> shimmer — 微光闪烁（骨架屏）</li>
+        <li><span class="check">✓</span> glitch — 故障色差效果</li>
+        <li><span class="check">✓</span> morphBlob — 流体变形进入</li>
+      </ul>
+    </div>
+    <div>
+      <h4>悬停动画（7 种）</h4>
+      <ul class="feature-list">
+        <li><span class="check">✓</span> scaleUp — 悬停微缩放</li>
+        <li><span class="check">✓</span> lift — 悬停上浮</li>
+        <li><span class="check">✓</span> glow — 悬停发光</li>
+        <li><span class="check">✓</span> ripple — 涟漪波纹</li>
+        <li><span class="check">✓</span> spotlight — 聚光效果</li>
+        <li><span class="check">✓</span> magnetic — 磁吸偏移</li>
+        <li><span class="check">✓</span> tilt — 3D 倾斜</li>
+      </ul>
+      <h4>动画参数</h4>
+      <ul class="feature-list">
+        <li><span class="check">✓</span> duration: 200-800ms 可调</li>
+        <li><span class="check">✓</span> delay: 0-500ms 可调</li>
+        <li><span class="check">✓</span> easing: ease/ease-in/ease-out/spring</li>
+        <li><span class="check">✓</span> stagger: 子元素错峰延迟</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ===== Section 4: Interaction Flow ===== -->
+<section>
+  <h2><span class="sec-num">4</span> 交互流程设计</h2>
+
+  <h3>4.1 核心用户流程</h3>
+  <p>Prism 的核心 UX 围绕"表达 → 生成 → 可视化 → 调整 → 导出"闭环设计：</p>
+
+  <div class="ux-flow">
+    <div class="ux-step user">用户描述需求</div>
+    <span class="ux-arrow">→</span>
+    <div class="ux-step ai">语义中介层解析</div>
+    <span class="ux-arrow">→</span>
+    <div class="ux-step action">MCP 工具调用</div>
+    <span class="ux-arrow">→</span>
+    <div class="ux-step action">State Store 更新</div>
+    <span class="ux-arrow">→</span>
+    <div class="ux-step user">WebSocket 推送</div>
+    <span class="ux-arrow">→</span>
+    <div class="ux-step user">画布实时渲染</div>
+    <span class="ux-arrow">→</span>
+    <div class="ux-step user">用户调整/拖拽</div>
+    <span class="ux-arrow">→</span>
+    <div class="ux-step action">令牌/组件变更</div>
+    <span class="ux-arrow">→</span>
+    <div class="ux-step action">代码导出</div>
+  </div>
+
+  <h3>4.2 场景一：非技术用户从零创建</h3>
+  <div class="card">
+    <p><strong>步骤 1：</strong>用户在 AI 输入框输入"帮我做一个咖啡店的网站，要温暖舒适的感觉"</p>
+    <p><strong>步骤 2：</strong>语义中介层解析 → style=playful, hue=30°（暖橙），生成完整令牌集</p>
+    <p><strong>步骤 3：</strong>AI Agent 调用 MCP 工具链：generate_design_tokens → apply_style_preset("playful") → add_component("hero") → add_component("card") × 3 → add_component("footer")</p>
+    <p><strong>步骤 4：</strong>每步操作通过 WebSocket 推送到客户端，画布逐步渲染。活动日志实时显示 AI 正在做什么</p>
+    <p><strong>步骤 5：</strong>用户看到结果后说"标题再大一点"，AI 调用 set_token 修改 font-size-scale</p>
+    <p><strong>步骤 6：</strong>用户从设计库拖拽一个 Carousel 组件到画布，手动放置到 Hero 下方</p>
+    <p><strong>步骤 7：</strong>用户点击导出，选择 HTML 格式，获得完整可部署的静态网站</p>
+  </div>
+
+  <h3>4.3 场景二：开发者快速原型</h3>
+  <div class="card">
+    <p><strong>步骤 1：</strong>开发者通过 Agent 发送"创建一个 SaaS Dashboard，深色主题，左侧导航 + 顶部数据卡片 + 底部表格"</p>
+    <p><strong>步骤 2：</strong>AI 选择 style=tech（深色 + 等宽字体），生成令牌集</p>
+    <p><strong>步骤 3：</strong>AI 创建组件：Navigation(variant="sidebar") → Grid(3col) → Card × 3 → Table</p>
+    <p><strong>步骤 4：</strong>开发者在令牌面板调整间距和色彩，实时预览</p>
+    <p><strong>步骤 5：</strong>导出为 React 代码，直接集成到 Next.js 项目</p>
+  </div>
+
+  <h3>4.4 客户端界面布局</h3>
+  <div class="arch-block">
+    <svg viewBox="0 0 880 400" width="100%" xmlns="http://www.w3.org/2000/svg">
+      <!-- Top Bar -->
+      <rect x="10" y="10" width="860" height="36" rx="6" fill="#1E1B4B"></rect>
+      <text x="30" y="33" font-size="12" fill="#C4B5FD" font-weight="600">Prism</text>
+      <circle cx="100" cy="28" r="4" fill="#10B981"></circle>
+      <text x="115" y="32" font-size="11" fill="#A78BFA">已连接</text>
+      <text x="200" y="32" font-size="11" fill="#A78BFA">项目：咖啡店网站</text>
+      <text x="400" y="32" font-size="11" fill="#A78BFA">风格：Playful</text>
+      <rect x="700" y="18" width="80" height="20" rx="4" fill="#7C3AED"></rect>
+      <text x="740" y="32" text-anchor="middle" font-size="10" fill="#fff" font-weight="600">导出</text>
+      <rect x="790" y="18" width="70" height="20" rx="4" fill="#374151"></rect>
+      <text x="825" y="32" text-anchor="middle" font-size="10" fill="#fff">预览</text>
+
+      <!-- Left Panel -->
+      <rect x="10" y="56" width="180" height="334" rx="6" fill="#F5F3FF" stroke="#E9E5FF"></rect>
+      <rect x="20" y="66" width="160" height="24" rx="4" fill="#EDE9FE"></rect>
+      <text x="100" y="82" text-anchor="middle" font-size="10" fill="#7C3AED" font-weight="600">页面：Home | About +</text>
+
+      <rect x="20" y="98" width="75" height="20" rx="4" fill="#7C3AED"></rect>
+      <text x="57" y="112" text-anchor="middle" font-size="9" fill="#fff" font-weight="600">设计库</text>
+      <rect x="105" y="98" width="75" height="20" rx="4" fill="#fff" stroke="#E9E5FF"></rect>
+      <text x="142" y="112" text-anchor="middle" font-size="9" fill="#6B7280">日志</text>
+
+      <rect x="20" y="128" width="50" height="16" rx="3" fill="#EDE9FE"></rect>
+      <text x="45" y="140" text-anchor="middle" font-size="8" fill="#7C3AED">风格</text>
+      <rect x="75" y="128" width="50" height="16" rx="3" fill="#fff" stroke="#E9E5FF"></rect>
+      <text x="100" y="140" text-anchor="middle" font-size="8" fill="#6B7280">动效</text>
+      <rect x="130" y="128" width="50" height="16" rx="3" fill="#fff" stroke="#E9E5FF"></rect>
+      <text x="155" y="140" text-anchor="middle" font-size="8" fill="#6B7280">组件</text>
+
+      <!-- Library items -->
+      <rect x="20" y="152" width="160" height="36" rx="4" fill="#fff" stroke="#E9E5FF"></rect>
+      <rect x="28" y="158" width="24" height="24" rx="3" fill="#FBBF24"></rect>
+      <text x="60" y="170" font-size="10" fill="#1E1B2E" font-weight="600">Minimal</text>
+      <text x="60" y="182" font-size="8" fill="#6B7280">简洁、留白、中性</text>
+
+      <rect x="20" y="194" width="160" height="36" rx="4" fill="#fff" stroke="#C4B5FD" stroke-width="1.5"></rect>
+      <rect x="28" y="200" width="24" height="24" rx="3" fill="#F97316"></rect>
+      <text x="60" y="212" font-size="10" fill="#1E1B2E" font-weight="600">Playful ✓</text>
+      <text x="60" y="224" font-size="8" fill="#6B7280">多彩、圆润、活泼</text>
+
+      <rect x="20" y="236" width="160" height="36" rx="4" fill="#fff" stroke="#E9E5FF"></rect>
+      <rect x="28" y="242" width="24" height="24" rx="3" fill="#1E1B4B"></rect>
+      <text x="60" y="254" font-size="10" fill="#1E1B2E" font-weight="600">Dark</text>
+      <text x="60" y="266" font-size="8" fill="#6B7280">深色、精致、科技</text>
+
+      <rect x="20" y="278" width="160" height="36" rx="4" fill="#fff" stroke="#E9E5FF"></rect>
+      <rect x="28" y="284" width="24" height="24" rx="3" fill="#065F46"></rect>
+      <text x="60" y="296" font-size="10" fill="#1E1B2E" font-weight="600">Editorial</text>
+      <text x="60" y="308" font-size="8" fill="#6B7280">衬线、高端、大留白</text>
+
+      <!-- Canvas -->
+      <rect x="200" y="56" width="480" height="334" rx="6" fill="#fff" stroke="#E9E5FF"></rect>
+      <!-- Hero -->
+      <rect x="220" y="72" width="440" height="80" rx="6" fill="#FEF3C7"></rect>
+      <text x="440" y="105" text-anchor="middle" font-size="14" fill="#92400E" font-weight="700">晨光咖啡</text>
+      <text x="440" y="125" text-anchor="middle" font-size="10" fill="#92400E">每一天的美好开始</text>
+      <!-- Cards -->
+      <rect x="220" y="162" width="140" height="60" rx="6" fill="#FED7AA"></rect>
+      <text x="290" y="195" text-anchor="middle" font-size="10" fill="#9A3412">手冲咖啡</text>
+      <rect x="370" y="162" width="140" height="60" rx="6" fill="#FED7AA"></rect>
+      <text x="440" y="195" text-anchor="middle" font-size="10" fill="#9A3412">甜点</text>
+      <rect x="520" y="162" width="140" height="60" rx="6" fill="#FED7AA"></rect>
+      <text x="590" y="195" text-anchor="middle" font-size="10" fill="#9A3412">咖啡豆</text>
+      <!-- Text block -->
+      <rect x="220" y="232" width="440" height="50" rx="6" fill="#FFFBEB"></rect>
+      <rect x="235" y="245" width="200" height="6" rx="2" fill="#FDE68A"></rect>
+      <rect x="235" y="258" width="300" height="4" rx="2" fill="#FEF3C7"></rect>
+      <rect x="235" y="268" width="250" height="4" rx="2" fill="#FEF3C7"></rect>
+      <!-- Footer -->
+      <rect x="220" y="292" width="440" height="80" rx="6" fill="#92400E"></rect>
+      <text x="440" y="335" text-anchor="middle" font-size="10" fill="#FEF3C7">© 2026 晨光咖啡</text>
+
+      <!-- Right Panel -->
+      <rect x="690" y="56" width="180" height="334" rx="6" fill="#F5F3FF" stroke="#E9E5FF"></rect>
+      <text x="780" y="76" text-anchor="middle" font-size="11" fill="#4C1D95" font-weight="700">设计令牌</text>
+
+      <rect x="700" y="86" width="40" height="16" rx="3" fill="#7C3AED"></rect>
+      <text x="720" y="98" text-anchor="middle" font-size="8" fill="#fff">色彩</text>
+      <rect x="745" y="86" width="40" height="16" rx="3" fill="#fff" stroke="#E9E5FF"></rect>
+      <text x="765" y="98" text-anchor="middle" font-size="8" fill="#6B7280">排版</text>
+      <rect x="790" y="86" width="40" height="16" rx="3" fill="#fff" stroke="#E9E5FF"></rect>
+      <text x="810" y="98" text-anchor="middle" font-size="8" fill="#6B7280">间距</text>
+      <rect x="835" y="86" width="30" height="16" rx="3" fill="#fff" stroke="#E9E5FF"></rect>
+      <text x="850" y="98" text-anchor="middle" font-size="8" fill="#6B7280">更多</text>
+
+      <!-- Token items -->
+      <rect x="700" y="112" width="160" height="28" rx="4" fill="#fff" stroke="#E9E5FF"></rect>
+      <rect x="708" y="120" width="12" height="12" rx="2" fill="#F97316"></rect>
+      <text x="728" y="130" font-size="9" fill="#1E1B2E">color-primary</text>
+      <text x="852" y="130" text-anchor="end" font-size="8" fill="#6B7280" font-family="monospace">#F97316</text>
+
+      <rect x="700" y="146" width="160" height="28" rx="4" fill="#fff" stroke="#E9E5FF"></rect>
+      <rect x="708" y="154" width="12" height="12" rx="2" fill="#C2410C"></rect>
+      <text x="728" y="164" font-size="9" fill="#1E1B2E">color-primary-dark</text>
+      <text x="852" y="164" text-anchor="end" font-size="8" fill="#6B7280" font-family="monospace">#C2410C</text>
+
+      <rect x="700" y="180" width="160" height="28" rx="4" fill="#fff" stroke="#E9E5FF"></rect>
+      <rect x="708" y="188" width="12" height="12" rx="2" fill="#FED7AA"></rect>
+      <text x="728" y="198" font-size="9" fill="#1E1B2E">color-accent</text>
+      <text x="852" y="198" text-anchor="end" font-size="8" fill="#6B7280" font-family="monospace">#FED7AA</text>
+
+      <rect x="700" y="214" width="160" height="28" rx="4" fill="#fff" stroke="#E9E5FF"></rect>
+      <rect x="708" y="222" width="12" height="12" rx="2" fill="#FFFBEB"></rect>
+      <text x="728" y="232" font-size="9" fill="#1E1B2E">color-bg</text>
+      <text x="852" y="232" text-anchor="end" font-size="8" fill="#6B7280" font-family="monospace">#FFFBEB</text>
+
+      <rect x="700" y="248" width="160" height="28" rx="4" fill="#fff" stroke="#E9E5FF"></rect>
+      <rect x="708" y="256" width="12" height="12" rx="2" fill="#92400E"></rect>
+      <text x="728" y="266" font-size="9" fill="#1E1B2E">color-text</text>
+      <text x="852" y="266" text-anchor="end" font-size="8" fill="#6B7280" font-family="monospace">#92400E</text>
+
+      <!-- Conflict check -->
+      <rect x="700" y="286" width="160" height="40" rx="4" fill="#D1FAE5" stroke="#6EE7B7"></rect>
+      <text x="780" y="302" text-anchor="middle" font-size="9" fill="#065F46" font-weight="600">✓ 对比度检测通过</text>
+      <text x="780" y="316" text-anchor="middle" font-size="8" fill="#059669">WCAG AA: 7.2:1</text>
+
+      <!-- AI Input -->
+      <rect x="700" y="336" width="160" height="48" rx="6" fill="#1E1B4B"></rect>
+      <text x="780" y="356" text-anchor="middle" font-size="9" fill="#C4B5FD">AI 输入框</text>
+      <text x="780" y="372" text-anchor="middle" font-size="8" fill="#A78BFA">输入指令修改设计...</text>
+    </svg>
+  </div>
+
+  <p>界面分为五大区域：<strong>顶栏</strong>（状态/项目名/风格/导出）、<strong>左侧面板</strong>（页面切换 + 设计库/活动日志）、<strong>中央画布</strong>（实时渲染区）、<strong>右侧面板</strong>（令牌编辑 + 冲突检测）、<strong>AI 输入框</strong>（底部浮动）。</p>
+</section>
+
+<!-- ===== Section 5: Design System ===== -->
+<section>
+  <h2><span class="sec-num">5</span> 设计系统方案</h2>
+
+  <h3>5.1 客户端视觉系统</h3>
+  <p>Prism 客户端自身遵循 Premium UI 六大原则<sup><a href="#cite-1">[1]</a></sup>，采用紫色品牌色 + 中性灰底：</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>设计维度</th>
+        <th>Prism 客户端规范</th>
+        <th>参照来源</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>主色</strong></td>
+        <td>#7C3AED（紫罗兰），用于品牌标识、主要操作、焦点环外环</td>
+        <td>产品品牌色</td>
+      </tr>
+      <tr>
+        <td><strong>背景</strong></td>
+        <td>#FFFFFF 纯白主背景，#F5F3FF 紫调浅灰面板背景</td>
+        <td>Stripe/Vercel 的白底策略<sup><a href="#cite-1">[1]</a></sup></td>
+      </tr>
+      <tr>
+        <td><strong>文字</strong></td>
+        <td>#1E1B2E 主文字，#3F3F5F 次级，#6B7280 辅助</td>
+        <td>高对比度，WCAG AAA</td>
+      </tr>
+      <tr>
+        <td><strong>字体</strong></td>
+        <td>系统无衬线（San Francisco / Segoe UI / Noto Sans CJK），等宽用 JetBrains Mono</td>
+        <td>单一字体家族原则<sup><a href="#cite-1">[1]</a></sup></td>
+      </tr>
+      <tr>
+        <td><strong>焦点环</strong></td>
+        <td>2px 白色内环 + 4px 品牌色外环</td>
+        <td>Vercel Geist UI 焦点环设计<sup><a href="#cite-1">[1]</a></sup></td>
+      </tr>
+      <tr>
+        <td><strong>圆角</strong></td>
+        <td>8px 按钮/输入/标签，12px 卡片/面板，16px 大容器</td>
+        <td>三级圆角系统</td>
+      </tr>
+      <tr>
+        <td><strong>阴影</strong></td>
+        <td>不使用阴影，以边线和留白区隔内容</td>
+        <td>Linear 的克制原则<sup><a href="#cite-1">[1]</a></sup></td>
+      </tr>
+      <tr>
+        <td><strong>动效</strong></td>
+        <td>ease-out 200ms 标准过渡，spring 弹性用于拖拽反馈</td>
+        <td>自定义曲线，非浏览器默认<sup><a href="#cite-1">[1]</a></sup></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>5.2 微状态规范</h3>
+  <p>每个交互元素必须具备六种状态<sup><a href="#cite-1">[1]</a></sup>：</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>状态</th>
+        <th>视觉表现</th>
+        <th>过渡时间</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>Default</strong></td><td>基础色 + 基础边框</td><td>—</td></tr>
+      <tr><td><strong>Hover</strong></td><td>背景加深 5%，边框变品牌色</td><td>150ms ease-out</td></tr>
+      <tr><td><strong>Focus</strong></td><td>显示焦点环（2px 白 + 4px 紫）</td><td>即时</td></tr>
+      <tr><td><strong>Active</strong></td><td>背景加深 10%，scale(0.98)</td><td>100ms ease-in</td></tr>
+      <tr><td><strong>Disabled</strong></td><td>opacity: 0.4, cursor: not-allowed</td><td>—</td></tr>
+      <tr><td><strong>Loading</strong></td><td>骨架屏匹配布局，非通用 spinner</td><td>200ms 淡入</td></tr>
+    </tbody>
+  </table>
+
+  <h3>5.3 空状态设计</h3>
+  <p>空状态是高信任时刻，必须精心设计而非使用通用占位文字<sup><a href="#cite-1">[1]</a></sup>：</p>
+  <div class="grid-3">
+    <div class="card">
+      <div class="card-title">画布空状态</div>
+      <p>显示"开始你的设计"引导卡片，含三个入口：AI 输入框、设计库拖拽、从模板创建。配以品牌色插画。</p>
+    </div>
+    <div class="card">
+      <div class="card-title">活动日志空状态</div>
+      <p>显示"AI Agent 的操作将显示在这里"提示，配以时钟图标和紫色边框。</p>
+    </div>
+    <div class="card">
+      <div class="card-title">冲突检测通过</div>
+      <p>绿色卡片显示"对比度检测通过"，展示具体 WCAG 比值（如 7.2:1），增强信任感。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ===== Section 6: Differentiation ===== -->
+<section>
+  <h2><span class="sec-num">6</span> 差异化策略</h2>
+
+  <h3>6.1 竞品定位矩阵</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>维度</th>
+        <th>Prism</th>
+        <th>v0</th>
+        <th>Figma Make</th>
+        <th>UXPin Forge</th>
+        <th>Visily</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>协议</strong></td>
+        <td><strong>MCP 开放</strong></td>
+        <td>私有</td>
+        <td>Figma API</td>
+        <td>私有</td>
+        <td>私有</td>
+      </tr>
+      <tr>
+        <td><strong>部署</strong></td>
+        <td><strong>本地优先</strong></td>
+        <td>云端</td>
+        <td>云端</td>
+        <td>云端</td>
+        <td>云端</td>
+      </tr>
+      <tr>
+        <td><strong>实时监控</strong></td>
+        <td><strong>WebSocket</strong></td>
+        <td>聊天式</td>
+        <td>Figma 内</td>
+        <td>编辑器内</td>
+        <td>编辑器内</td>
+      </tr>
+      <tr>
+        <td><strong>令牌系统</strong></td>
+        <td><strong>三层+冲突检测</strong></td>
+        <td>Tailwind 类</td>
+        <td>Figma 变量</td>
+        <td>组件库绑定</td>
+        <td>无</td>
+      </tr>
+      <tr>
+        <td><strong>非技术用户</strong></td>
+        <td><strong>语义中介层</strong></td>
+        <td>需技术背景</td>
+        <td>中等</td>
+        <td>中等</td>
+        <td>友好</td>
+      </tr>
+      <tr>
+        <td><strong>设计库拖拽</strong></td>
+        <td><strong>三库+悬停预览</strong></td>
+        <td>无</td>
+        <td>无</td>
+        <td>无</td>
+        <td>模板库</td>
+      </tr>
+      <tr>
+        <td><strong>截图转 UI</strong></td>
+        <td>规划中</td>
+        <td>无</td>
+        <td>无</td>
+        <td>有</td>
+        <td><strong>有</strong></td>
+      </tr>
+      <tr>
+        <td><strong>URL 转 UI</strong></td>
+        <td>规划中</td>
+        <td>无</td>
+        <td>无</td>
+        <td><strong>有</strong></td>
+        <td>无</td>
+      </tr>
+      <tr>
+        <td><strong>导出格式</strong></td>
+        <td><strong>4 种</strong></td>
+        <td>React</td>
+        <td>Figma 帧</td>
+        <td>React JSX</td>
+        <td>图片</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>6.2 六大差异化优势</h3>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">优势 1：MCP 协议原生</div>
+      <p>任何支持 MCP 的 AI Agent（Claude、GPT、Gemini）都可直接驱动 Prism，无需定制集成。竞品全部使用私有 API。<sup><a href="#cite-5">[5]</a></sup></p>
+    </div>
+    <div class="card">
+      <div class="card-title">优势 2：本地优先</div>
+      <p>数据不离开设备，设计过程完全可控。对隐私敏感企业用户至关重要。竞品全部云端运行。</p>
+    </div>
+    <div class="card">
+      <div class="card-title">优势 3：实时可视化监控</div>
+      <p>WebSocket 双向同步，用户看到 AI 每一步操作。竞品为"输入提示→等待→输出"的黑盒模式。</p>
+    </div>
+    <div class="card">
+      <div class="card-title">优势 4：语义中介层</div>
+      <p>"温暖舒适"→暖橙令牌集。非技术用户无需知道 HSL。竞品假设用户懂设计术语。</p>
+    </div>
+    <div class="card">
+      <div class="card-title">优势 5：三库合一设计库</div>
+      <p>风格库 + 动效库 + 组件库，悬停预览 + 拖拽到画布。竞品无此能力——要么纯 AI 指令，要么纯手动。</p>
+    </div>
+    <div class="card">
+      <div class="card-title">优势 6：令牌冲突检测</div>
+      <p>实时 WCAG 对比度检查 + 令牌漂移扫描。竞品中仅 UXPin 有部分令牌管理能力，但无冲突检测。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ===== Section 7: Implementation Roadmap ===== -->
+<section>
+  <h2><span class="sec-num">7</span> 实施路线图</h2>
+
+  <div class="roadmap">
+    <div class="roadmap-item done">
+      <div class="roadmap-phase">Phase 1 · v1.0.0 已完成</div>
+      <div class="roadmap-title">核心功能 MVP</div>
+      <div class="roadmap-desc">
+        MCP 工具体系（29+ 工具）、WebSocket 双通道实时协作、28 种组件 + 变体系统、14 种风格预设（含 2026 趋势风格）、20 种动效（13 入场 + 7 悬停）、三层令牌架构、令牌冲突检测 + WCAG 检查、Undo/Redo 历史栈、多页面管理、4 种导出格式（HTML/CSS/React/JSON）、设计库三面板（悬停预览 + 拖拽到画布）、风格一键应用、响应式预览（桌面/平板/手机）
+      </div>
+    </div>
+    <div class="roadmap-item">
+      <div class="roadmap-phase">Phase 2 · v1.1.0 · 2026 Q3</div>
+      <div class="roadmap-title">Premium UI 打磨 + 截图转 UI</div>
+      <div class="roadmap-desc">
+        <strong>UI 打磨：</strong>所有组件六种微状态、自定义焦点环、骨架屏加载、空状态设计、动画曲线系统、键盘快捷键。<br>
+        <strong>新功能：</strong>截图转 UI（上传截图 → AI 分析 → 组件库重建）、手绘草图转 UI、对话式迭代增强（多轮上下文记忆）、AI 热力图预测（参照 Attention Insight<sup><a href="#cite-6">[6]</a></sup>）
+      </div>
+    </div>
+    <div class="roadmap-item">
+      <div class="roadmap-phase">Phase 3 · v1.2.0 · 2026 Q4</div>
+      <div class="roadmap-title">AI 能力增强 + URL 转 UI</div>
+      <div class="roadmap-desc">
+        URL 转 UI（粘贴链接 → 提取布局 → 组件库重建）、多模型 Agent 支持（Claude/GPT/Gemini 通过 MCP）、品牌风格学习（上传品牌资产 → 自动生成定制风格预设）、迭代式设计 refinement（多轮对话优化）、从截图反向生成设计令牌
+      </div>
+    </div>
+    <div class="roadmap-item">
+      <div class="roadmap-phase">Phase 4 · v2.0.0 · 2027 Q1</div>
+      <div class="roadmap-title">协作 + 生态 + 令牌漂移检测</div>
+      <div class="roadmap-desc">
+        多人实时协作编辑、Figma 双向同步插件、组件市场（社区分享风格预设和组件包）、令牌漂移检测（AI 扫描代码库识别硬编码值<sup><a href="#cite-9">[9]</a></sup>）、CI/CD 集成（令牌自动推送到代码仓库）、Storybook 集成预览
+      </div>
+    </div>
+    <div class="roadmap-item">
+      <div class="roadmap-phase">Phase 5 · v2.1.0 · 2027 Q2</div>
+      <div class="roadmap-title">智能设计系统治理</div>
+      <div class="roadmap-desc">
+        设计系统健康度分析（基于使用数据）、自动令牌优化建议、无障碍审计自动化、设计一致性 Linter、AI 驱动的 A/B 测试变体生成、多品牌令牌管理（参照 Supernova<sup><a href="#cite-7">[7]</a></sup>）
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== Section 8: Technical Implementation ===== -->
+<section>
+  <h2><span class="sec-num">8</span> 技术实现方案</h2>
+
+  <h3>8.1 技术栈</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>层级</th>
+        <th>技术选型</th>
+        <th>选型理由</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>MCP Server</strong></td>
+        <td>TypeScript + Node.js + @modelcontextprotocol/sdk</td>
+        <td>MCP 官方 SDK，类型安全，与 AI Agent 生态兼容</td>
+      </tr>
+      <tr>
+        <td><strong>HTTP/WS Server</strong></td>
+        <td>Express.js + ws</td>
+        <td>轻量级，成熟的 WebSocket 支持</td>
+      </tr>
+      <tr>
+        <td><strong>客户端</strong></td>
+        <td>原生 HTML/CSS/JS（无框架）</td>
+        <td>零依赖，本地即开即用，加载快</td>
+      </tr>
+      <tr>
+        <td><strong>状态管理</strong></td>
+        <td>自定义 State Store + 事件驱动</td>
+        <td>精确控制状态变更和 WebSocket 同步</td>
+      </tr>
+      <tr>
+        <td><strong>令牌导出</strong></td>
+        <td>自定义格式化器 + Style Dictionary（规划中）</td>
+        <td>多平台格式输出<sup><a href="#cite-7">[7]</a></sup></td>
+      </tr>
+      <tr>
+        <td><strong>测试</strong></td>
+        <td>Vitest</td>
+        <td>快速、兼容 TypeScript、54/54 测试通过</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>8.2 MCP 工具清单（29+）</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>分类</th>
+        <th>工具名</th>
+        <th>功能</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td rowspan="9"><strong>令牌生成</strong></td><td>generate_color_palette</td><td>生成色彩调色板（6 种和谐方案）</td></tr>
+      <tr><td>generate_typography_system</td><td>生成排版系统（字体配对 + 比例尺）</td></tr>
+      <tr><td>generate_spacing_system</td><td>生成间距系统（线性/几何/黄金比例）</td></tr>
+      <tr><td>generate_shadow_system</td><td>生成阴影系统（6 级 elevation）</td></tr>
+      <tr><td>generate_border_radius_system</td><td>生成圆角系统</td></tr>
+      <tr><td>generate_gradient</td><td>生成渐变（linear/radial/conic）</td></tr>
+      <tr><td>check_contrast</td><td>WCAG 对比度检测</td></tr>
+      <tr><td>generate_breakpoints</td><td>生成响应式断点</td></tr>
+      <tr><td>generate_design_tokens</td><td>一键生成完整令牌集</td></tr>
+      <tr><td rowspan="6"><strong>令牌管理</strong></td><td>set_token</td><td>设置单个令牌值</td></tr>
+      <tr><td>set_token_batch</td><td>批量设置令牌</td></tr>
+      <tr><td>get_tokens</td><td>获取当前令牌集</td></tr>
+      <tr><td>delete_token</td><td>删除令牌</td></tr>
+      <tr><td>apply_style_preset</td><td>应用风格预设（生成全量令牌）</td></tr>
+      <tr><td>list_style_presets</td><td>列出可用风格预设</td></tr>
+      <tr><td rowspan="6"><strong>组件管理</strong></td><td>add_component</td><td>添加组件到页面</td></tr>
+      <tr><td>update_component</td><td>更新组件属性</td></tr>
+      <tr><td>delete_component</td><td>删除组件</td></tr>
+      <tr><td>reorder_component</td><td>重排组件顺序</td></tr>
+      <tr><td>set_animation</td><td>设置组件动画</td></tr>
+      <tr><td>list_components</td><td>列出页面组件</td></tr>
+      <tr><td rowspan="4"><strong>页面管理</strong></td><td>add_page</td><td>添加新页面</td></tr>
+      <tr><td>delete_page</td><td>删除页面</td></tr>
+      <tr><td>set_active_page</td><td>切换活动页面</td></tr>
+      <tr><td>list_pages</td><td>列出所有页面</td></tr>
+      <tr><td rowspan="4"><strong>导出</strong></td><td>export_html</td><td>导出 HTML 文件</td></tr>
+      <tr><td>export_css</td><td>导出 CSS 文件</td></tr>
+      <tr><td>export_react</td><td>导出 React 组件代码</td></tr>
+      <tr><td>export_json</td><td>导出设计令牌 JSON</td></tr>
+      <tr><td rowspan="3"><strong>项目</strong></td><td>set_project_name</td><td>设置项目名称</td></tr>
+      <tr><td>set_style</td><td>设置项目风格</td></tr>
+      <tr><td>get_state</td><td>获取完整项目状态</td></tr>
+    </tbody>
+  </table>
+
+  <h3>8.3 关键实现细节</h3>
+
+  <h4>Undo/Redo 历史栈</h4>
+  <p>采用<mark class="key">变更后快照</mark>策略：每次状态变更后保存完整快照。Undo 恢复到前一个快照，Redo 恢复到后一个快照。历史栈大小限制为 50 步，防止内存溢出。</p>
+
+  <h4>WebSocket 消息协议</h4>
+  <p>服务器→客户端消息类型：<code>init</code>（初始全量状态）、<code>change</code>（增量变更）、<code>activity</code>（活动日志条目）。</p>
+  <p>客户端→服务器消息类型：<code>add_component</code>、<code>update_component</code>、<code>set_token</code>、<code>apply_style</code>、<code>set_animation</code>、<code>undo</code>、<code>redo</code> 等。</p>
+
+  <h4>令牌冲突检测</h4>
+  <p>每次令牌变更时，自动检查所有使用该令牌的组件的 WCAG 对比度。对比度低于 AA 标准（4.5:1 文字，3:1 大文字）时，在右侧面板显示橙色警告卡片，列出冲突的令牌对和建议修复值。</p>
+
+  <h4>风格预设应用</h4>
+  <p><code>apply_style_preset</code> 方法从预设定义中提取色相、饱和度、明度，通过 HSL 色彩空间生成基础色，然后用色彩和谐算法生成完整调色板，同时生成匹配的排版、间距、阴影、圆角和过渡令牌集，一次性应用到 State Store。</p>
+
+  <div class="callout">
+    <div class="callout-title">Phase 2 技术优先项</div>
+    <p>截图转 UI 的实现路径：上传图片 → 调用 AI 视觉模型分析布局结构（识别 Hero/Card/Grid/Footer 等区域）→ 将识别结果映射为 Prism 组件类型和属性 → 调用 MCP 工具链 <code>add_component</code> 逐步创建。这需要新增一个 <code>screenshot_to_ui</code> MCP 工具，内部调用多模态 AI 模型。</p>
+  </div>
+</section>
+
+<!-- ===== Section 9: Conclusion ===== -->
+<section>
+  <h2><span class="sec-num">9</span> 结论与下一步</h2>
+
+  <p>Prism 的核心竞争力在于 <strong>"MCP 开放协议 + 本地优先 + 实时可视化 + 语义中介 + 设计库拖拽 + 令牌系统"</strong> 的组合优势。当前 Phase 1 已完成核心 MVP，下一步应集中资源在两个方向：</p>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">方向一：Premium UI 打磨</div>
+      <p>按 Linear/Vercel 检查清单逐项完善客户端交互微状态。对细节的执着是唯一无法被复制的产品壁垒<sup><a href="#cite-1">[1]</a></sup>。这是 Phase 2 的最高优先级。</p>
+    </div>
+    <div class="card">
+      <div class="card-title">方向二：截图转 UI + URL 转 UI</div>
+      <p>这是 UXPin Forge 和 Visily 的核心差异化能力<sup><a href="#cite-3">[3]</a></sup><sup><a href="#cite-4">[4]</a></sup>。实现后 Prism 将成为唯一同时具备五种输入方式的 AI 设计平台。</p>
+    </div>
+  </div>
+
+  <p>同时，积极构建 MCP 生态——发布 MCP 工具文档，鼓励社区开发第三方工具扩展，将 Prism 定位为 AI 驱动设计工具领域的"开放标准"倡导者，与 v0（Vercel 闭源生态）和 Figma Make（Figma 闭源生态）形成鲜明对比。</p>
+</section>
+
+<!-- ===== Footer ===== -->
+<footer>
+  <div class="sources">
+    <h2>Sources</h2>
+    <ol>
+      <li id="cite-1">
+        <span class="src-title">Mantlr, "How Stripe, Linear, and Vercel Ship Premium UI." Linear Method、Rauno Freiberg 的 Devouring Details 和 Matt Ström-Awn 的 Stripe Dashboard 一手资料综合分析。</span>
+        <a class="src-url" href="https://mantlr.com/blog/stripe-linear-vercel-premium-ui" target="_blank" rel="noopener">https://mantlr.com/blog/stripe-linear-vercel-premium-ui</a>
+      </li>
+      <li id="cite-2">
+        <span class="src-title">UXPin, "15 Best Website Design Examples &amp; What Makes Them Great (2026)." Linear 的性能即设计理念和 15 个顶级设计网站分析。</span>
+        <a class="src-url" href="https://www.uxpin.com/studio/blog/good-website-designs-examples/" target="_blank" rel="noopener">https://www.uxpin.com/studio/blog/good-website-designs-examples/</a>
+      </li>
+      <li id="cite-3">
+        <span class="src-title">UXPin, "Generate UI with AI: From Text Prompts to Production-Ready Components (2026)." UXPin Forge 的三种输入方式和对话式迭代能力。</span>
+        <a class="src-url" href="https://www.uxpin.com/studio/blog/generate-ui-with-ai/" target="_blank" rel="noopener">https://www.uxpin.com/studio/blog/generate-ui-with-ai/</a>
+      </li>
+      <li id="cite-4">
+        <span class="src-title">Visily, "AI Design Assistant for Product Minds." 截图转可编辑设计和多来源 AI 生成能力。</span>
+        <a class="src-url" href="https://www.visily.ai/ai-design/" target="_blank" rel="noopener">https://www.visily.ai/ai-design/</a>
+      </li>
+      <li id="cite-5">
+        <span class="src-title">Wireflow, "Best Agentic Design Tools in 2026." 6 款代理式设计工具对比，包括 v0、Figma Make、Lovable 等。</span>
+        <a class="src-url" href="https://www.wireflow.ai/blog/best-agentic-design-tools-in-2026" target="_blank" rel="noopener">https://www.wireflow.ai/blog/best-agentic-design-tools-in-2026</a>
+      </li>
+      <li id="cite-6">
+        <span class="src-title">Figma, "9 of the top AI tools for UX designers in 2026." Attention Insight 的 AI 热力图和 UX Pilot 的 UX 研究能力。</span>
+        <a class="src-url" href="https://www.figma.com/resource-library/ai-tools-for-ux-designers/" target="_blank" rel="noopener">https://www.figma.com/resource-library/ai-tools-for-ux-designers/</a>
+      </li>
+      <li id="cite-7">
+        <span class="src-title">Webtwizz, "The 10 Best Design System Tools for 2026." Tokens Studio、Style Dictionary、Specify、Supernova 等令牌管理工具对比。</span>
+        <a class="src-url" href="https://webtwizz.com/blog/design-system-tools" target="_blank" rel="noopener">https://webtwizz.com/blog/design-system-tools</a>
+      </li>
+      <li id="cite-8">
+        <span class="src-title">Figma, "Design tokens: How to sync design and code in Figma." 三层令牌架构（Primitive → Semantic → Component）。</span>
+        <a class="src-url" href="https://www.figma.com/resource-library/design-tokens/" target="_blank" rel="noopener">https://www.figma.com/resource-library/design-tokens/</a>
+      </li>
+      <li id="cite-9">
+        <span class="src-title">Kanopy Labs, "AI-Powered Design Systems: Automating Component Generation 2026." 令牌漂移检测和 AI 驱动的代码库扫描。</span>
+        <a class="src-url" href="https://kanopylabs.com/blog/ai-powered-design-systems-component-generation" target="_blank" rel="noopener">https://kanopylabs.com/blog/ai-powered-design-systems-component-generation</a>
+      </li>
+      <li id="cite-10">
+        <span class="src-title">UXPin, "Component-Based Design: Complete Implementation Guide." Atomic Design 方法论和组件驱动开发。</span>
+        <a class="src-url" href="https://www.uxpin.com/studio/blog/component-based-design-complete-implementation-guide/" target="_blank" rel="noopener">https://www.uxpin.com/studio/blog/component-based-design-complete-implementation-guide/</a>
+      </li>
+    </ol>
+  </div>
+</footer>
+
+</div>
+
+
+</body></html>

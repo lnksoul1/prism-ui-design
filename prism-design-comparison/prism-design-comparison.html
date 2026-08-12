@@ -1201,5 +1201,56 @@
   window.addEventListener('resize', function() { chart2.resize(); });
 })();
 </script>
+<!-- ============================================================
+     v1.2 勘误（2026-08-12）
+     本报告基于 2026-08-11 的代码快照。其后实现已发生如下变化，
+     阅读本报告时请以本勘误为准：
+     ============================================================ -->
+<section id="errata" style="max-width:960px;margin:0 auto;padding:48px 24px;border-top:1px solid var(--border);">
+  <h2 style="font-size:22px;margin-bottom:12px;">📌 v1.2 勘误与状态更新（2026-08-12）</h2>
+  <p style="color:var(--text-muted);font-size:13px;line-height:1.7;margin-bottom:16px;">
+    以下内容修订本报告 2026-08-11 快照中的结论：
+  </p>
+  <table style="width:100%;border-collapse:collapse;font-size:13px;">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border);text-align:left;">
+        <th style="padding:8px;">原报告结论</th>
+        <th style="padding:8px;">现状</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:8px;color:var(--text-muted);">「设计库功能完全未实现」，整体完成度约 87%</td>
+        <td style="padding:8px;">设计库（风格/动效/组件三标签 + 悬停预览 + 拖拽到画布）已在 <code>client/app.js</code> 完整实现；本报告该结论已过时</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:8px;color:var(--text-muted);">工具名 <code>design_apply_style</code> / <code>design_check_dependencies</code> / <code>design_detect_token_conflicts</code></td>
+        <td style="padding:8px;">实际注册名称为 <code>design_apply_template</code> / <code>design_check_prompts</code> / <code>design_get_conflicts</code>；README 已同步为 28 个工具</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:8px;color:var(--text-muted);">声称「54/54 项测试验证」</td>
+        <td style="padding:8px;">仓库已建立真实测试体系（<code>npm test</code>），覆盖 state / tokens / tools / service / project-store / 集成链路，当前 111 项全部通过</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:8px;color:var(--text-muted);">阴影令牌缺失于风格预设</td>
+        <td style="padding:8px;"><code>applyStyleTokenSet</code> 已生成 5 级阴影令牌（shadow-sm … shadow-2xl），并新增客户端阴影 Tab</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:8px;color:var(--text-muted);">状态仅存内存，重启即丢</td>
+        <td style="padding:8px;">新增项目持久化：<code>design_save_project</code> / <code>design_load_project</code> / <code>design_list_projects</code> + 自动保存，重启自动恢复</td>
+      </tr>
+      <tr>
+        <td style="padding:8px;color:var(--text-muted);">REST 与 WS 双通道逻辑重复</td>
+        <td style="padding:8px;">已收敛为 <code>src/service/design-service.ts</code> 共享服务层，WS 消息增加 zod 严格校验</td>
+      </tr>
+    </tbody>
+  </table>
+  <p style="color:var(--text-dim);font-size:12px;margin-top:16px;">
+    更新依据：<code>prism-improvement-plan.md</code>（Phase A1–A5）落地情况。更完整的功能规划见 <code>prism-functional-upgrade-plan.md</code>。
+  </p>
+  <p style="color:var(--text-dim);font-size:12px;margin-top:8px;">
+    <strong>v1.3 补充（2026-08-12）</strong>：按 <code>prism-design-spec.html</code> 升级，风格预设扩至 14 种（新增 8 种 2026 趋势风格）、组件类型扩至 41 种、动效扩至 20 种（13 入场 + 7 悬停，支持 stagger），并按规格 §8.2 补齐 7 个工具（列表/项目名/令牌增删查）。详见 <code>prism-improvement-plan.md</code> 实施进度。
+  </p>
+</section>
 </body>
 </html>

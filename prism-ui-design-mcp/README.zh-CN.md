@@ -26,7 +26,7 @@
 - **用户通道（WebSocket）**：浏览器客户端实时显示 AI 的操作，用户可调整令牌、删除组件
 - **双向同步**：AI 的操作实时推送到客户端，用户的调整也同步回状态存储，AI 下次查询时可见
 
-### 17 个工具
+### 60 个工具
 
 | 工具 | 类型 | 功能说明 |
 |------|------|----------|
@@ -37,6 +37,49 @@
 | `design_set_animation` | 实时 | 为组件设置入场和悬停动画 |
 | `design_set_token` | 实时 | 设置或更新单个设计令牌 |
 | `design_get_state` | 实时 | 获取完整设计状态（令牌、组件、活动日志） |
+| `design_undo` | 实时 | 撤销上一步操作 |
+| `design_redo` | 实时 | 重做已撤销的操作 |
+| `design_add_page` | 实时 | 新增页面 |
+| `design_switch_page` | 实时 | 切换当前页面 |
+| `design_remove_page` | 实时 | 删除页面 |
+| `design_apply_template` | 实时 | 应用页面模板（电商/SaaS/博客/作品集/仪表盘） |
+| `design_export` | 实时 | 导出设计为 HTML/React/Vue/Figma Tokens |
+| `design_reorder_component` | 实时 | 调整组件顺序 |
+| `design_set_theme` | 实时 | 切换浅色/深色主题 |
+| `design_get_conflicts` | 实时 | 获取令牌冲突 |
+| `design_check_prompts` | 实时 | 读取并清除用户指令 |
+| `design_save_project` | 实时 | 将当前设计保存为 .prism.json 文件 |
+| `design_load_project` | 实时 | 从 .prism.json 文件恢复设计 |
+| `design_list_projects` | 实时 | 列出已保存的项目 |
+| `design_export_tokens` | 实时 | 导出令牌为 W3C DTCG / CSS / Style Dictionary / Figma Tokens |
+| `design_import_tokens` | 实时 | 从 DTCG JSON 导入设计令牌（支持替换/合并策略） |
+| `design_audit_accessibility` | 实时 | 按 WCAG 规则对设计进行无障碍评分 |
+| `design_render_preview` | 实时 | 渲染设计为 HTML（安装 Playwright 后可输出 PNG 截图） |
+| `design_save_template` | 实时 | 将当前设计保存为可复用模板 |
+| `design_load_template` | 实时 | 加载已保存的模板 |
+| `design_list_templates` | 实时 | 列出已保存的模板 |
+| `design_create_version` | 实时 | 将当前设计保存为版本快照 |
+| `design_list_versions` | 实时 | 列出版本快照 |
+| `design_restore_version` | 实时 | 恢复历史版本 |
+| `design_diff_versions` | 实时 | 对比两个版本（组件 + 令牌变化） |
+| `design_import_design_md` | 实时 | 从 Google DESIGN.md 导入设计令牌 |
+| `design_import_webpage` | 实时 | 从网页 URL / HTML 导入组件 |
+| `design_get_style_guide` | 实时 | 查询风格指南（玻璃拟态/粗野主义等） |
+| `design_apply_style_guide` | 实时 | 在风格预设上应用风格指南 |
+| `design_semantic_style` | 实时 | 将形容词映射为令牌并记录语义原因 |
+| `design_list_capabilities` | 实时 | 输出自描述能力清单 |
+| `design_list_style_presets` | 实时 | 列出 14 种内置风格预设 |
+| `design_list_components` | 实时 | 列出当前页面组件 |
+| `design_list_pages` | 实时 | 列出所有页面 |
+| `design_set_project_name` | 实时 | 重命名项目 |
+| `design_get_tokens` | 实时 | 获取当前令牌（DTCG JSON） |
+| `design_set_token_batch` | 实时 | 批量设置令牌 |
+| `design_delete_token` | 实时 | 删除单个令牌 |
+| `design_suggest_improvements` | 实时 | 启发式设计评审（结构/密度/动效/无障碍/令牌） |
+| `design_create_brand_style` | 实时 | 从品牌色学习生成品牌令牌集 |
+| `design_reflow` | 实时 | 按规范章节顺序重排页面组件 |
+| `design_auto_improve` | 实时 | 自动补齐常见结构缺失（令牌/导航/首屏/页脚） |
+| `design_set_platform` | 实时 | 设置预览平台（Web/桌面/移动） |
 | `ui_generate_color_palette` | 生成 | 基于色彩理论生成六种和谐配色方案 |
 | `ui_suggest_typography` | 生成 | 精选字体配对，附带 Google Fonts 链接 |
 | `ui_generate_type_scale` | 生成 | 模数化字号系统（8 种比率） |

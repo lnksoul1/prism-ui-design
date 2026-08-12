@@ -34,6 +34,10 @@ let conflictCheckInterval = null;
 let selectedComponentId = null;
 let canvasZoom = 100;
 let canvasMode = "flow";
+let myClientId = null;
+const remoteCursors = new Map();
+let lastCursorSent = 0;
+const CURSOR_THROTTLE = 100;
 
 // ===== DOM Helpers =====
 
@@ -241,8 +245,64 @@ function connect() {
 
 function send(msg) {
   if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify(msg));
+    const payload = { ...msg };
+    // Optimistic concurrency: attach the revision the client last saw (C5).
+    if (msg.type !== "cursor" && currentState && typeof currentState.revision === "number") {
+      payload.base_revision = currentState.revision;
+    }
+    ws.send(JSON.stringify(payload));
   }
+}
+
+function setupLiveCursors() {
+  const scrollWrap = $("canvas-scroll-wrap");
+  if (!scrollWrap) return;
+  scrollWrap.addEventListener("mousemove", (e) => {
+    const now = Date.now();
+    if (now - lastCursorSent < CURSOR_THROTTLE) return;
+    lastCursorSent = now;
+    const frame = $("canvas-frame");
+    if (!frame) return;
+    const rect = frame.getBoundingClientRect();
+    send({ type: "cursor", x: Math.round(e.clientX - rect.left), y: Math.round(e.clientY - rect.top) });
+  });
+}
+
+function renderRemoteCursors() {
+  const frame = $("canvas-frame");
+  if (!frame) return;
+  let overlay = $("cursor-overlay");
+  if (remoteCursors.size === 0) {
+    if (overlay) overlay.remove();
+    return;
+  }
+  if (!overlay) {
+    overlay = el("div", "cursor-overlay");
+    overlay.id = "cursor-overlay";
+    frame.appendChild(overlay);
+  }
+  overlay.innerHTML = "";
+  remoteCursors.forEach((pos, clientId) => {
+    const cursor = el("div", "remote-cursor");
+    cursor.style.left = pos.x + "px";
+    cursor.style.top = pos.y + "px";
+    cursor.appendChild(el("span", "remote-cursor-caret"));
+    cursor.appendChild(el("span", "remote-cursor-label", clientId.slice(-6)));
+    overlay.appendChild(cursor);
+  });
+}
+
+function showConflictWarning(msg) {
+  const container = $("conflict-warnings");
+  if (!container) return;
+  const warning = el("div", "conflict-warning");
+  warning.appendChild(el("span", "warn-icon", "⚠️"));
+  const text = el("span", "warn-text", `冲突：${msg.message || "设计已被其他客户端修改"}（将自动刷新）`);
+  warning.appendChild(text);
+  container.prepend(warning);
+  setTimeout(() => warning.remove(), 8000);
+  // Resync with the server state.
+  fetchInitialState();
 }
 
 function updateStatus(status) {
@@ -268,6 +328,7 @@ function updateStatus(status) {
 function handleMessage(msg) {
   switch (msg.type) {
     case "init":
+      myClientId = msg.clientId || null;
       currentState = msg.state;
       renderAll();
       break;
@@ -280,6 +341,18 @@ function handleMessage(msg) {
       break;
     case "presence":
       updateStatus(typeof msg.count === "number" ? msg.count : "connected");
+      break;
+    case "cursor":
+      if (!msg.client_id || msg.client_id === myClientId) return;
+      remoteCursors.set(msg.client_id, { x: msg.x, y: msg.y });
+      renderRemoteCursors();
+      break;
+    case "cursor_leave":
+      if (msg.client_id) remoteCursors.delete(msg.client_id);
+      renderRemoteCursors();
+      break;
+    case "conflict":
+      showConflictWarning(msg);
       break;
   }
 }
@@ -3555,6 +3628,7 @@ function init() {
   setupZoom();
   setupCanvasShortcuts();
   setupCanvasMode();
+  setupLiveCursors();
   setupThemeToggle();
   setupPageSwitcher();
   setupExportModal();

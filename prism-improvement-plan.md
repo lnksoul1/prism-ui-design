@@ -5,7 +5,7 @@
 > 依据：源码审计（28 个 MCP 工具、REST/WS 双通道、客户端渲染引擎）+ 2026-08 外部调研
 
 > **实施进度（2026-08-12 更新）**
-> - ✅ Phase A1 测试体系：250 项测试全绿
+> - ✅ Phase A1 测试体系：252 项测试全绿（新增实时光标/冲突检测集成测试、revision 状态测试）
 > - ✅ Phase A2 持久化：`design_save_project` / `design_load_project` / `design_list_projects` + REST 端点 + 自动保存/启动恢复 + Dashboard 保存/加载按钮
 > - ✅ Phase A3 双通道收敛：`src/service/design-service.ts` 共享服务层 + WS 消息 zod 严格校验（拒绝未知类型/非法字段）
 > - ✅ Phase A4 修复：`getState()` 返回 canUndo/canRedo；阴影令牌纳入风格预设与客户端阴影 Tab；组件选中机制（动效应用目标）；新增缩放/图层面板/属性检查器
@@ -45,7 +45,9 @@
 > - ✅ F3 扩展：`design_export_tokens(format="tailwind")`（Tailwind v4 @theme）
 > - ✅ F9 扩展：`design_export(format="svelte")`（Svelte SFC）
 > - ✅ F8 基础：Dashboard 中英双语（顶栏切换 + localStorage 记忆，覆盖界面外壳/空状态/状态栏/检查器标签）
-> - 🔄 待办：C5 实时光标/冲突解决、C6 完整智能体、F9 更多框架、规格 Phase 2（截图转 UI）
+> - ✅ C5 实时光标：WS `cursor`/`cursor_leave` 协议 + 客户端远程光标渲染（节流 100ms、客户端标签）
+> - ✅ C5 冲突解决：`revision` 乐观并发控制——变更携带 base_revision，过期修订被拒绝并返回 `conflict`，客户端自动重同步
+> - 🔄 待办：C6 完整智能体、F9 更多框架、规格 Phase 2（截图转 UI）
 
 ---
 

@@ -257,7 +257,7 @@ describe("getState", () => {
     assert.equal(state.tokens.colors["color-primary"], undefined);
   });
 
-  test("exposes canUndo/canRedo booleans", () => {
+test("exposes canUndo/canRedo booleans", () => {
     let state = stateStore.getState();
     assert.equal(state.canUndo, false);
     assert.equal(state.canRedo, false);
@@ -277,6 +277,18 @@ describe("getState", () => {
     }
     assert.equal(stateStore.getState().activityLog.length, 100);
   });
+});
+
+test("revision increments on mutation and resets on restore", () => {
+  assert.equal(stateStore.getState().revision, 0);
+  stateStore.addComponent("card", undefined, { title: "x" }, null, "ai");
+  assert.equal(stateStore.getState().revision, 1);
+  stateStore.setToken("colors", "color-primary", "#123456", "user");
+  assert.equal(stateStore.getState().revision, 2);
+  stateStore.restoreSnapshot(stateStore.getState());
+  assert.equal(stateStore.getState().revision, 2, "restore keeps snapshot revision");
+  stateStore.resetForTests();
+  assert.equal(stateStore.getState().revision, 0);
 });
 
 describe("events, clearAll, and pending prompt", () => {

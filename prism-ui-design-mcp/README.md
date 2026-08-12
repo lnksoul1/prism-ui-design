@@ -126,7 +126,7 @@ npm test
 The test suite covers the state store (undo/redo, pages, tokens, conflicts),
 style-preset token generation, all MCP tool schemas, the shared service layer,
 project persistence, DTCG token interop, accessibility audit, render preview,
-and an HTTP + WebSocket integration chain (**250 tests passing**).
+and an HTTP + WebSocket integration chain (**252 tests passing**).
 
 ## Templates, versions, semantics & style guides
 
@@ -172,6 +172,11 @@ and an HTTP + WebSocket integration chain (**250 tests passing**).
   emits a Svelte SFC with token CSS.
 - **i18n**: the dashboard shell supports 中文 / English with a topbar toggle
   (persisted in localStorage).
+- **Live cursors** (C5): every connected dashboard broadcasts its pointer
+  position (throttled); other clients see remote cursors with a client tag.
+- **Conflict detection** (C5): every mutation carries the client's last-seen
+  `revision`; if the design changed underneath it, the mutation is rejected
+  with a `conflict` message and the client auto-resyncs.
 - **Freeform canvas**: toggle between flow layout and free positioning —
   drag components anywhere, resize with 8 handles, edit X/Y/W/H in the
   inspector, and auto-arrange into a clean vertical stack.

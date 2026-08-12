@@ -74,6 +74,7 @@ export interface DesignState {
   activePlatform: string;
   platforms: Record<string, PlatformSnapshot>;
   comments: DesignComment[];
+  revision: number;
 }
 
 export interface PlatformSnapshot {
@@ -131,6 +132,7 @@ class DesignStateStore extends EventEmitter {
       activePlatform: "web-desktop",
       platforms: {},
       comments: [],
+      revision: 0,
     };
     // Initialize history with the initial state
     this.history = [JSON.parse(JSON.stringify(this.state))];
@@ -152,6 +154,8 @@ class DesignStateStore extends EventEmitter {
    * Called at the end of every mutating method.
    */
   private commit(change: unknown): void {
+    // Monotonic revision for optimistic-concurrency conflict detection (C5).
+    this.state.revision = (this.state.revision || 0) + 1;
     // Truncate any redo history
     this.history = this.history.slice(0, this.historyIndex + 1);
     // Push deep copy of current (post-mutation) state
@@ -734,6 +738,7 @@ class DesignStateStore extends EventEmitter {
         typeof snapshot.activePlatform === "string" ? snapshot.activePlatform : "web-desktop",
       platforms: snapshot.platforms && typeof snapshot.platforms === "object" ? snapshot.platforms : {},
       comments: Array.isArray(snapshot.comments) ? snapshot.comments.slice(0, 200) : [],
+      revision: typeof snapshot.revision === "number" ? snapshot.revision : 0,
     };
     this.fixComponentsReference();
 
@@ -791,6 +796,7 @@ class DesignStateStore extends EventEmitter {
       activePlatform: "web-desktop",
       platforms: {},
       comments: [],
+      revision: 0,
     };
     this.history = [JSON.parse(JSON.stringify(this.state))];
     this.historyIndex = 0;

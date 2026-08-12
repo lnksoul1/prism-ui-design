@@ -166,8 +166,8 @@ const app = express();
 const httpServer = http.createServer(app);
 const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
 
-// Connected dashboard clients (presence tracking)
-const wsClients = new Map<WebSocket, { id: string; joinedAt: string }>();
+// Connected dashboard clients (presence + cursor tracking)
+const wsClients = new Map<WebSocket, { id: string; joinedAt: string; cursor?: { x: number; y: number } }>();
 
 // Serve static client files
 const clientDir = path.resolve(__dirname, "../client");
@@ -497,6 +497,7 @@ wss.on("connection", (ws: WebSocket) => {
   // Send current state on connect
   ws.send(JSON.stringify({
     type: "init",
+    clientId,
     state: stateStore.getState(),
   }));
   broadcastPresence();
@@ -505,7 +506,30 @@ wss.on("connection", (ws: WebSocket) => {
   ws.on("message", (data: Buffer) => {
     try {
       const raw = JSON.parse(data.toString());
-      const parsed = designService.wsMessageSchema.safeParse(raw);
+
+      // Live cursors are ephemeral and bypass the mutation pipeline (C5).
+      if (raw && raw.type === "cursor") {
+        if (typeof raw.x === "number" && typeof raw.y === "number") {
+          wsClients.set(ws, { ...(wsClients.get(ws) || { id: clientId, joinedAt: new Date().toISOString() }), cursor: { x: raw.x, y: raw.y } });
+          broadcastCursor(clientId, raw.x, raw.y);
+        }
+        return;
+      }
+
+      // Optimistic concurrency: reject mutations based on a stale revision (C5).
+      const baseRevision = typeof raw?.base_revision === "number" ? raw.base_revision : undefined;
+      const { base_revision: _br, ...rest } = raw || {};
+      if (baseRevision !== undefined && baseRevision !== stateStore.getState().revision) {
+        ws.send(JSON.stringify({
+          type: "conflict",
+          message: `Design changed by another client (revision ${baseRevision} → ${stateStore.getState().revision}). Reload and retry.`,
+          expected_revision: baseRevision,
+          current_revision: stateStore.getState().revision,
+        }));
+        return;
+      }
+
+      const parsed = designService.wsMessageSchema.safeParse(rest);
       if (!parsed.success) {
         const issues = parsed.error.issues
           .map((i) => `${i.path.join(".") || "message"}: ${i.message}`)
@@ -525,6 +549,7 @@ wss.on("connection", (ws: WebSocket) => {
   ws.on("close", () => {
     wsClients.delete(ws);
     broadcastPresence();
+    broadcastCursorLeave(clientId);
   });
 });
 
@@ -535,6 +560,24 @@ function broadcastPresence(): void {
     count: clients.length,
     clients,
   });
+  wss.clients.forEach((client: WebSocket) => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(message);
+    }
+  });
+}
+
+function broadcastCursor(clientId: string, x: number, y: number): void {
+  const message = JSON.stringify({ type: "cursor", client_id: clientId, x, y });
+  wss.clients.forEach((client: WebSocket) => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(message);
+    }
+  });
+}
+
+function broadcastCursorLeave(clientId: string): void {
+  const message = JSON.stringify({ type: "cursor_leave", client_id: clientId });
   wss.clients.forEach((client: WebSocket) => {
     if (client.readyState === WebSocket.OPEN) {
       client.send(message);

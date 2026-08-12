@@ -262,3 +262,141 @@ test(
     }
   }
 );
+
+test(
+  "live cursors and optimistic-concurrency conflict detection",
+  { timeout: 60000 },
+  async () => {
+    const port = await getFreePort();
+    const child = spawn(process.execPath, [SERVER_ENTRY], {
+      cwd: path.resolve(__dirname, "..", ".."),
+      env: {
+        ...process.env,
+        DASHBOARD_PORT: String(port),
+        PRISM_PROJECT_DIR: path.join(os.tmpdir(), "prism-server-test-collab"),
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let logs = "";
+    child.stderr?.on("data", (d) => (logs += d.toString()));
+    const base = `http://127.0.0.1:${port}`;
+
+    try {
+      await waitForHealth(`${base}/health`, 20000);
+
+      const ws1 = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+      const ws1Messages: Array<Record<string, unknown>> = [];
+      ws1.on("message", (data) => ws1Messages.push(JSON.parse(data.toString())));
+      await new Promise<void>((resolve, reject) => {
+        ws1.once("open", resolve);
+        ws1.once("error", reject);
+      });
+
+      // Wait for ws1 init to learn the initial revision
+      await new Promise<void>((resolve) => {
+        const timer = setInterval(() => {
+          const init = ws1Messages.find((m) => m.type === "init");
+          if (init) {
+            clearInterval(timer);
+            resolve();
+          }
+        }, 20);
+        setTimeout(() => {
+          clearInterval(timer);
+          resolve();
+        }, 5000);
+      });
+      const initMsg = ws1Messages.find((m) => m.type === "init") as Record<string, unknown>;
+      const initState = initMsg.state as Record<string, unknown>;
+      const initialRevision = initState.revision as number;
+      const initialComponents = (initState.components as unknown[]).length;
+
+      const ws2 = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+      let cursorSeen: Record<string, unknown> = {};
+      ws2.on("message", (data) => {
+        const msg = JSON.parse(data.toString()) as Record<string, unknown>;
+        if (msg.type === "cursor") cursorSeen = msg;
+      });
+      await new Promise<void>((resolve, reject) => {
+        ws2.once("open", resolve);
+        ws2.once("error", reject);
+      });
+
+      // 1) Cursor broadcast reaches the other client
+      ws1.send(JSON.stringify({ type: "cursor", x: 120, y: 240 }));
+      await new Promise<void>((resolve) => {
+        const timer = setInterval(() => {
+          if (cursorSeen) {
+            clearInterval(timer);
+            resolve();
+          }
+        }, 20);
+        setTimeout(() => {
+          clearInterval(timer);
+          resolve();
+        }, 5000);
+      });
+      assert.equal(cursorSeen.type, "cursor");
+      assert.equal(cursorSeen.x, 120);
+      assert.equal(cursorSeen.y, 240);
+      assert.equal(typeof cursorSeen.client_id, "string");
+
+      // 2) A mutation with the current revision is accepted
+      ws2.send(JSON.stringify({ type: "add_component", component_type: "card", props: { title: "x" }, base_revision: initialRevision }));
+      await new Promise<void>((resolve) => {
+        const timer = setInterval(() => {
+          const state = ws1Messages.find((m) => m.type === "change")?.state as Record<string, unknown> | undefined;
+          if (state && ((state.components as unknown[])?.length ?? 0) > 0) {
+            clearInterval(timer);
+            resolve();
+          }
+        }, 20);
+        setTimeout(() => {
+          clearInterval(timer);
+          resolve();
+        }, 5000);
+      });
+      const afterState = await fetch(`${base}/api/state`).then((r) => r.json()) as Record<string, unknown>;
+      assert.equal((afterState.components as unknown[]).length, initialComponents + 1);
+      assert.ok((afterState.revision as number) > initialRevision);
+
+      // 3) A mutation with a stale revision is rejected with a conflict
+      ws1.send(JSON.stringify({ type: "add_component", component_type: "hero", props: {}, base_revision: initialRevision }));
+      await new Promise<void>((resolve) => {
+        const timer = setInterval(() => {
+          if (ws1Messages.some((m) => m.type === "conflict")) {
+            clearInterval(timer);
+            resolve();
+          }
+        }, 20);
+        setTimeout(() => {
+          clearInterval(timer);
+          resolve();
+        }, 5000);
+      });
+      const conflictSeen = ws1Messages.find((m) => m.type === "conflict") as Record<string, unknown>;
+      assert.equal(conflictSeen.type, "conflict");
+      assert.equal(conflictSeen.current_revision, afterState.revision);
+      const unchanged = await fetch(`${base}/api/state`).then((r) => r.json()) as Record<string, unknown>;
+      assert.equal((unchanged.components as unknown[]).length, initialComponents + 1, "stale mutation must not apply");
+      assert.equal(unchanged.revision, afterState.revision, "revision must not change on conflict");
+
+      ws1.close();
+      ws2.close();
+    } catch (error) {
+      throw new Error(`${error instanceof Error ? error.message : String(error)}\n--- server logs ---\n${logs}`);
+    } finally {
+      child.kill();
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(() => {
+          child.kill("SIGKILL");
+          resolve();
+        }, 3000);
+        child.once("exit", () => {
+          clearTimeout(timer);
+          resolve();
+        });
+      });
+    }
+  }
+);

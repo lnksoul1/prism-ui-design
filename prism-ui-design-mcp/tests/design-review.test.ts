@@ -6,6 +6,7 @@ import {
   canonicalOrder,
   createBrandStyle,
   reflowPage,
+  reviewAndImprove,
   suggestImprovements,
 } from "../src/tools/design-review.js";
 import { applyStyleTokenSet } from "../src/tokens.js";
@@ -93,4 +94,18 @@ test("autoImprove is a no-op on a complete page", () => {
   stateStore.addComponent("footer", undefined, {}, null, "ai");
   const result = autoImprove();
   assert.equal(result.actions.length, 0);
+});
+
+test("reviewAndImprove scores, fixes, and re-scores in one call", () => {
+  stateStore.setProjectName("Review Loop", "ai");
+  stateStore.setStyle("bold", "ai");
+  const result = reviewAndImprove();
+  assert.ok(result.before_score < 60, "empty design should score low before fixes");
+  assert.ok(result.after_score > result.before_score, "fixes should raise the score");
+  assert.ok(result.applied.some((a) => a.action === "apply_style_preset"));
+  assert.ok(result.applied.some((a) => a.action === "add_navbar"));
+  assert.equal(typeof result.accessibility.score, "number");
+  assert.ok(result.suggestions.length >= 0);
+  const state = stateStore.getState();
+  assert.ok(state.components.some((c) => c.type === "hero"));
 });

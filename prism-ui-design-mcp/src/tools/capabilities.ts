@@ -91,6 +91,7 @@ const TOOL_MANIFEST: Array<{ name: string; group: string; summary: string; examp
   { name: "design_remove_comment", group: "collaboration", summary: "Remove a comment", example: 'design_remove_comment(comment_id="cmt_x")' },
   // C6 one-shot generation
   { name: "design_generate_page", group: "semantics", summary: "Generate a page from a brief (template + semantic style)", example: 'design_generate_page(brief="电商促销首页", adjectives=["温暖","简约"])' },
+  { name: "design_review_and_improve", group: "review", summary: "One-call review loop: score, fix, re-score + a11y audit", example: "design_review_and_improve()" },
 ];
 
 export function registerCapabilitiesTool(server: McpServer): void {

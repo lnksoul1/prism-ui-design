@@ -13,7 +13,13 @@
 import type { DesignTokens, DesignToken } from "../state.js";
 import { load as parseYaml, dump as stringifyYaml } from "js-yaml";
 
-export type DtcgExportFormat = "dtcg" | "css" | "style-dictionary" | "figma_tokens" | "design_md";
+export type DtcgExportFormat =
+  | "dtcg"
+  | "css"
+  | "style-dictionary"
+  | "figma_tokens"
+  | "design_md"
+  | "tailwind";
 
 export interface DtcgToken {
   $type: string;
@@ -86,6 +92,18 @@ export function tokensToStyleDictionary(tokens: DesignTokens): Record<string, Re
     });
   });
   return result;
+}
+
+/** Tailwind v4 CSS-first export: an `@theme` block mapping tokens to CSS variables. */
+export function tokensToTailwind4(tokens: DesignTokens): string {
+  const lines = ["@theme {"];
+  (Object.keys(tokens) as Array<keyof DesignTokens>).forEach((category) => {
+    Object.entries(tokens[category] || {}).forEach(([key, token]) => {
+      lines.push(`  --${key}: ${token.value};`);
+    });
+  });
+  lines.push("}");
+  return lines.join("\n");
 }
 
 /**

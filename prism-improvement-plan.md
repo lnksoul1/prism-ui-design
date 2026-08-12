@@ -5,11 +5,11 @@
 > 依据：源码审计（28 个 MCP 工具、REST/WS 双通道、客户端渲染引擎）+ 2026-08 外部调研
 
 > **实施进度（2026-08-12 更新）**
-> - ✅ Phase A1 测试体系：246 项测试全绿（新增 collab-platform/布局字段覆盖）
+> - ✅ Phase A1 测试体系：250 项测试全绿
 > - ✅ Phase A2 持久化：`design_save_project` / `design_load_project` / `design_list_projects` + REST 端点 + 自动保存/启动恢复 + Dashboard 保存/加载按钮
 > - ✅ Phase A3 双通道收敛：`src/service/design-service.ts` 共享服务层 + WS 消息 zod 严格校验（拒绝未知类型/非法字段）
 > - ✅ Phase A4 修复：`getState()` 返回 canUndo/canRedo；阴影令牌纳入风格预设与客户端阴影 Tab；组件选中机制（动效应用目标）；新增缩放/图层面板/属性检查器
-> - ✅ Phase A5 文档：README 工具清单 67 个；对比报告追加 v1.2 勘误；已提交 Git（48cc8fe、fc7bde7）
+> - ✅ Phase A5 文档：README 工具清单 68 个；对比报告追加 v1.2 勘误；已提交 Git（48cc8fe、fc7bde7、510a64b）
 > - ✅ Phase B2 无障碍审计：`design_audit_accessibility`（9 条 WCAG 规则，AA/AAA，评分 0–100）
 > - ✅ Phase B3 令牌互通：`design_export_tokens`（dtcg/css/style-dictionary/figma_tokens）+ `design_import_tokens`（replace/merge-overwrite/merge-keep）
 > - ✅ Phase B4 MCP 上下文：4 个 Resources（tokens/components/patterns/audit checklist）+ 3 个 Prompts（build_page/design_review/import_project）
@@ -41,7 +41,11 @@
 > - ✅ C2 多平台设计状态：`design_save_platform` / `design_load_platform` / `design_list_platforms`（每平台独立页面快照，共享风格与令牌）
 > - ✅ C5 评论批注：`design_add_comment` / `design_list_comments` / `design_remove_comment`（组件级评论，不改变设计）
 > - ✅ C6 子集（一键生成）：`design_generate_page`（brief → 模板识别 + 语义形容词风格 + 页面组装）
-> - 🔄 待办：C5 实时光标/冲突解决、C6 完整智能体、F8 i18n、F9 更多框架、规格 Phase 2（截图转 UI）
+> - ✅ C6 子集（评审循环）：`design_review_and_improve`（评分 → 自动修复 → 复评 + 无障碍审计）
+> - ✅ F3 扩展：`design_export_tokens(format="tailwind")`（Tailwind v4 @theme）
+> - ✅ F9 扩展：`design_export(format="svelte")`（Svelte SFC）
+> - ✅ F8 基础：Dashboard 中英双语（顶栏切换 + localStorage 记忆，覆盖界面外壳/空状态/状态栏/检查器标签）
+> - 🔄 待办：C5 实时光标/冲突解决、C6 完整智能体、F9 更多框架、规格 Phase 2（截图转 UI）
 
 ---
 

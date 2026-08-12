@@ -44,3 +44,11 @@ test("react-ts export includes typed props and tokens", () => {
   assert.match(code, /React\.JSX\.Element/);
   assert.match(code, /--color-primary:/);
 });
+
+test("svelte export produces an SFC with token CSS", () => {
+  const code = exportDesign("svelte");
+  assert.match(code, /<svelte:head>/);
+  assert.match(code, /<style>/);
+  assert.match(code, /--color-primary:/);
+  assert.match(code, /export let title/);
+});

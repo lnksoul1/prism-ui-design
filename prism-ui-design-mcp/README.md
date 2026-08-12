@@ -12,7 +12,7 @@ An MCP (Model Context Protocol) server that provides comprehensive UI design ass
 
 ## Features
 
-- **67 MCP tools** covering the full spectrum of UI design needs
+- **68 MCP tools** covering the full spectrum of UI design needs
 - **Color theory engine** with HSL-based harmony generation (monochromatic, analogous, complementary, split-complementary, triadic, tetradic)
 - **WCAG 2.1 contrast checker** with AA/AAA compliance scoring
 - **Curated font pairings** with Google Fonts integration
@@ -115,6 +115,7 @@ TRANSPORT=http PORT=3100 npm start
 | `design_list_comments` | List review comments |
 | `design_remove_comment` | Remove a review comment |
 | `design_generate_page` | Generate a page from a brief (template + semantic style) |
+| `design_review_and_improve` | One-call review loop: score, fix, re-score + a11y audit |
 
 ## Testing
 
@@ -125,7 +126,7 @@ npm test
 The test suite covers the state store (undo/redo, pages, tokens, conflicts),
 style-preset token generation, all MCP tool schemas, the shared service layer,
 project persistence, DTCG token interop, accessibility audit, render preview,
-and an HTTP + WebSocket integration chain (**246 tests passing**).
+and an HTTP + WebSocket integration chain (**250 tests passing**).
 
 ## Templates, versions, semantics & style guides
 
@@ -164,6 +165,13 @@ and an HTTP + WebSocket integration chain (**246 tests passing**).
   feedback to any component without changing the design.
 - **One-shot generation** (`design_generate_page`): turn a brief into a
   complete page — template detection + semantic adjectives in one call.
+- **Review & improve** (`design_review_and_improve`): score the design, apply
+  structural fixes, re-score, and run the accessibility audit in one call.
+- **Tailwind export**: `design_export_tokens(format="tailwind")` emits a
+  Tailwind v4 CSS-first `@theme` block; `design_export(format="svelte")`
+  emits a Svelte SFC with token CSS.
+- **i18n**: the dashboard shell supports 中文 / English with a topbar toggle
+  (persisted in localStorage).
 - **Freeform canvas**: toggle between flow layout and free positioning —
   drag components anywhere, resize with 8 handles, edit X/Y/W/H in the
   inspector, and auto-arrange into a clean vertical stack.

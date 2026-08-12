@@ -48,6 +48,162 @@ function el(tag, className, text) {
   return e;
 }
 
+// ===== i18n (F8) =====
+
+const I18N = {
+  zh: {
+    connected: "已连接",
+    disconnected: "已断开",
+    connecting: "连接中",
+    online: "{n} 人在线",
+    layers: "图层",
+    libStyles: "风格",
+    libAnimations: "动效",
+    libComponents: "组件",
+    activityLog: "活动日志",
+    canvasLabel: "实时预览画布",
+    flow: "流式",
+    freeform: "自由",
+    autoLayout: "自动排列",
+    inspector: "属性检查器",
+    designTokens: "设计令牌",
+    tabColors: "色彩",
+    tabType: "字体",
+    tabSpacing: "间距",
+    tabShadows: "阴影",
+    tabRadii: "圆角",
+    send: "发送",
+    sent: "已发送",
+    promptPlaceholder: "输入指令给 AI，如：把主色改成蓝色",
+    tokenEmpty: "令牌将在 AI 初始化后出现",
+    tokenEmptyCategory: "此分类暂无令牌",
+    activityEmpty: "AI Agent 操作将显示在这里",
+    layerEmpty: "组件图层将显示在这里",
+    canvasEmpty: "等待 AI Agent 创建设计",
+    canvasHint1: "AI 会通过 MCP 工具调用在此画布上构建 UI",
+    canvasHint2: "你的调整会实时同步回 AI",
+    ai: "AI",
+    user: "用户",
+    libraryLoading: "加载中...",
+    inspectorEmpty: "点击画布上的组件",
+    inspectorEmptyHint: "查看并编辑属性",
+    noTextProps: "无文本属性",
+    content: "内容",
+    layout: "布局",
+    animation: "动效",
+    entry: "入场",
+    hover: "悬停",
+    duration: "时长",
+    deleteComponent: "删除组件",
+    width: "宽度",
+    height: "高度",
+    save: "💾 保存",
+    load: "📂 加载",
+    import: "📥 导入",
+    export: "📤 导出",
+  },
+  en: {
+    connected: "Connected",
+    disconnected: "Disconnected",
+    connecting: "Connecting",
+    online: "{n} online",
+    layers: "Layers",
+    libStyles: "Styles",
+    libAnimations: "Motion",
+    libComponents: "Components",
+    activityLog: "Activity",
+    canvasLabel: "Live Canvas",
+    flow: "Flow",
+    freeform: "Free",
+    autoLayout: "Auto Layout",
+    inspector: "Inspector",
+    designTokens: "Tokens",
+    tabColors: "Colors",
+    tabType: "Type",
+    tabSpacing: "Spacing",
+    tabShadows: "Shadows",
+    tabRadii: "Radius",
+    send: "Send",
+    sent: "Sent",
+    promptPlaceholder: "Tell the AI what to change, e.g. make the primary color blue",
+    tokenEmpty: "Tokens appear after AI initializes",
+    tokenEmptyCategory: "No tokens in this category",
+    activityEmpty: "AI agent actions appear here",
+    layerEmpty: "Component layers appear here",
+    canvasEmpty: "Waiting for the AI agent to create a design",
+    canvasHint1: "The AI builds the UI here via MCP tools",
+    canvasHint2: "Your edits sync back to the AI in real time",
+    ai: "AI",
+    user: "User",
+    libraryLoading: "Loading...",
+    inspectorEmpty: "Click a component on the canvas",
+    inspectorEmptyHint: "View and edit properties",
+    noTextProps: "No text properties",
+    content: "Content",
+    layout: "Layout",
+    animation: "Animation",
+    entry: "Entry",
+    hover: "Hover",
+    duration: "Duration",
+    deleteComponent: "Delete",
+    width: "Width",
+    height: "Height",
+    save: "💾 Save",
+    load: "📂 Load",
+    import: "📥 Import",
+    export: "📤 Export",
+  },
+};
+
+let uiLang = "zh";
+try {
+  uiLang = localStorage.getItem("prism-lang") || "zh";
+} catch (err) {
+  uiLang = "zh";
+}
+
+function t(key, vars) {
+  const table = I18N[uiLang] || I18N.zh;
+  let text = table[key] !== undefined ? table[key] : I18N.zh[key] !== undefined ? I18N.zh[key] : key;
+  if (vars) {
+    Object.entries(vars).forEach(([k, v]) => {
+      text = String(text).replace(`{${k}}`, String(v));
+    });
+  }
+  return text;
+}
+
+function applyI18n() {
+  document.querySelectorAll("[data-i18n]").forEach((node) => {
+    node.textContent = t(node.dataset.i18n);
+  });
+  document.querySelectorAll("[data-i18n-placeholder]").forEach((node) => {
+    node.placeholder = t(node.dataset.i18nPlaceholder);
+  });
+  document.querySelectorAll("[data-i18n-title]").forEach((node) => {
+    node.title = t(node.dataset.i18nTitle);
+  });
+  const toggle = $("lang-toggle");
+  if (toggle) toggle.textContent = uiLang === "zh" ? "EN" : "中";
+}
+
+function setupI18n() {
+  const toggle = $("lang-toggle");
+  if (toggle) {
+    toggle.addEventListener("click", () => {
+      uiLang = uiLang === "zh" ? "en" : "zh";
+      try {
+        localStorage.setItem("prism-lang", uiLang);
+      } catch (err) {
+        // ignore storage errors
+      }
+      applyI18n();
+      renderAll();
+    });
+  }
+  applyI18n();
+}
+
 // ===== WebSocket Connection =====
 
 function connect() {
@@ -94,16 +250,16 @@ function updateStatus(status) {
   const text = $("ws-status-text");
   if (status === "connected") {
     dot.className = "status-dot connected";
-    text.textContent = "已连接";
+    text.textContent = t("connected");
   } else if (typeof status === "number") {
     dot.className = "status-dot connected";
-    text.textContent = status + " 人在线";
+    text.textContent = t("online", { n: status });
   } else if (status === "disconnected") {
     dot.className = "status-dot disconnected";
-    text.textContent = "已断开";
+    text.textContent = t("disconnected");
   } else {
     dot.className = "status-dot";
-    text.textContent = "连接中";
+    text.textContent = t("connecting");
   }
 }
 
@@ -268,9 +424,9 @@ function renderCanvas() {
     canvas.innerHTML = `
       <div class="canvas-placeholder">
         <div class="placeholder-icon">◈</div>
-        <p>等待 AI Agent 创建设计</p>
-        <p class="placeholder-hint">AI 会通过 MCP 工具调用在此画布上构建 UI</p>
-        <p class="placeholder-hint">你的调整会实时同步回 AI</p>
+        <p>${t("canvasEmpty")}</p>
+        <p class="placeholder-hint">${t("canvasHint1")}</p>
+        <p class="placeholder-hint">${t("canvasHint2")}</p>
       </div>
     `;
     meta.textContent = "0 个组件";
@@ -527,7 +683,7 @@ function applyCanvasMode(canvas) {
   if (!canvas) return;
   canvas.classList.toggle("canvas-freeform", canvasMode === "freeform");
   const btn = $("layout-mode-btn");
-  if (btn) btn.textContent = canvasMode === "freeform" ? "自由" : "流式";
+  if (btn) btn.textContent = canvasMode === "freeform" ? t("freeform") : t("flow");
 }
 
 function initializeFreeformLayouts() {
@@ -622,8 +778,8 @@ function renderInspector() {
     panel.innerHTML = `
       <div class="inspector-empty">
         <div class="inspector-empty-icon">◈</div>
-        <p>点击画布上的组件</p>
-        <p class="inspector-empty-hint">查看并编辑属性</p>
+    <p>${t("inspectorEmpty")}</p>
+    <p class="inspector-empty-hint">${t("inspectorEmptyHint")}</p>
       </div>`;
     return;
   }
@@ -643,11 +799,11 @@ function renderInspector() {
   // Layout section (freeform mode)
   if (canvasMode === "freeform") {
     const layoutSection = el("div", "inspector-section");
-    layoutSection.appendChild(el("div", "inspector-section-title", "布局"));
+  layoutSection.appendChild(el("div", "inspector-section-title", t("layout")));
     const L = comp.layout || { x: 0, y: 0, w: 0, h: 0 };
     ["x", "y", "w", "h"].forEach((key) => {
       const row = el("div", "prop-row");
-      row.appendChild(el("div", "prop-label", key === "w" ? "宽度" : key === "h" ? "高度" : key.toUpperCase()));
+  row.appendChild(el("div", "prop-label", key === "w" ? t("width") : key === "h" ? t("height") : key.toUpperCase()));
       const input = el("input", "prop-num-input");
       input.type = "number";
       input.value = String(L[key] || 0);
@@ -666,7 +822,7 @@ function renderInspector() {
 
   // Content (string props)
   const contentSection = el("div", "inspector-section");
-  contentSection.appendChild(el("div", "inspector-section-title", "内容"));
+  contentSection.appendChild(el("div", "inspector-section-title", t("content")));
   let textRows = 0;
   Object.entries(props).forEach(([key, value]) => {
     if (typeof value !== "string") return;
@@ -693,17 +849,17 @@ function renderInspector() {
     textRows++;
   });
   if (textRows === 0) {
-    contentSection.appendChild(el("div", "inspector-hint", "无文本属性"));
+    contentSection.appendChild(el("div", "inspector-hint", t("noTextProps")));
   }
   panel.appendChild(contentSection);
 
   // Animation
   const animSection = el("div", "inspector-section");
-  animSection.appendChild(el("div", "inspector-section-title", "动效"));
+  animSection.appendChild(el("div", "inspector-section-title", t("animation")));
   const anim = comp.animation || {};
 
   const entryRow = el("div", "prop-row");
-  entryRow.appendChild(el("div", "prop-label", "入场"));
+  entryRow.appendChild(el("div", "prop-label", t("entry")));
   const entrySelect = el("select", "prop-select");
   entrySelect.innerHTML = '<option value="">无</option>' +
     LIBRARY_ANIMATIONS.filter((a) => a.entry).map((a) => `<option value="${a.entry}" ${anim.entry === a.entry ? "selected" : ""}>${a.name}</option>`).join("");
@@ -714,7 +870,7 @@ function renderInspector() {
   animSection.appendChild(entryRow);
 
   const hoverRow = el("div", "prop-row");
-  hoverRow.appendChild(el("div", "prop-label", "悬停"));
+  hoverRow.appendChild(el("div", "prop-label", t("hover")));
   const hoverSelect = el("select", "prop-select");
   hoverSelect.innerHTML = '<option value="">无</option>' +
     LIBRARY_ANIMATIONS.filter((a) => a.hover).map((a) => `<option value="${a.hover}" ${anim.hover === a.hover ? "selected" : ""}>${a.name}</option>`).join("");
@@ -725,7 +881,7 @@ function renderInspector() {
   animSection.appendChild(hoverRow);
 
   const durRow = el("div", "prop-row");
-  durRow.appendChild(el("div", "prop-label", "时长"));
+  durRow.appendChild(el("div", "prop-label", t("duration")));
   const durGroup = el("div", "prop-input-group");
   const durSlider = el("input", "prop-slider");
   durSlider.type = "range";
@@ -759,7 +915,7 @@ function renderInspector() {
 
   // Actions
   const actions = el("div", "inspector-section");
-  const delBtn = el("button", "inspector-delete-btn", "删除组件");
+  const delBtn = el("button", "inspector-delete-btn", t("deleteComponent"));
   delBtn.addEventListener("click", () => {
     handleDeleteComponent(comp.id);
     deselectAll();
@@ -777,7 +933,7 @@ function renderLayerPanel() {
   if (!list) return;
   const components = getCurrentComponents();
   if (components.length === 0) {
-    list.innerHTML = '<div class="layer-empty">组件图层将显示在这里</div>';
+  list.innerHTML = `<div class="layer-empty">${t("layerEmpty")}</div>`;
     return;
   }
   list.innerHTML = "";
@@ -788,7 +944,7 @@ function renderLayerPanel() {
     item.appendChild(el("span", "layer-name", `${comp.type}${comp.variant ? "/" + comp.variant : ""}`));
     item.addEventListener("click", () => selectComponent(comp.id));
     const del = el("button", "layer-del", "✕");
-    del.title = "删除组件";
+  del.title = t("deleteComponent");
     del.addEventListener("click", (e) => {
       e.stopPropagation();
       handleDeleteComponent(comp.id);
@@ -1978,7 +2134,7 @@ function renderTokenPanel() {
   const list = $("token-list");
 
   if (!currentState || !currentState.tokens) {
-    list.innerHTML = '<div class="token-empty">令牌将在 AI 初始化后出现</div>';
+    list.innerHTML = `<div class="token-empty">${t("tokenEmpty")}</div>`;
     return;
   }
 
@@ -1986,7 +2142,7 @@ function renderTokenPanel() {
   const keys = Object.keys(tokens);
 
   if (keys.length === 0) {
-    list.innerHTML = '<div class="token-empty">此分类暂无令牌</div>';
+    list.innerHTML = `<div class="token-empty">${t("tokenEmptyCategory")}</div>`;
     return;
   }
 
@@ -2134,7 +2290,7 @@ function renderActivityLog() {
   const list = $("activity-list");
 
   if (!currentState || !currentState.activityLog || currentState.activityLog.length === 0) {
-    list.innerHTML = '<div class="activity-empty">AI Agent 操作将显示在这里</div>';
+    list.innerHTML = `<div class="activity-empty">${t("activityEmpty")}</div>`;
     return;
   }
 
@@ -2157,7 +2313,7 @@ function addActivityEntry(entry, container) {
   header.style.cssText = "display:flex;justify-content:space-between;align-items:start;";
 
   const left = el("div");
-  left.appendChild(el("span", "act-source", entry.source === "ai" ? "AI" : "用户"));
+  left.appendChild(el("span", "act-source", entry.source === "ai" ? t("ai") : t("user")));
   left.appendChild(el("span", "act-detail", entry.detail));
   header.appendChild(left);
 
@@ -3088,7 +3244,7 @@ function renderLibraryList() {
   else if (currentLibraryTab === "components") items = LIBRARY_COMPONENTS;
 
   if (items.length === 0) {
-    list.innerHTML = '<div class="library-empty">暂无项目</div>';
+    list.innerHTML = `<div class="library-empty">${t("libraryLoading")}</div>`;
     return;
   }
 
@@ -3392,6 +3548,7 @@ function getAnimationTarget(components) {
 // ===== Initialize =====
 
 function init() {
+  setupI18n();
   setupTabs();
   setupPlatformSwitcher();
   setupUndoRedo();

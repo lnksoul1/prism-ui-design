@@ -244,6 +244,85 @@ Returns a list of applied actions.`,
   );
 }
 
+// ===== design_review_and_improve =====
+
+export interface ReviewAndImproveResult {
+  before_score: number;
+  after_score: number;
+  suggestions: Suggestion[];
+  applied: AutoImproveAction[];
+  accessibility: { score: number; critical: number };
+}
+
+/**
+ * One-call "agent loop": score the design, apply the common structural fixes,
+ * and re-score. Returns a full report so the caller can decide what to do next.
+ */
+export function reviewAndImprove(): ReviewAndImproveResult {
+  const before = suggestImprovements();
+  const applied = autoImprove().actions;
+  const after = suggestImprovements();
+  const audit = auditDesign("AA");
+  return {
+    before_score: before.score,
+    after_score: after.score,
+    suggestions: after.suggestions,
+    applied,
+    accessibility: {
+      score: audit.score,
+      critical: audit.findings.filter((f) => f.severity === "critical").length,
+    },
+  };
+}
+
+export function registerReviewAndImproveTool(server: McpServer): void {
+  server.registerTool(
+    "design_review_and_improve",
+    {
+      title: "Review & Improve Design",
+      description: `Run the full review loop in one call:
+1. score the current design (structure / density / motion / tokens)
+2. apply common structural fixes (tokens, navbar, hero, footer)
+3. re-score and run the accessibility audit
+
+Returns before/after scores, applied actions, remaining suggestions, and the
+accessibility summary.`,
+      inputSchema: {},
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async () => {
+      try {
+        const result = reviewAndImprove();
+        const lines = [
+          `# Review & Improve`,
+          ``,
+          `**Score:** ${result.before_score} → ${result.after_score}`,
+          `**Applied:** ${result.applied.length === 0 ? "none" : result.applied.map((a) => a.action).join(", ")}`,
+          `**Remaining suggestions:** ${result.suggestions.length}`,
+          `**Accessibility:** ${result.accessibility.score}/100 (${result.accessibility.critical} critical)`,
+          ``,
+          ...result.suggestions.map((s, i) => `${i + 1}. [${s.severity.toUpperCase()}] ${s.title} — ${s.tool_hint}`),
+        ].join("\n");
+        return {
+          content: [{ type: "text" as const, text: lines }],
+          structuredContent: { success: true, ...result },
+        };
+      } catch (error) {
+        return {
+          content: [
+            { type: "text" as const, text: `Error: ${error instanceof Error ? error.message : String(error)}` },
+          ],
+        };
+      }
+    }
+  );
+}
+
 // ===== design_create_brand_style =====
 
 export interface BrandDecision {

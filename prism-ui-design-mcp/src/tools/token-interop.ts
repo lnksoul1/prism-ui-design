@@ -14,6 +14,7 @@ import {
   tokensToDesignMd,
   tokensToDtcg,
   tokensToStyleDictionary,
+  tokensToTailwind4,
   type DtcgExportFormat,
 } from "../tokens/dtcgi.js";
 
@@ -30,12 +31,13 @@ Supported formats:
   - style-dictionary: Nested Style Dictionary JSON (category → token → value)
   - figma_tokens: Figma Tokens plugin compatible JSON (DTCG-shaped)
   - design_md: Google DESIGN.md document (YAML front matter + prose)
+  - tailwind: Tailwind v4 CSS-first @theme block
 
 Args:
-  - format (string): 'dtcg' | 'css' | 'style-dictionary' | 'figma_tokens' | 'design_md'`,
+  - format (string): 'dtcg' | 'css' | 'style-dictionary' | 'figma_tokens' | 'design_md' | 'tailwind'`,
       inputSchema: {
         format: z
-          .enum(["dtcg", "css", "style-dictionary", "figma_tokens", "design_md"])
+          .enum(["dtcg", "css", "style-dictionary", "figma_tokens", "design_md", "tailwind"])
           .describe("Export format"),
       },
       annotations: {
@@ -57,6 +59,8 @@ Args:
               ? JSON.stringify(tokensToStyleDictionary(tokens), null, 2)
               : format === "design_md"
                 ? tokensToDesignMd(tokens, state.projectName || "Prism Design")
+                : format === "tailwind"
+                  ? tokensToTailwind4(tokens)
                 : JSON.stringify(tokensToDtcg(tokens), null, 2);
         const count = Object.values(tokens).reduce((sum, cat) => sum + Object.keys(cat).length, 0);
         return {

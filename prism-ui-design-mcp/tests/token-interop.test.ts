@@ -7,6 +7,7 @@ import {
   tokensToCss,
   tokensToDtcg,
   tokensToStyleDictionary,
+  tokensToTailwind4,
 } from "../src/tokens/dtcgi.js";
 
 beforeEach(() => {
@@ -42,6 +43,14 @@ test("tokensToStyleDictionary nests category → token → value", () => {
   seedTokens();
   const sd = tokensToStyleDictionary(stateStore.getState().tokens);
   assert.deepEqual(sd.colors["color-primary"], { value: "#7C3AED" });
+});
+
+test("tokensToTailwind4 emits an @theme block", () => {
+  seedTokens();
+  const css = tokensToTailwind4(stateStore.getState().tokens);
+  assert.match(css, /^@theme \{/);
+  assert.match(css, /--color-primary: #7C3AED;/);
+  assert.match(css, /--shadow-md: 0 4px 6px rgba\(0,0,0,0.1\);/);
 });
 
 test("dtcgToTokenMaps accepts grouped and flat shapes", () => {

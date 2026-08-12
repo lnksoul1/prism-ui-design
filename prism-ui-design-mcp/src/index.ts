@@ -87,6 +87,7 @@ import {
   registerBrandStyleTool,
   registerReflowTool,
   registerAutoImproveTool,
+  registerReviewAndImproveTool,
 } from "./tools/design-review.js";
 import { registerResources } from "./resources/index.js";
 import { registerPrompts } from "./prompts/index.js";
@@ -147,6 +148,7 @@ registerSuggestTool(server);
 registerBrandStyleTool(server);
 registerReflowTool(server);
 registerAutoImproveTool(server);
+registerReviewAndImproveTool(server);
 
 // C2 platform snapshots, C5 comments, C6 one-shot page generation
 registerPlatformTools(server);
@@ -288,8 +290,8 @@ app.get("/api/conflicts", (_req, res) => {
 // API: Export design as code
 app.post("/api/export", (req, res) => {
   const { format } = req.body;
-  if (!["html", "react", "vue", "figma_tokens", "react-ts", "css", "presentation", "flutter", "swiftui"].includes(format)) {
-    res.status(400).json({ error: "Invalid format. Must be 'html', 'react', 'vue', 'figma_tokens', 'react-ts', 'css', 'presentation', 'flutter', or 'swiftui'" });
+  if (!["html", "react", "vue", "figma_tokens", "react-ts", "css", "presentation", "flutter", "swiftui", "svelte"].includes(format)) {
+    res.status(400).json({ error: "Invalid format. Must be 'html', 'react', 'vue', 'figma_tokens', 'react-ts', 'css', 'presentation', 'flutter', 'swiftui', or 'svelte'" });
     return;
   }
   try {

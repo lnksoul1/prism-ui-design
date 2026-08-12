@@ -32,6 +32,7 @@ import {
   registerBrandStyleTool,
   registerReflowTool,
   registerAutoImproveTool,
+  registerReviewAndImproveTool,
 } from "../src/tools/design-review.js";
 import { registerPlatformTools } from "../src/tools/platform-tools.js";
 import { registerCollabTools } from "../src/tools/collab-tools.js";
@@ -81,6 +82,7 @@ registerSuggestTool(fakeServer as never);
 registerBrandStyleTool(fakeServer as never);
 registerReflowTool(fakeServer as never);
 registerAutoImproveTool(fakeServer as never);
+registerReviewAndImproveTool(fakeServer as never);
 registerPlatformTools(fakeServer as never);
 registerCollabTools(fakeServer as never);
 registerGeneratePageTool(fakeServer as never);
@@ -176,6 +178,7 @@ const VALID_PARAMS: Record<string, Record<string, unknown>> = {
   design_list_comments: {},
   design_remove_comment: { comment_id: "missing" },
   design_generate_page: { brief: "电商促销首页", adjectives: ["温暖", "简约"] },
+  design_review_and_improve: {},
 };
 
 const EXPECT_STRUCTURED = new Set([
@@ -234,6 +237,7 @@ const EXPECT_STRUCTURED = new Set([
   "design_list_comments",
   "design_remove_comment",
   "design_generate_page",
+  "design_review_and_improve",
 ]);
 
 const INVALID_PARAMS: Record<string, Record<string, unknown>> = {
@@ -271,9 +275,9 @@ const INVALID_PARAMS: Record<string, Record<string, unknown>> = {
   design_generate_page: { brief: "" },
 };
 
-test("registers all 67 tools with unique names", () => {
-  assert.equal(captured.length, 67);
-  assert.equal(new Set(captured.map((t) => t.name)).size, 67);
+test("registers all 68 tools with unique names", () => {
+  assert.equal(captured.length, 68);
+  assert.equal(new Set(captured.map((t) => t.name)).size, 68);
   for (const tool of captured) {
     assert.equal(typeof tool.handler, "function");
   }

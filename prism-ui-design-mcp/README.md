@@ -190,8 +190,14 @@ optional Playwright browser smoke (`npm run test:e2e`).
 - **Client panels**: project switcher, template library (built-in + saved),
   version snapshots, and component comments are now first-class dashboard
   panels; activity/token/library search and conflict reload UI included.
+- **Open client UI**: the canvas empty state includes "打开客户端界面", which
+  imports the dashboard's own shell (`client/index.html`) as a design page
+  (`POST /api/import-client`) so the service can adjust this project's UI.
 - **Prompt queue visibility**: queued user prompts appear in the activity log
   and are broadcast as `prompt_queued` for connected agents/gateways.
+- **Canvas fixes**: the preview canvas now scrolls when content overflows, and
+  freeform mode lets you drag components anywhere (whole wrapper, not just the
+  handle) and resize with corner handles.
 - **Freeform canvas**: toggle between flow layout and free positioning —
   drag components anywhere, resize with 8 handles, edit X/Y/W/H in the
   inspector, and auto-arrange into a clean vertical stack.

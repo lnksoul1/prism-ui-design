@@ -141,6 +141,9 @@ const I18N = {
     builtinTemplates: "内置模板",
     reload: "重新加载",
     conflictTitle: "设计已被其他客户端修改",
+    openClientUi: "打开客户端界面",
+    openClientUiDesc: "把 Prism 客户端 UI 导入画布进行调整",
+    freeformHint: "拖动组件调整位置，拖边角调整大小",
   },
   en: {
     connected: "Connected",
@@ -223,6 +226,9 @@ const I18N = {
     builtinTemplates: "Built-in templates",
     reload: "Reload",
     conflictTitle: "The design was changed by another client",
+    openClientUi: "Open client UI",
+    openClientUiDesc: "Import the Prism client UI into the canvas to adjust it",
+    freeformHint: "Drag components to move, drag corners to resize",
   },
 };
 
@@ -593,6 +599,10 @@ function renderCanvas() {
               <span class="pa-icon">▤</span>
               <span><span class="pa-title">${t("startWithTemplate")}</span><br><span class="pa-desc">${t("startWithTemplateDesc")}</span></span>
             </button>
+            <button class="placeholder-action" id="empty-client">
+              <span class="pa-icon">◈</span>
+              <span><span class="pa-title">${t("openClientUi")}</span><br><span class="pa-desc">${t("openClientUiDesc")}</span></span>
+            </button>
           </div>
         </div>
       </div>
@@ -631,6 +641,23 @@ function renderCanvas() {
           }
         } catch (err) {
           console.error("Template create failed:", err);
+        }
+      });
+    }
+    const clientBtn = $("empty-client");
+    if (clientBtn) {
+      clientBtn.addEventListener("click", async () => {
+        try {
+          const response = await fetch("/api/import-client", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({}),
+          });
+          if (response.ok) {
+            await fetchInitialState();
+          }
+        } catch (err) {
+          console.error("Client UI import failed:", err);
         }
       });
     }
@@ -787,9 +814,12 @@ function renderComponent(comp) {
 function attachFreeformDrag(wrapper, compId) {
   wrapper.addEventListener("mousedown", (e) => {
     if (e.button !== 0) return;
-    if (e.target.closest(".comp-overlay") || e.target.closest(".resize-handle")) return;
+    // Only exclude actual controls; dragging from the badge/overlay strip is allowed.
+    if (e.target.closest(".comp-delete") || e.target.closest(".comp-drag-handle")) return;
+    if (e.target.closest(".resize-handle")) return;
     if (e.target.closest("[contenteditable='true']")) return;
     e.preventDefault();
+    selectComponent(compId);
     const startX = e.clientX;
     const startY = e.clientY;
     const comp = getCompById(compId);
@@ -926,6 +956,12 @@ function setupCanvasMode() {
       canvasMode = canvasMode === "flow" ? "freeform" : "flow";
       if (canvasMode === "freeform") {
         initializeFreeformLayouts();
+        const hint = $("canvas-drop-hint");
+        if (hint) {
+          hint.textContent = t("freeformHint");
+          hint.style.display = "block";
+          setTimeout(() => { hint.style.display = "none"; }, 3000);
+        }
       }
       renderCanvas();
       renderInspector();

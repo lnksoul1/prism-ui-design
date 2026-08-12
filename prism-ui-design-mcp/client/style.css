@@ -338,7 +338,7 @@ body::after {
 .canvas-frame {
   display: flex;
   flex-direction: column;
-  flex: 1;
+  flex: 0 0 auto;
   min-height: 100%;
 }
 .platform-chrome {
@@ -348,13 +348,13 @@ body::after {
   width: 100%;
   max-width: 100%;
   min-height: 100%;
-  flex: 1;
+  flex: 0 0 auto;
   transition: max-width 0.4s var(--ease);
 }
 .platform-chrome.device-tablet { max-width: 768px; }
 .platform-chrome.device-mobile { max-width: 375px; }
 .platform-chrome .canvas {
-  flex: 1;
+  flex: 0 0 auto;
   min-height: 100%;
   border: 1px solid var(--border);
   border-top: none;
@@ -2986,7 +2986,6 @@ textarea:focus-visible,
 .canvas-frame {
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
-  overflow: hidden;
   background: var(--bg);
 }
 

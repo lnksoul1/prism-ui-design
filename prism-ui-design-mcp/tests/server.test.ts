@@ -229,6 +229,28 @@ test(
       };
       assert.ok(afterPrompt.activityLog.some((a) => a.action === "user_prompt"), "prompt should be logged");
 
+      // Client UI import: opens the dashboard shell as a design page
+      const clientRes = await fetch(`${base}/api/import-client`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const clientImport = (await clientRes.json()) as {
+        success: boolean;
+        imported: number;
+        pageName: string;
+        components: Array<{ type: string }>;
+      };
+      assert.equal(clientImport.success, true);
+      assert.ok(clientImport.imported >= 5);
+      assert.equal(clientImport.pageName, "Prism 客户端 UI");
+      const clientState = (await (await fetch(`${base}/api/state`)).json()) as {
+        projectName: string;
+        tokens: { colors: Record<string, unknown> };
+      };
+      assert.equal(clientState.projectName, "Prism 客户端");
+      assert.ok(Object.keys(clientState.tokens.colors).length > 0, "client import applies tokens");
+
       // PNG render: returns image/png when Playwright is available, else 501
       const playwrightAvailable = await isPlaywrightUsable();
       const pngRes = await fetch(`${base}/api/render?format=png`);

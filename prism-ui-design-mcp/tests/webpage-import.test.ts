@@ -1,7 +1,7 @@
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { stateStore } from "../src/state.js";
-import { importHtmlString } from "../src/import-project.js";
+import { importClientUi, importHtmlString } from "../src/import-project.js";
 
 beforeEach(() => {
   stateStore.resetForTests();
@@ -44,4 +44,18 @@ test("importHtmlString clears existing state when requested", () => {
 
 test("importHtmlString throws when no components are recognizable", () => {
   assert.throws(() => importHtmlString("<p>just text</p>", "empty", false), /No recognizable UI components/);
+});
+
+test("importClientUi opens the Prism dashboard shell as a design", () => {
+  const result = importClientUi(false);
+  assert.equal(result.pageName, "Prism 客户端 UI");
+  assert.ok(result.pageId.startsWith("page_"));
+  assert.ok(result.imported >= 5, `expected >= 5 components, got ${result.imported}`);
+  const types = result.components.map((c) => c.type);
+  for (const expected of ["navbar", "sidebar", "tabs", "hero", "form"]) {
+    assert.ok(types.includes(expected), `expected ${expected} in ${types}`);
+  }
+  const state = stateStore.getState();
+  const currentPage = state.pages.find((p) => p.id === result.pageId);
+  assert.equal(currentPage?.components.length, result.imported);
 });

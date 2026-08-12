@@ -8,6 +8,7 @@
 
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 import { stateStore } from "./state.js";
 
 // ===== Types =====
@@ -96,6 +97,101 @@ export function importHtmlString(
     stateStore.addComponent(comp.type, comp.variant, comp.props, null, "ai");
   }
   return { pageName: page.name, pageId: page.id, imported: components.length };
+}
+
+/**
+ * Parse the Prism dashboard shell (client/index.html) into design components so
+ * the service can open the project's own UI and adjust it on the canvas.
+ */
+function parseClientShell(html: string): ExtractedComponent[] {
+  const text = (s: string | undefined): string =>
+    (s || "").replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+
+  const components: ExtractedComponent[] = [];
+
+  const brand = text(/<span class="logo">([\s\S]*?)<\/span>/.exec(html)?.[1]) || "Prism";
+  const topbarButtons = [...html.matchAll(/<button[^>]*class="toolbar-btn"[^>]*>([\s\S]*?)<\/button>/g)]
+    .map((m) => text(m[1]))
+    .filter(Boolean)
+    .slice(0, 6);
+  components.push({
+    type: "navbar",
+    variant: "with_cta",
+    props: { brand, links: topbarButtons, cta_text: "EN" },
+  });
+
+  const toolTabs = [...html.matchAll(/<button[^>]*class="tool-tab[^>]*>([\s\S]*?)<\/button>/g)]
+    .map((m) => text(m[1]))
+    .filter(Boolean);
+  components.push({
+    type: "sidebar",
+    props: { title: "工具面板", links: toolTabs.length ? toolTabs : ["设计库", "版本", "评论"] },
+  });
+
+  const libTabs = [...html.matchAll(/<button[^>]*class="lib-tab[^>]*>([\s\S]*?)<\/button>/g)]
+    .map((m) => text(m[1]))
+    .filter(Boolean);
+  components.push({ type: "tabs", props: { tabs: libTabs.length ? libTabs : ["风格", "动效", "组件", "模板"] } });
+
+  const panelTitles = [...html.matchAll(/<h3 class="panel-title[^>]*>([\s\S]*?)<\/h3>/g)]
+    .map((m) => text(m[1]))
+    .filter(Boolean);
+  components.push({
+    type: "text_section",
+    props: { title: "面板区", body: panelTitles.join(" · ") || "图层 · 活动日志 · 设计令牌" },
+  });
+
+  const canvasLabel = text(/<span class="canvas-label"[^>]*>([\s\S]*?)<\/span>/.exec(html)?.[1]) || "实时预览画布";
+  components.push({
+    type: "hero",
+    variant: "centered",
+    props: { title: canvasLabel, subtitle: "实时预览 · 平台切换 · 自由布局", button_text: "流式 / 自由" },
+  });
+
+  const promptPh = text(/<input[^>]*id="prompt-input"[^>]*placeholder="([\s\S]*?)"/.exec(html)?.[1]) || "";
+  components.push({
+    type: "form",
+    props: { fields: [{ label: "AI 指令", type: "text", placeholder: promptPh }], button_text: "发送" },
+  });
+
+  const tokenTabs = [...html.matchAll(/<button[^>]*class="tab-btn[^>]*>([\s\S]*?)<\/button>/g)]
+    .map((m) => text(m[1]))
+    .filter(Boolean);
+  components.push({
+    type: "badge",
+    props: { text: "设计令牌: " + (tokenTabs.join("/") || "色彩/字体/间距/阴影/圆角") },
+  });
+
+  return components;
+}
+
+/**
+ * Import the Prism client dashboard shell (client/index.html) as a new page in
+ * the design canvas, so the service can be used to adjust the project's own UI.
+ */
+export function importClientUi(clearExisting = false): {
+  pageName: string;
+  pageId: string;
+  imported: number;
+  components: ExtractedComponent[];
+} {
+  // Works both from dist/ (server runtime) and .test-build/ (tests) via cwd.
+  const htmlFile = [
+    path.resolve(process.cwd(), "client", "index.html"),
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "client", "index.html"),
+  ].find((candidate) => fs.existsSync(candidate));
+  if (!htmlFile) {
+    throw new Error(`Client UI file not found (client/index.html)`);
+  }
+  const components = parseClientShell(fs.readFileSync(htmlFile, "utf-8"));
+  if (clearExisting) {
+    stateStore.clearAll("ai");
+  }
+  const page = stateStore.addPage("Prism 客户端 UI", "ai");
+  for (const comp of components) {
+    stateStore.addComponent(comp.type, comp.variant, comp.props, null, "ai");
+  }
+  return { pageName: page.name, pageId: page.id, imported: components.length, components };
 }
 
 function findSupportedFiles(rootDir: string): string[] {

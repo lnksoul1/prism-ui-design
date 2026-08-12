@@ -36,6 +36,7 @@ import { fileURLToPath } from "url";
 import { WebSocketServer, WebSocket } from "ws";
 import { SERVER_NAME, SERVER_VERSION } from "./constants.js";
 import { stateStore } from "./state.js";
+import { applyStyleTokenSet } from "./tokens.js";
 
 // Shared mutation layer (used by both REST and WebSocket channels)
 import * as designService from "./service/design-service.js";
@@ -55,7 +56,7 @@ import { registerDesignTokensTool } from "./tools/design-tokens.js";
 import { registerAllDesignTools, exportDesign, applyPageTemplate } from "./tools/design-tools.js";
 
 // Project import module
-import { scanProject, type ExtractedPage } from "./import-project.js";
+import { importClientUi, scanProject, type ExtractedPage } from "./import-project.js";
 
 // Project persistence (save / load / autosave)
 import { registerProjectTools } from "./tools/project-tools.js";
@@ -401,6 +402,22 @@ app.post("/api/import", async (req, res) => {
     res.status(500).json({
       error: error instanceof Error ? error.message : String(error),
     });
+  }
+});
+
+// API: Import the Prism client dashboard shell so the service can open and
+// adjust the project's own UI on the canvas.
+app.post("/api/import-client", (req, res) => {
+  const { clear_existing } = req.body || {};
+  try {
+    const result = importClientUi(clear_existing === true);
+    stateStore.setProjectName("Prism 客户端", "ai");
+    stateStore.setStyle("minimal", "ai");
+    applyStyleTokenSet(stateStore, "minimal", "#7C3AED", "ai");
+    stateStore.switchPage(result.pageId, "ai");
+    res.json({ success: true, ...result });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
   }
 });
 

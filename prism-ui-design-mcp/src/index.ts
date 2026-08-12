@@ -66,6 +66,8 @@ import {
   listProjects,
   saveProject,
 } from "./project-store.js";
+import { listTemplates, loadTemplate, saveTemplate } from "./templates.js";
+import { createVersion, diffVersions, listVersions, restoreVersion } from "./versions.js";
 
 // Phase B capabilities: token interop, a11y audit, render preview, resources, prompts
 import { registerTokenInteropTools } from "./tools/token-interop.js";
@@ -310,6 +312,7 @@ app.post("/api/prompt", (req, res) => {
     return;
   }
   designService.setPendingPrompt(prompt);
+  broadcastPromptQueued(prompt);
   res.json({ success: true });
 });
 
@@ -446,6 +449,128 @@ app.post("/api/template", (req, res) => {
   }
 });
 
+// API: List saved templates
+app.get("/api/templates", (_req, res) => {
+  try {
+    const templates = listTemplates();
+    res.json({ success: true, count: templates.length, templates });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+// API: Save the current design as a template
+app.post("/api/template/save", (req, res) => {
+  const { name } = req.body || {};
+  try {
+    const result = saveTemplate(typeof name === "string" ? name : undefined);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+// API: Load a saved template
+app.post("/api/template/load", (req, res) => {
+  const { file } = req.body || {};
+  if (!file || typeof file !== "string") {
+    res.status(400).json({ error: "Missing 'file' field" });
+    return;
+  }
+  try {
+    const result = loadTemplate(file);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+// API: Create a design version snapshot
+app.post("/api/version", (req, res) => {
+  const { name } = req.body || {};
+  try {
+    const version = createVersion(typeof name === "string" ? name : undefined);
+    res.json({
+      success: true,
+      id: version.id,
+      name: version.name,
+      created_at: version.createdAt,
+      component_count: version.componentCount,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+// API: List design versions
+app.get("/api/versions", (_req, res) => {
+  try {
+    const versions = listVersions();
+    res.json({ success: true, count: versions.length, versions });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+// API: Diff two versions
+app.post("/api/version/diff", (req, res) => {
+  const { from_id, to_id } = req.body || {};
+  if (!from_id || !to_id) {
+    res.status(400).json({ error: "Missing from_id or to_id" });
+    return;
+  }
+  try {
+    const diff = diffVersions(from_id, to_id);
+    res.json({ success: true, ...diff });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+// API: Restore a version snapshot
+app.post("/api/version/:id/restore", (req, res) => {
+  const { id } = req.params;
+  try {
+    const version = restoreVersion(id);
+    res.json({ success: true, restored_id: version.id, name: version.name });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+// API: Add a review comment
+app.post("/api/comment", (req, res) => {
+  const { component_id, text, author } = req.body || {};
+  if (!component_id || !text) {
+    res.status(400).json({ error: "Missing component_id or text" });
+    return;
+  }
+  try {
+    const comment = stateStore.addComment(component_id, String(text), typeof author === "string" ? author : "user", "user");
+    res.json({ success: true, comment });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+// API: List comments (optionally filtered by component)
+app.get("/api/comments", (req, res) => {
+  const componentId = typeof req.query.component_id === "string" ? req.query.component_id : undefined;
+  const all = stateStore.getState().comments;
+  const comments = componentId ? all.filter((c) => c.component_id === componentId) : all;
+  res.json({ success: true, count: comments.length, comments });
+});
+
+// API: Remove a comment
+app.delete("/api/comment/:id", (req, res) => {
+  const ok = stateStore.removeComment(req.params.id, "user");
+  if (!ok) {
+    res.status(404).json({ success: false, error: `Comment ${req.params.id} not found` });
+    return;
+  }
+  res.json({ success: true, comment_id: req.params.id });
+});
+
 // API: Save project to disk
 app.post("/api/project/save", (req, res) => {
   const { name, file } = req.body || {};
@@ -482,11 +607,31 @@ app.get("/api/projects", (_req, res) => {
   }
 });
 
-// API: Render the current design as standalone HTML (screenshot when Playwright available)
-app.get("/api/render", async (_req, res) => {
+// API: Render the current design as HTML, or as a real PNG screenshot
+// (requires Playwright; returns 501 with a readable error when unavailable).
+app.get("/api/render", async (req, res) => {
   try {
     const { exportDesign } = await import("./tools/design-tools.js");
+    const { renderHtmlToPng } = await import("./tools/design-render.js");
+    const format = req.query.format === "png" ? "png" : "html";
+    const viewport = typeof req.query.viewport === "string" ? req.query.viewport : "desktop";
     const html = exportDesign("html");
+    if (format === "png") {
+      try {
+        const png = await renderHtmlToPng(html, viewport);
+        res.setHeader("Content-Type", "image/png");
+        res.setHeader("Content-Disposition", `inline; filename="prism-preview-${viewport}.png"`);
+        res.send(png);
+      } catch (error) {
+        res.status(501).json({
+          error:
+            error instanceof Error && error.message.includes("playwright")
+              ? "Playwright is not installed — run `npm i -D playwright && npx playwright install chromium` to enable screenshots."
+              : `Screenshot failed: ${error instanceof Error ? error.message : String(error)}`,
+        });
+      }
+      return;
+    }
     res.json({ success: true, html, code_length: html.length });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
@@ -555,6 +700,8 @@ wss.on("connection", (ws: WebSocket) => {
       const result = designService.applyClientMessage(parsed.data);
       if (!result.ok) {
         ws.send(JSON.stringify({ type: "error", message: result.detail }));
+      } else if (parsed.data.type === "prompt") {
+        broadcastPromptQueued(parsed.data.prompt);
       }
     } catch (error) {
       ws.send(JSON.stringify({ type: "error", message: `Malformed message: ${error instanceof Error ? error.message : String(error)}` }));
@@ -593,6 +740,15 @@ function broadcastCursor(clientId: string, x: number, y: number): void {
 
 function broadcastCursorLeave(clientId: string): void {
   const message = JSON.stringify({ type: "cursor_leave", client_id: clientId });
+  wss.clients.forEach((client: WebSocket) => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(message);
+    }
+  });
+}
+
+function broadcastPromptQueued(prompt: string): void {
+  const message = JSON.stringify({ type: "prompt_queued", prompt });
   wss.clients.forEach((client: WebSocket) => {
     if (client.readyState === WebSocket.OPEN) {
       client.send(message);
@@ -701,6 +857,7 @@ async function main(): Promise<void> {
 
   // 2. Restore the most recent project (autosave checkpoint), otherwise auto-import
   const fs = await import("fs");
+  const autoImport = process.env.PRISM_AUTOIMPORT !== "off";
   if (process.env.PRISM_AUTOLOAD !== "off" && fs.existsSync(autosavePath())) {
     try {
       const result = loadProject(autosavePath());
@@ -709,9 +866,9 @@ async function main(): Promise<void> {
       );
     } catch (error) {
       console.error(`[${SERVER_NAME}] Autosave restore failed:`, error instanceof Error ? error.message : String(error));
-      await autoImportProjectPages();
+      if (autoImport) await autoImportProjectPages();
     }
-  } else {
+  } else if (autoImport) {
     await autoImportProjectPages();
   }
 

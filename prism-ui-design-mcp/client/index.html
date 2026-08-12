@@ -26,8 +26,7 @@
     <button class="toolbar-btn" id="undo-btn" title="撤销 (Ctrl+Z)">↶</button>
     <button class="toolbar-btn" id="redo-btn" title="重做 (Ctrl+Shift+Z)">↷</button>
     <button class="toolbar-btn" id="screenshot-btn" title="截图">📸</button>
-    <button class="toolbar-btn" id="save-btn" title="保存项目" data-i18n="save">💾 保存</button>
-    <button class="toolbar-btn" id="load-btn" title="加载最近保存的项目" data-i18n="load">📂 加载</button>
+    <button class="toolbar-btn" id="project-btn" title="项目" data-i18n="project">🗂 项目</button>
     <button class="toolbar-btn" id="import-btn" title="导入项目" data-i18n="import">📥 导入</button>
     <button class="toolbar-btn" id="export-btn" title="导出代码" data-i18n="export">📤 导出</button>
     <button class="theme-toggle" id="theme-toggle" title="切换主题">🌙</button>
@@ -53,18 +52,44 @@
         <div class="layer-empty">组件图层将显示在这里</div>
       </div>
     </div>
-    <!-- Design Library -->
-    <div class="library-section">
+    <!-- Tools: Library / Versions / Comments -->
+    <div class="tools-tabs">
+      <button class="tool-tab active" data-tool="library" data-i18n="library">设计库</button>
+      <button class="tool-tab" data-tool="versions" data-i18n="versions">版本</button>
+      <button class="tool-tab" data-tool="comments" data-i18n="comments">评论</button>
+    </div>
+    <div class="tool-pane active" id="pane-library">
       <div class="library-tabs">
         <button class="lib-tab active" data-lib="styles" title="风格库" data-i18n="libStyles">风格</button>
         <button class="lib-tab" data-lib="animations" title="动效库" data-i18n="libAnimations">动效</button>
         <button class="lib-tab" data-lib="components" title="组件库" data-i18n="libComponents">组件</button>
+        <button class="lib-tab" data-lib="templates" title="模板库" data-i18n="libTemplates">模板</button>
       </div>
+      <input type="text" class="tool-search" id="library-search" data-i18n-placeholder="searchLibrary" placeholder="搜索组件/风格/动效...">
       <div class="library-list" id="library-list">
         <div class="library-empty">加载中...</div>
       </div>
     </div>
+    <div class="tool-pane" id="pane-versions">
+      <button class="toolbar-btn version-create" id="version-create-btn" data-i18n="createVersion">+ 新建版本</button>
+      <div class="version-list" id="version-list"><div class="tool-empty" data-i18n="versionEmpty">暂无版本</div></div>
+    </div>
+    <div class="tool-pane" id="pane-comments">
+      <div class="comment-add">
+        <input type="text" class="tool-search" id="comment-input" data-i18n-placeholder="commentPlaceholder" placeholder="评论选中的组件...">
+        <button class="prompt-send" id="comment-add-btn" data-i18n="addComment">添加</button>
+      </div>
+      <div class="comment-list" id="comment-list"><div class="tool-empty" data-i18n="commentEmpty">暂无评论</div></div>
+    </div>
     <h3 class="panel-title" data-i18n="activityLog">活动日志</h3>
+    <div class="activity-filter">
+      <input type="text" class="tool-search" id="activity-search" data-i18n-placeholder="searchActivity" placeholder="搜索操作...">
+      <select class="activity-source" id="activity-source">
+        <option value="">全部</option>
+        <option value="ai">AI</option>
+        <option value="user">用户</option>
+      </select>
+    </div>
     <div class="activity-list" id="activity-list">
       <div class="activity-empty">AI Agent 操作将显示在这里</div>
     </div>
@@ -149,6 +174,7 @@
     <!-- Design Tokens -->
     <h3 class="panel-title" data-i18n="designTokens">设计令牌</h3>
     <div class="conflict-warnings" id="conflict-warnings"></div>
+    <input type="text" class="tool-search" id="token-search" data-i18n-placeholder="searchTokens" placeholder="搜索令牌...">
     <div class="token-tabs">
       <button class="tab-btn active" data-tab="colors" data-i18n="tabColors">色彩</button>
       <button class="tab-btn" data-tab="typography" data-i18n="tabType">字体</button>
@@ -167,6 +193,20 @@
 <div class="prompt-bar">
   <input type="text" class="prompt-input" id="prompt-input" data-i18n-placeholder="promptPlaceholder" placeholder="输入指令给 AI，如：把主色改成蓝色">
   <button class="prompt-send" id="prompt-send" data-i18n="send">发送</button>
+</div>
+
+<!-- Project Modal -->
+<div class="modal-overlay" id="project-modal" style="display:none">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 data-i18n="project">项目</h3>
+      <button class="modal-close" id="project-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <button class="btn-import-go" id="project-save-btn" data-i18n="saveCurrent">保存当前设计</button>
+      <div class="project-list" id="project-list"><div class="tool-empty" data-i18n="projectEmpty">暂无已保存项目</div></div>
+    </div>
+  </div>
 </div>
 
 <!-- Export Modal -->

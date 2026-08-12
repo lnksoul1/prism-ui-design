@@ -168,6 +168,79 @@ test(
       assert.ok(tpl.count >= 5, "saas template should add multiple components");
       assert.ok(Array.isArray(tpl.component_ids));
 
+      // Template management endpoints
+      const saveTplRes = await fetch(`${base}/api/template/save`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "E2E Template" }),
+      });
+      const saveTpl = (await saveTplRes.json()) as { success: boolean; file: string };
+      assert.equal(saveTpl.success, true);
+      const listTplRes = await fetch(`${base}/api/templates`);
+      const listTpl = (await listTplRes.json()) as { success: boolean; count: number; templates: Array<{ file: string }> };
+      assert.equal(listTpl.success, true);
+      assert.ok(listTpl.count >= 1);
+      const loadTplRes = await fetch(`${base}/api/template/load`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ file: saveTpl.file }),
+      });
+      const loadTpl = (await loadTplRes.json()) as { success: boolean };
+      assert.equal(loadTpl.success, true);
+
+      // Version management endpoints
+      const verRes = await fetch(`${base}/api/version`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "v1" }),
+      });
+      const ver = (await verRes.json()) as { success: boolean; id: string };
+      assert.equal(ver.success, true);
+      const listVer = (await (await fetch(`${base}/api/versions`)).json()) as { success: boolean; count: number };
+      assert.ok(listVer.count >= 1);
+      const restoreRes = await fetch(`${base}/api/version/${ver.id}/restore`, { method: "POST" });
+      const restoreVer = (await restoreRes.json()) as { success: boolean };
+      assert.equal(restoreVer.success, true);
+
+      // Comment endpoints
+      const commentRes = await fetch(`${base}/api/comment`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ component_id: comp.id, text: "review note", author: "tester" }),
+      });
+      const comment = (await commentRes.json()) as { success: boolean; comment: { id: string } };
+      assert.equal(comment.success, true);
+      const comments = (await (await fetch(`${base}/api/comments`)).json()) as { success: boolean; count: number };
+      assert.equal(comments.count, 1);
+      const delRes = await fetch(`${base}/api/comment/${comment.comment.id}`, { method: "DELETE" });
+      const delComment = (await delRes.json()) as { success: boolean };
+      assert.equal(delComment.success, true);
+
+      // Prompt queue records an activity entry
+      const promptRes = await fetch(`${base}/api/prompt`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: "make it blue" }),
+      });
+      const promptPosted = (await promptRes.json()) as { success: boolean };
+      assert.equal(promptPosted.success, true);
+      const afterPrompt = (await (await fetch(`${base}/api/state`)).json()) as {
+        activityLog: Array<{ action: string }>;
+      };
+      assert.ok(afterPrompt.activityLog.some((a) => a.action === "user_prompt"), "prompt should be logged");
+
+      // PNG render: returns image/png when Playwright is available, else 501
+      const playwrightAvailable = await isPlaywrightUsable();
+      const pngRes = await fetch(`${base}/api/render?format=png`);
+      if (playwrightAvailable) {
+        assert.equal(pngRes.status, 200);
+        assert.match(pngRes.headers.get("content-type") || "", /image\/png/);
+        const buf = Buffer.from(await pngRes.arrayBuffer());
+        assert.equal(buf.subarray(0, 8).toString("hex"), "89504e470d0a1a0a", "PNG magic bytes");
+      } else {
+        assert.equal(pngRes.status, 501);
+      }
+
       const change = await Promise.race([
         changePromise,
         new Promise<never>((_, reject) =>
@@ -184,7 +257,10 @@ test(
 
       ws.close();
     } catch (error) {
-      throw new Error(`${error instanceof Error ? error.message : String(error)}\n--- server logs ---\n${logs}`);
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}\n--- server logs ---\n${logs}`,
+        { cause: error }
+      );
     } finally {
       child.kill();
       await new Promise<void>((resolve) => {
@@ -200,6 +276,19 @@ test(
     }
   }
 );
+
+async function isPlaywrightUsable(): Promise<boolean> {
+  try {
+    const { chromium } = (await import("playwright" as string)) as {
+      chromium: { launch(): Promise<{ close(): Promise<void> }> };
+    };
+    const browser = await chromium.launch();
+    await browser.close();
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 test(
   "presence broadcasts online client count over WebSocket",
@@ -256,7 +345,10 @@ test(
       ws1.close();
       ws2.close();
     } catch (error) {
-      throw new Error(`${error instanceof Error ? error.message : String(error)}\n--- server logs ---\n${logs}`);
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}\n--- server logs ---\n${logs}`,
+        { cause: error }
+      );
     } finally {
       child.kill();
       await new Promise<void>((resolve) => {
@@ -323,9 +415,11 @@ test(
 
       const ws2 = new WebSocket(`ws://127.0.0.1:${port}/ws`);
       let cursorSeen: Record<string, unknown> = {};
+      let promptQueuedSeen: Record<string, unknown> = {};
       ws2.on("message", (data) => {
         const msg = JSON.parse(data.toString()) as Record<string, unknown>;
         if (msg.type === "cursor") cursorSeen = msg;
+        if (msg.type === "prompt_queued") promptQueuedSeen = msg;
       });
       await new Promise<void>((resolve, reject) => {
         ws2.once("open", resolve);
@@ -391,10 +485,77 @@ test(
       assert.equal((unchanged.components as unknown[]).length, initialComponents + 1, "stale mutation must not apply");
       assert.equal(unchanged.revision, afterState.revision, "revision must not change on conflict");
 
+      // 4) A queued prompt is broadcast to other clients
+      ws1.send(JSON.stringify({ type: "prompt", prompt: "hello agent" }));
+      await new Promise<void>((resolve) => {
+        const timer = setInterval(() => {
+          if (promptQueuedSeen.type) {
+            clearInterval(timer);
+            resolve();
+          }
+        }, 20);
+        setTimeout(() => {
+          clearInterval(timer);
+          resolve();
+        }, 5000);
+      });
+      assert.equal(promptQueuedSeen.type, "prompt_queued");
+      assert.equal(promptQueuedSeen.prompt, "hello agent");
+
       ws1.close();
       ws2.close();
     } catch (error) {
-      throw new Error(`${error instanceof Error ? error.message : String(error)}\n--- server logs ---\n${logs}`);
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}\n--- server logs ---\n${logs}`,
+        { cause: error }
+      );
+    } finally {
+      child.kill();
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(() => {
+          child.kill("SIGKILL");
+          resolve();
+        }, 3000);
+        child.once("exit", () => {
+          clearTimeout(timer);
+          resolve();
+        });
+      });
+    }
+  }
+);
+
+test(
+  "PRISM_AUTOIMPORT=off starts with a fresh single-page state",
+  { timeout: 60000 },
+  async () => {
+    const port = await getFreePort();
+    const child = spawn(process.execPath, [SERVER_ENTRY], {
+      cwd: path.resolve(__dirname, "..", ".."),
+      env: {
+        ...process.env,
+        DASHBOARD_PORT: String(port),
+        PRISM_AUTOIMPORT: "off",
+        PRISM_AUTOLOAD: "off",
+        PRISM_PROJECT_DIR: path.join(os.tmpdir(), "prism-server-test-fresh"),
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let logs = "";
+    child.stderr?.on("data", (d) => (logs += d.toString()));
+    try {
+      await waitForHealth(`http://127.0.0.1:${port}/health`, 20000);
+      const state = (await (await fetch(`http://127.0.0.1:${port}/api/state`)).json()) as {
+        pages: unknown[];
+        components: unknown[];
+      };
+      assert.equal(state.pages.length, 1, "auto-import should be skipped");
+      assert.equal(state.components.length, 0);
+    } catch (error) {
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}\n--- server logs ---\n${logs}`,
+        { cause: error }
+      );
     } finally {
       child.kill();
       await new Promise<void>((resolve) => {

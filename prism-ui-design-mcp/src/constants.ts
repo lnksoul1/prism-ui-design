@@ -1,7 +1,7 @@
 export const CHARACTER_LIMIT = 30000;
 
 export const SERVER_NAME = "ui-design-mcp-server";
-export const SERVER_VERSION = "1.0.0";
+export const SERVER_VERSION = "1.1.0";
 
 // ===== Style Presets =====
 

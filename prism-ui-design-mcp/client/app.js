@@ -38,6 +38,11 @@ let myClientId = null;
 const remoteCursors = new Map();
 let lastCursorSent = 0;
 const CURSOR_THROTTLE = 100;
+let tokenSearchQuery = "";
+let activitySearchQuery = "";
+let activitySourceFilter = "";
+let librarySearchQuery = "";
+let currentToolTab = "library";
 
 // ===== DOM Helpers =====
 
@@ -113,6 +118,29 @@ const I18N = {
     startWithTemplate: "从模板创建",
     startWithTemplateDesc: "一键生成 SaaS / 电商 / 博客等页面",
     contrastPass: "对比度检测通过",
+    project: "项目",
+    library: "设计库",
+    versions: "版本",
+    comments: "评论",
+    createVersion: "+ 新建版本",
+    versionEmpty: "暂无版本",
+    commentEmpty: "暂无评论",
+    commentPlaceholder: "评论选中的组件...",
+    addComment: "添加",
+    searchLibrary: "搜索组件/风格/动效...",
+    searchActivity: "搜索操作...",
+    searchTokens: "搜索令牌...",
+    saveCurrent: "保存当前设计",
+    projectEmpty: "暂无已保存项目",
+    libTemplates: "模板",
+    restoreVersion: "恢复",
+    diffLatest: "对比最新",
+    saveTemplate: "保存当前为模板",
+    saveTemplatePrompt: "模板名称",
+    savedTemplates: "已存模板",
+    builtinTemplates: "内置模板",
+    reload: "重新加载",
+    conflictTitle: "设计已被其他客户端修改",
   },
   en: {
     connected: "Connected",
@@ -172,6 +200,29 @@ const I18N = {
     startWithTemplate: "Start from a template",
     startWithTemplateDesc: "One click: SaaS, e-commerce, blog, and more",
     contrastPass: "Contrast check passed",
+    project: "Projects",
+    library: "Library",
+    versions: "Versions",
+    comments: "Comments",
+    createVersion: "+ New version",
+    versionEmpty: "No versions yet",
+    commentEmpty: "No comments yet",
+    commentPlaceholder: "Comment on the selected component...",
+    addComment: "Add",
+    searchLibrary: "Search components / styles / motion...",
+    searchActivity: "Search activity...",
+    searchTokens: "Search tokens...",
+    saveCurrent: "Save current design",
+    projectEmpty: "No saved projects yet",
+    libTemplates: "Templates",
+    restoreVersion: "Restore",
+    diffLatest: "Diff latest",
+    saveTemplate: "Save current as template",
+    saveTemplatePrompt: "Template name",
+    savedTemplates: "Saved templates",
+    builtinTemplates: "Built-in templates",
+    reload: "Reload",
+    conflictTitle: "The design was changed by another client",
   },
 };
 
@@ -313,12 +364,22 @@ function showConflictWarning(msg) {
   if (!container) return;
   const warning = el("div", "conflict-warning");
   warning.appendChild(el("span", "warn-icon", "⚠️"));
-  const text = el("span", "warn-text", `冲突：${msg.message || "设计已被其他客户端修改"}（将自动刷新）`);
+  const text = el("span", "warn-text", msg.message || t("conflictTitle"));
   warning.appendChild(text);
+  const reload = el("button", "conflict-reload", t("reload"));
+  reload.addEventListener("click", () => {
+    fetchInitialState();
+    warning.remove();
+  });
+  warning.appendChild(reload);
   container.prepend(warning);
-  setTimeout(() => warning.remove(), 8000);
-  // Resync with the server state.
-  fetchInitialState();
+  // Auto-resync after 8s as a safety net; the reload button is instant.
+  setTimeout(() => {
+    if (warning.parentNode) {
+      fetchInitialState();
+      warning.remove();
+    }
+  }, 8000);
 }
 
 function updateStatus(status) {
@@ -455,6 +516,9 @@ function renderAll() {
   if (!isInspectorFocused()) {
     renderInspector();
   }
+
+  // Comments reflect design-state changes
+  renderComments();
 
   // Tokens
   renderTokenPanel();
@@ -896,6 +960,7 @@ function selectComponent(id) {
   if (wrapper) wrapper.classList.add("selected");
   renderInspector();
   renderLayerPanel();
+  renderComments();
 }
 
 function deselectAll() {
@@ -2280,7 +2345,16 @@ function renderTokenPanel() {
   }
 
   const tokens = currentState.tokens[activeTokenTab] || {};
-  const keys = Object.keys(tokens);
+  let keys = Object.keys(tokens);
+  if (tokenSearchQuery) {
+    keys = keys.filter((key) => {
+      const token = tokens[key];
+      return (
+        key.toLowerCase().includes(tokenSearchQuery) ||
+        String(token.value).toLowerCase().includes(tokenSearchQuery)
+      );
+    });
+  }
 
   if (keys.length === 0) {
     list.innerHTML = `<div class="token-empty">${t("tokenEmptyCategory")}</div>`;
@@ -2436,7 +2510,21 @@ function renderActivityLog() {
   }
 
   list.innerHTML = "";
-  currentState.activityLog.forEach((entry) => {
+  let entries = currentState.activityLog;
+  if (activitySourceFilter) {
+    entries = entries.filter((e) => e.source === activitySourceFilter);
+  }
+  if (activitySearchQuery) {
+    entries = entries.filter((e) =>
+      String(e.detail || "").toLowerCase().includes(activitySearchQuery) ||
+      String(e.action || "").toLowerCase().includes(activitySearchQuery)
+    );
+  }
+  if (entries.length === 0) {
+    list.innerHTML = `<div class="activity-empty">—</div>`;
+    return;
+  }
+  entries.forEach((entry) => {
     addActivityEntry(entry, list);
   });
 }
@@ -2869,7 +2957,32 @@ function setupScreenshot() {
   btn.addEventListener("click", takeScreenshot);
 }
 
-function takeScreenshot() {
+async function takeScreenshot() {
+  const canvas = $("canvas");
+  if (!canvas) return;
+
+  // Real PNG via the server render pipeline (Playwright); fall back to HTML.
+  try {
+    const response = await fetch("/api/render?format=png&viewport=desktop");
+    if (response.ok) {
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "prism-preview.png";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      return;
+    }
+  } catch (err) {
+    console.warn("PNG screenshot failed, falling back to HTML preview:", err);
+  }
+  openHtmlScreenshot();
+}
+
+function openHtmlScreenshot() {
   const canvas = $("canvas");
   if (!canvas) return;
 
@@ -3249,8 +3362,23 @@ function flashButton(btn, text, duration = 1500) {
 }
 
 function setupProjectPersistence() {
-  const saveBtn = $("save-btn");
-  const loadBtn = $("load-btn");
+  const projectBtn = $("project-btn");
+  const modal = $("project-modal");
+  const closeBtn = $("project-close");
+  const saveBtn = $("project-save-btn");
+  if (!projectBtn || !modal) return;
+
+  projectBtn.addEventListener("click", () => {
+    modal.style.display = "flex";
+    renderProjectList();
+  });
+  if (closeBtn) closeBtn.addEventListener("click", () => { modal.style.display = "none"; });
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) modal.style.display = "none";
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && modal.style.display === "flex") modal.style.display = "none";
+  });
 
   if (saveBtn) {
     saveBtn.addEventListener("click", async () => {
@@ -3262,13 +3390,8 @@ function setupProjectPersistence() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name }),
         });
-        if (response.ok) {
-          const data = await response.json();
-          flashButton(saveBtn, "已保存 ✓");
-          console.info("[Prism] Project saved:", data.file);
-        } else {
-          flashButton(saveBtn, "保存失败 ✕");
-        }
+        flashButton(saveBtn, response.ok ? "已保存 ✓" : "保存失败 ✕");
+        if (response.ok) renderProjectList();
       } catch (err) {
         console.error("Save failed:", err);
         flashButton(saveBtn, "保存失败 ✕");
@@ -3277,42 +3400,234 @@ function setupProjectPersistence() {
       }
     });
   }
+}
 
-  if (loadBtn) {
-    loadBtn.addEventListener("click", async () => {
-      loadBtn.disabled = true;
-      try {
-        const listRes = await fetch("/api/projects");
-        if (!listRes.ok) throw new Error("list failed");
-        const list = await listRes.json();
-        const projects = list.projects || [];
-        if (projects.length === 0) {
-          flashButton(loadBtn, "无已保存项目");
-          return;
-        }
-        const latest = projects[0];
-        if (!window.confirm(`加载最近保存的项目？\n\n${latest.name}\n${latest.file}`)) {
-          return;
-        }
-        const response = await fetch("/api/project/load", {
+async function renderProjectList() {
+  const list = $("project-list");
+  if (!list) return;
+  try {
+    const res = await fetch("/api/projects");
+    const data = await res.json();
+    const projects = data.projects || [];
+    list.innerHTML = "";
+    if (projects.length === 0) {
+      list.innerHTML = `<div class="tool-empty">${t("projectEmpty")}</div>`;
+      return;
+    }
+    projects.forEach((p) => {
+      const item = el("div", "project-item");
+      const meta = el("div", "project-item-meta");
+      meta.appendChild(el("div", "project-item-name", p.name));
+      meta.appendChild(el("div", "project-item-desc", `${p.component_count} 组件 · ${p.updatedAt ? new Date(p.updatedAt).toLocaleString() : ""}`));
+      item.appendChild(meta);
+      const load = el("button", "project-item-load", t("load"));
+      load.addEventListener("click", async () => {
+        const res = await fetch("/api/project/load", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ file: latest.file }),
+          body: JSON.stringify({ file: p.file }),
         });
-        if (response.ok) {
-          const data = await response.json();
-          flashButton(loadBtn, `已加载 ${data.project_name}`);
-          // The WebSocket broadcast (or HTTP fallback) refreshes all panels.
+        if (res.ok) {
+          modalClose("project-modal");
           await fetchInitialState();
-        } else {
-          flashButton(loadBtn, "加载失败 ✕");
         }
-      } catch (err) {
-        console.error("Load failed:", err);
-        flashButton(loadBtn, "加载失败 ✕");
-      } finally {
-        loadBtn.disabled = false;
+      });
+      item.appendChild(load);
+      list.appendChild(item);
+    });
+  } catch (err) {
+    list.innerHTML = `<div class="tool-empty">${t("projectEmpty")}</div>`;
+  }
+}
+
+function modalClose(id) {
+  const modal = $(id);
+  if (modal) modal.style.display = "none";
+}
+
+// ===== Tool tabs: Library / Versions / Comments =====
+
+function setupToolTabs() {
+  const tabs = document.querySelectorAll(".tool-tab");
+  tabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      tabs.forEach((t) => t.classList.remove("active"));
+      tab.classList.add("active");
+      currentToolTab = tab.dataset.tool;
+      document.querySelectorAll(".tool-pane").forEach((pane) => pane.classList.remove("active"));
+      const pane = $("pane-" + currentToolTab);
+      if (pane) pane.classList.add("active");
+      if (currentToolTab === "versions") renderVersions();
+      if (currentToolTab === "comments") renderComments();
+    });
+  });
+}
+
+// ===== Versions panel =====
+
+async function renderVersions() {
+  const list = $("version-list");
+  if (!list) return;
+  try {
+    const res = await fetch("/api/versions");
+    const data = await res.json();
+    const versions = data.versions || [];
+    list.innerHTML = "";
+    if (versions.length === 0) {
+      list.innerHTML = `<div class="tool-empty">${t("versionEmpty")}</div>`;
+      return;
+    }
+    const latestId = versions[0].id;
+    versions.forEach((v) => {
+      const item = el("div", "version-item");
+      const meta = el("div", "version-item-meta");
+      meta.appendChild(el("div", "version-item-name", v.name));
+      meta.appendChild(el("div", "version-item-desc", `${v.component_count} 组件 · ${new Date(v.createdAt).toLocaleString()}`));
+      item.appendChild(meta);
+      const actions = el("div", "version-item-actions");
+      const restore = el("button", "toolbar-btn", t("restoreVersion"));
+      restore.addEventListener("click", async () => {
+        const res = await fetch(`/api/version/${v.id}/restore`, { method: "POST" });
+        if (res.ok) {
+          await fetchInitialState();
+          renderVersions();
+        }
+      });
+      actions.appendChild(restore);
+      if (v.id !== latestId) {
+        const diff = el("button", "toolbar-btn", t("diffLatest"));
+        diff.addEventListener("click", async () => {
+          const res = await fetch("/api/version/diff", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ from_id: v.id, to_id: latestId }),
+          });
+          if (res.ok) {
+            const d = await res.json();
+            alert((d.summary || []).join("\n") || "无差异");
+          }
+        });
+        actions.appendChild(diff);
       }
+      item.appendChild(actions);
+      list.appendChild(item);
+    });
+  } catch (err) {
+    list.innerHTML = `<div class="tool-empty">${t("versionEmpty")}</div>`;
+  }
+}
+
+function setupVersionsPanel() {
+  const create = $("version-create-btn");
+  if (!create) return;
+  create.addEventListener("click", async () => {
+    const name = window.prompt(t("saveTemplatePrompt")) || undefined;
+    const res = await fetch("/api/version", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: name || undefined }),
+    });
+    if (res.ok) renderVersions();
+  });
+}
+
+// ===== Comments panel =====
+
+async function renderComments() {
+  const list = $("comment-list");
+  if (!list) return;
+  try {
+    const res = await fetch("/api/comments");
+    const data = await res.json();
+    const comments = data.comments || [];
+    list.innerHTML = "";
+    if (comments.length === 0) {
+      list.innerHTML = `<div class="tool-empty">${t("commentEmpty")}</div>`;
+      return;
+    }
+    comments.forEach((c) => {
+      const item = el("div", "comment-item");
+      const head = el("div", "comment-item-head");
+      head.appendChild(el("span", "comment-item-author", c.author));
+      head.appendChild(el("span", "comment-item-time", new Date(c.createdAt).toLocaleTimeString()));
+      item.appendChild(head);
+      item.appendChild(el("div", "comment-item-text", c.text));
+      const del = el("button", "comment-item-del", "✕");
+      del.title = "删除";
+      del.addEventListener("click", async () => {
+        await fetch(`/api/comment/${c.id}`, { method: "DELETE" });
+        renderComments();
+      });
+      item.appendChild(del);
+      list.appendChild(item);
+    });
+  } catch (err) {
+    list.innerHTML = `<div class="tool-empty">${t("commentEmpty")}</div>`;
+  }
+}
+
+function setupCommentsPanel() {
+  const addBtn = $("comment-add-btn");
+  const input = $("comment-input");
+  if (!addBtn || !input) return;
+  addBtn.addEventListener("click", async () => {
+    const text = input.value.trim();
+    if (!text) return;
+    if (!selectedComponentId) {
+      input.placeholder = t("commentPlaceholder");
+      return;
+    }
+    const res = await fetch("/api/comment", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ component_id: selectedComponentId, text, author: "user" }),
+    });
+    if (res.ok) {
+      input.value = "";
+      renderComments();
+    }
+  });
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") addBtn.click();
+  });
+}
+
+// ===== Local search / filter (P1-5) =====
+
+function setupLibrarySearch() {
+  const input = $("library-search");
+  if (!input) return;
+  input.addEventListener("input", () => {
+    librarySearchQuery = input.value.trim().toLowerCase();
+    document.querySelectorAll("#library-list .lib-item").forEach((item) => {
+      const haystack = (item.textContent || "").toLowerCase();
+      item.style.display = haystack.includes(librarySearchQuery) ? "" : "none";
+    });
+  });
+}
+
+function setupTokenSearch() {
+  const input = $("token-search");
+  if (!input) return;
+  input.addEventListener("input", () => {
+    tokenSearchQuery = input.value.trim().toLowerCase();
+    renderTokenPanel();
+  });
+}
+
+function setupActivityFilter() {
+  const input = $("activity-search");
+  const source = $("activity-source");
+  if (input) {
+    input.addEventListener("input", () => {
+      activitySearchQuery = input.value.trim().toLowerCase();
+      renderActivityLog();
+    });
+  }
+  if (source) {
+    source.addEventListener("change", () => {
+      activitySourceFilter = source.value;
+      renderActivityLog();
     });
   }
 }
@@ -3409,6 +3724,15 @@ const LIBRARY_COMPONENTS = [
   { id: "toggle", name: "开关", desc: "切换开关", icon: "◉", variant: "", defaultProps: { label: "通知", checked: true } },
 ];
 
+// Built-in page templates (mirror server-side applyPageTemplate)
+const LIBRARY_TEMPLATES = [
+  { id: "saas_landing", name: "SaaS 落地页", desc: "导航 + Hero + 功能 + 定价 + CTA", icon: "◈", builtin: true },
+  { id: "ecommerce_home", name: "电商首页", desc: "导航 + 促销 Hero + 商品网格", icon: "🛍", builtin: true },
+  { id: "blog_post", name: "博客文章", desc: "标题 + 正文 + 配图", icon: "✍", builtin: true },
+  { id: "portfolio", name: "作品集", desc: "Hero + 4 列卡片 + 关于", icon: "◫", builtin: true },
+  { id: "dashboard", name: "数据看板", desc: "导航 + 指标 + 卡片网格", icon: "▦", builtin: true },
+];
+
 let currentLibraryTab = "styles";
 
 function setupDesignLibrary() {
@@ -3435,10 +3759,24 @@ function renderLibraryList() {
   if (currentLibraryTab === "styles") items = LIBRARY_STYLES;
   else if (currentLibraryTab === "animations") items = LIBRARY_ANIMATIONS;
   else if (currentLibraryTab === "components") items = LIBRARY_COMPONENTS;
+  else if (currentLibraryTab === "templates") items = LIBRARY_TEMPLATES;
 
   if (items.length === 0) {
     list.innerHTML = `<div class="library-empty">${t("libraryLoading")}</div>`;
     return;
+  }
+
+  if (currentLibraryTab === "templates") {
+    const saveItem = el("div", "lib-item lib-item-save");
+    const saveIcon = el("span", "lib-item-icon", "💾");
+    saveIcon.style.color = "var(--accent)";
+    saveItem.appendChild(saveIcon);
+    const saveText = el("div", "lib-item-text");
+    saveText.appendChild(el("div", "lib-item-name", t("saveTemplate")));
+    saveText.appendChild(el("div", "lib-item-desc", "保存当前设计为模板"));
+    saveItem.appendChild(saveText);
+    saveItem.addEventListener("click", saveCurrentAsTemplate);
+    list.appendChild(saveItem);
   }
 
   items.forEach((item) => {
@@ -3491,6 +3829,56 @@ function renderLibraryList() {
 
     list.appendChild(elItem);
   });
+
+  // Saved templates are appended asynchronously
+  if (currentLibraryTab === "templates") {
+    renderSavedTemplates();
+  }
+}
+
+async function saveCurrentAsTemplate() {
+  const name = window.prompt(t("saveTemplatePrompt"));
+  if (!name) return;
+  const res = await fetch("/api/template/save", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  if (res.ok) renderLibraryList();
+}
+
+async function renderSavedTemplates() {
+  const list = $("library-list");
+  if (!list) return;
+  try {
+    const res = await fetch("/api/templates");
+    const data = await res.json();
+    const templates = data.templates || [];
+    if (templates.length === 0) return;
+    const sep = el("div", "lib-group-label", t("savedTemplates"));
+    list.appendChild(sep);
+    templates.forEach((tpl) => {
+      const item = el("div", "lib-item");
+      const icon = el("span", "lib-item-icon", "▤");
+      icon.style.color = "var(--accent)";
+      item.appendChild(icon);
+      const text = el("div", "lib-item-text");
+      text.appendChild(el("div", "lib-item-name", tpl.name));
+      text.appendChild(el("div", "lib-item-desc", `${tpl.component_count} 组件`));
+      item.appendChild(text);
+      item.addEventListener("click", async () => {
+        const loadRes = await fetch("/api/template/load", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ file: tpl.file }),
+        });
+        if (loadRes.ok) await fetchInitialState();
+      });
+      list.appendChild(item);
+    });
+  } catch (err) {
+    // ignore: saved templates unavailable
+  }
 }
 
 function handleLibraryItemClick(item) {
@@ -3499,6 +3887,8 @@ function handleLibraryItemClick(item) {
   } else if (currentLibraryTab === "components") {
     // Use HTTP API for reliability (WebSocket may have timing issues)
     addComponentViaAPI(item);
+  } else if (currentLibraryTab === "templates") {
+    applyTemplateViaAPI(item);
   } else if (currentLibraryTab === "animations") {
     const components = getCurrentComponents();
     if (components.length === 0) {
@@ -3519,6 +3909,24 @@ function handleLibraryItemClick(item) {
       hover: item.hover,
       duration: item.duration,
     });
+  }
+}
+
+async function applyTemplateViaAPI(item) {
+  if (item.builtin) {
+    const response = await fetch("/api/template", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ template: item.id }),
+    });
+    if (response.ok) await fetchInitialState();
+  } else if (item.file) {
+    const response = await fetch("/api/template/load", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ file: item.file }),
+    });
+    if (response.ok) await fetchInitialState();
   }
 }
 
@@ -3754,6 +4162,12 @@ function init() {
   setupExportModal();
   setupImportModal();
   setupProjectPersistence();
+  setupToolTabs();
+  setupVersionsPanel();
+  setupCommentsPanel();
+  setupLibrarySearch();
+  setupTokenSearch();
+  setupActivityFilter();
   setupScreenshot();
   setupPromptBar();
   setupConflictCheck();

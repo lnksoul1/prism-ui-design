@@ -1,7 +1,7 @@
 # UI Design MCP Server
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Node.js >= 18](https://img.shields.io/badge/node-%3E%3D18-green.svg)](https://nodejs.org/)
+[![Node.js >= 20](https://img.shields.io/badge/node-%3E%3D20-green.svg)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
 [![Tests](https://img.shields.io/badge/tests-60%2B%20passing-brightgreen.svg)](https://nodejs.org/api/test.html)
 [![MCP Protocol](https://img.shields.io/badge/MCP-Protocol-purple.svg)](https://modelcontextprotocol.io/)
@@ -126,7 +126,8 @@ npm test
 The test suite covers the state store (undo/redo, pages, tokens, conflicts),
 style-preset token generation, all MCP tool schemas, the shared service layer,
 project persistence, DTCG token interop, accessibility audit, render preview,
-and an HTTP + WebSocket integration chain (**252 tests passing**).
+and an HTTP + WebSocket integration chain (**254 tests passing**), plus an
+optional Playwright browser smoke (`npm run test:e2e`).
 
 ## Templates, versions, semantics & style guides
 
@@ -183,6 +184,14 @@ and an HTTP + WebSocket integration chain (**252 tests passing**).
   dot-grid canvas, and crafted empty states (canvas guide card with AI /
   library / template entry points, activity clock state, WCAG contrast-pass
   card with the live ratio).
+- **Real screenshots**: the screenshot button downloads a PNG rendered by
+  Playwright (`/api/render?format=png`), falling back to HTML when browsers
+  are unavailable.
+- **Client panels**: project switcher, template library (built-in + saved),
+  version snapshots, and component comments are now first-class dashboard
+  panels; activity/token/library search and conflict reload UI included.
+- **Prompt queue visibility**: queued user prompts appear in the activity log
+  and are broadcast as `prompt_queued` for connected agents/gateways.
 - **Freeform canvas**: toggle between flow layout and free positioning —
   drag components anywhere, resize with 8 handles, edit X/Y/W/H in the
   inspector, and auto-arrange into a clean vertical stack.
@@ -214,6 +223,45 @@ Explicit save/load is available through the MCP tools
 the REST endpoints (`/api/project/save`, `/api/project/load`, `/api/projects`),
 and the dashboard toolbar (💾 保存 / 📂 加载).
 Override the storage directory with `PRISM_PROJECT_DIR`.
+
+## Agent workflow
+
+The browser prompt bar queues instructions for the AI agent. Agents poll the
+queue and act on it:
+
+```
+loop:
+  result = design_check_prompts()        # returns + clears the pending prompt
+  if result.has_prompt:
+    act_on(result.prompt)                # e.g. design_update_component(...)
+  sleep(2s)
+```
+
+Every queued prompt is also written to the activity log and broadcast over
+WebSocket as `{ type: "prompt_queued", prompt }`.
+
+## Configuration (environment)
+
+| Variable | Default | Effect |
+|---|---|---|
+| `DASHBOARD_PORT` | `3100` | HTTP/WebSocket port |
+| `PRISM_PROJECT_DIR` | `~/.prism/projects` | Project/template storage directory |
+| `PRISM_AUTOLOAD` | on | Restore the autosave checkpoint on startup (`off` disables) |
+| `PRISM_AUTOIMPORT` | on | Auto-import workspace pages on startup (`off` starts with a fresh Home page) |
+| `PRISM_PREVIEWS_DIR` | `.prism-previews` | Screenshot output directory (tool only) |
+| `PRISM_SKIP_E2E` | off | Skip Playwright browser smoke tests (`1` skips) |
+
+## Quality gates
+
+```bash
+npm run lint      # ESLint (warnings don't block)
+npm run format    # Prettier --write
+npm run check     # lint + build + test (CI gate)
+npm run test:e2e  # optional Playwright browser smoke (needs Chromium)
+```
+
+CI (GitHub Actions, `.github/workflows/ci.yml`) runs lint + build + test on
+every push/PR with Node 20.
 
 ## Configuration
 

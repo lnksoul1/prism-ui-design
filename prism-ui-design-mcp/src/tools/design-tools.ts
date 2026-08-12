@@ -1377,6 +1377,7 @@ Returns: Full design state (project name, style, all tokens, component tree, act
           ``,
           `**Project:** ${state.projectName}`,
           `**Style:** ${state.style}`,
+          `**Pending prompt:** ${store.getPendingPrompt() ? `"${store.getPendingPrompt()}"` : "none"}`,
           `**Components:** ${state.components.length}`,
           `**Color tokens:** ${Object.keys(state.tokens.colors).length}`,
           `**Typography tokens:** ${Object.keys(state.tokens.typography).length}`,

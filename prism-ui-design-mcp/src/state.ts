@@ -809,6 +809,11 @@ class DesignStateStore extends EventEmitter {
     this.pendingPrompt = prompt;
   }
 
+  /** Record a user prompt in the activity log (does not mutate design state). */
+  recordPrompt(prompt: string): void {
+    this.logActivity("user_prompt", "prompt", prompt, "user");
+  }
+
   getPendingPrompt(): string | null {
     return this.pendingPrompt;
   }

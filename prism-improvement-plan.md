@@ -5,7 +5,7 @@
 > 依据：源码审计（28 个 MCP 工具、REST/WS 双通道、客户端渲染引擎）+ 2026-08 外部调研
 
 > **实施进度（2026-08-12 更新）**
-> - ✅ Phase A1 测试体系：252 项测试全绿（新增实时光标/冲突检测集成测试、revision 状态测试）
+> - ✅ Phase A1 测试体系：254 项测试全绿 + Playwright e2e 冒烟 2/2
 > - ✅ Phase A2 持久化：`design_save_project` / `design_load_project` / `design_list_projects` + REST 端点 + 自动保存/启动恢复 + Dashboard 保存/加载按钮
 > - ✅ Phase A3 双通道收敛：`src/service/design-service.ts` 共享服务层 + WS 消息 zod 严格校验（拒绝未知类型/非法字段）
 > - ✅ Phase A4 修复：`getState()` 返回 canUndo/canRedo；阴影令牌纳入风格预设与客户端阴影 Tab；组件选中机制（动效应用目标）；新增缩放/图层面板/属性检查器
@@ -48,7 +48,14 @@
 > - ✅ C5 实时光标：WS `cursor`/`cursor_leave` 协议 + 客户端远程光标渲染（节流 100ms、客户端标签）
 > - ✅ C5 冲突解决：`revision` 乐观并发控制——变更携带 base_revision，过期修订被拒绝并返回 `conflict`，客户端自动重同步
 > - ✅ 客户端视觉升级（规格 §5.1–5.3 + 顶尖网站参照）：Premium 浅色体系（紫罗兰 #7C3AED、白底、8/12/16 三级圆角、克制阴影、系统无衬线 + JetBrains Mono、Vercel 式双层焦点环、六态微交互）、画布点阵背景、空状态三入口引导卡（AI 生成/设计库拖拽/模板创建 + `/api/template`）、活动日志时钟空状态、冲突通过绿卡（实时 WCAG 比值）
-> - 🔄 待办：C6 完整智能体、F9 更多框架、规格 Phase 2（截图转 UI）
+> - ✅ P0-1 真实截图：Playwright 安装完成，`/api/render?format=png` 返回真实 PNG（无浏览器时 501 降级），客户端截图按钮下载 PNG（失败回退 HTML）
+> - ✅ P0-2 AI 指令闭环：指令写入活动日志（user_prompt）+ WS `prompt_queued` 广播 + `design_get_state` 摘要含 pending prompt + README Agent 轮询工作流
+> - ✅ P0-3 客户端四面板：模板/版本/评论 REST 端点 + 左侧二级 Tab（设计库/版本/评论）+ 模板子 Tab（内置/已存/保存当前）+ 顶栏项目弹窗（列表/保存/加载）
+> - ✅ P0-4 工程基线：ESLint flat config + Prettier + EditorConfig + GitHub Actions CI（Node 20）+ 跨平台 clean + 版本升至 1.1.0（含一致性测试）
+> - ✅ P1-5 搜索筛选：活动日志（关键词 + AI/用户来源）、令牌面板、设计库
+> - ✅ P1-6 冲突 UI（横幅 + 重新加载按钮 + 8s 自动重同步）+ `PRISM_AUTOIMPORT=off` 启动可配置 + README 配置表
+> - ✅ P1-7 浏览器冒烟：`tests/e2e/dashboard.spec.ts`（空状态渲染 + 模板创建 + 无 console 错误），`npm run test:e2e`
+> - 🔄 待办：C6 完整智能体、F9 更多框架、规格 Phase 2 截图转 UI（依赖视觉模型）、数据库/多项目工作区
 
 ---
 

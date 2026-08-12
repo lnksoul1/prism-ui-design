@@ -35,13 +35,7 @@ test("design_render_preview returns the full standalone HTML", async () => {
   assert.ok(html.length > 100, "html should be substantial");
   assert.match(html, /Render Check/, "html should contain component content");
   assert.match(html, /<style/, "html should include embedded styles");
-  let playwrightAvailable = false;
-  try {
-    await import("playwright" as string);
-    playwrightAvailable = true;
-  } catch {
-    playwrightAvailable = false;
-  }
+  const playwrightAvailable = await isPlaywrightUsable();
   assert.equal(result?.structuredContent?.screenshot, playwrightAvailable);
   if (!playwrightAvailable) {
     assert.ok(result?.structuredContent?.note, "should explain Playwright availability");
@@ -53,3 +47,16 @@ test("design_render_preview accepts desktop default", async () => {
   assert.ok(result?.content && Array.isArray(result.content) && result.content.length > 0);
   assert.equal(result?.structuredContent?.viewport, "desktop");
 });
+
+async function isPlaywrightUsable(): Promise<boolean> {
+  try {
+    const { chromium } = (await import("playwright" as string)) as {
+      chromium: { launch(): Promise<{ close(): Promise<void> }> };
+    };
+    const browser = await chromium.launch();
+    await browser.close();
+    return true;
+  } catch {
+    return false;
+  }
+}

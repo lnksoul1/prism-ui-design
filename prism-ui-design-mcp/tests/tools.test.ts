@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "fs";
 import os from "os";
 import path from "path";
+import { readFileSync } from "fs";
 import { z } from "zod";
 import { stateStore } from "../src/state.js";
+import { SERVER_VERSION } from "../src/constants.js";
 import { registerColorPaletteTool } from "../src/tools/color-palette.js";
 import { registerTypographyTool } from "../src/tools/typography.js";
 import { registerSpacingTool } from "../src/tools/spacing.js";
@@ -281,6 +283,14 @@ test("registers all 68 tools with unique names", () => {
   for (const tool of captured) {
     assert.equal(typeof tool.handler, "function");
   }
+});
+
+test("server version matches package.json", () => {
+  const pkg = JSON.parse(readFileSync(path.resolve(process.cwd(), "package.json"), "utf-8")) as {
+    version: string;
+  };
+  assert.equal(SERVER_VERSION, pkg.version);
+  assert.match(pkg.version, /^\d+\.\d+\.\d+$/);
 });
 
 for (const tool of captured) {

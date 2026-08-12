@@ -303,6 +303,37 @@ npm run clean
 DASHBOARD_PORT=4200 npm start
 ```
 
+## 环境变量配置
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `DASHBOARD_PORT` | `3100` | HTTP/WebSocket 端口 |
+| `PRISM_PROJECT_DIR` | `~/.prism/projects` | 项目/模板存储目录 |
+| `PRISM_AUTOLOAD` | 开启 | 启动时恢复自动保存（`off` 关闭） |
+| `PRISM_AUTOIMPORT` | 开启 | 启动时自动导入工作区页面（`off` 以空白 Home 启动） |
+| `PRISM_SKIP_E2E` | 关闭 | `1` 时跳过 Playwright 冒烟测试 |
+
+## Agent 工作流
+
+浏览器指令栏会把需求写入队列，Agent 轮询 `design_check_prompts` 获取并处理：
+
+```
+循环：
+  result = design_check_prompts()   # 读取并清除待处理指令
+  若 result.has_prompt：执行该指令（如 design_update_component）
+  等待 2 秒
+```
+
+每条指令还会写入活动日志，并通过 WebSocket 广播 `prompt_queued`。
+
+## 质量门禁
+
+```bash
+npm run lint      # ESLint
+npm run check     # lint + build + test（CI 门槛）
+npm run test:e2e  # Playwright 浏览器冒烟（需 Chromium）
+```
+
 ## 环境要求
 
 - Node.js >= 18

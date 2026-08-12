@@ -4,6 +4,8 @@ node_modules/
 # Build output
 dist/
 .test-build/
+test-results/
+playwright-report/
 
 # IDE
 .vscode/

@@ -246,6 +246,7 @@ export function redo() {
 
 export function setPendingPrompt(prompt: string): void {
   stateStore.setPendingPrompt(prompt);
+  stateStore.recordPrompt(prompt);
 }
 
 // ===== WebSocket message schemas =====

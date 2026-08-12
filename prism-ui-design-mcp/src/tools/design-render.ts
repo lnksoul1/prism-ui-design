@@ -47,6 +47,36 @@ async function renderPng(html: string, viewport: { width: number; height: number
   }
 }
 
+/**
+ * Render the given HTML to a PNG buffer with Playwright.
+ * Throws when Playwright/Chromium are unavailable (callers degrade gracefully).
+ */
+export async function renderHtmlToPng(
+  html: string,
+  viewportName: string = "desktop"
+): Promise<Buffer> {
+  const viewport = VIEWPORTS[viewportName] || VIEWPORTS.desktop;
+  const { chromium } = (await import("playwright" as string)) as {
+    chromium: {
+      launch(): Promise<{
+        newPage(options?: { viewport?: { width: number; height: number } }): Promise<{
+          setContent(html: string, options?: { waitUntil?: string }): Promise<void>;
+          screenshot(options?: { fullPage?: boolean }): Promise<Buffer>;
+        }>;
+        close(): Promise<void>;
+      }>;
+    };
+  };
+  const browser = await chromium.launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: viewport.width, height: viewport.height } });
+    await page.setContent(html, { waitUntil: "networkidle" });
+    return await page.screenshot({ fullPage: false });
+  } finally {
+    await browser.close();
+  }
+}
+
 export function registerRenderTool(server: McpServer): void {
   server.registerTool(
     "design_render_preview",

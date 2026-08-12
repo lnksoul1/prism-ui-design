@@ -123,6 +123,21 @@ function guessComponent(shape: CanvasShape, assets: Map<string, { src?: string; 
     }
     case "frame":
       return makeComponent("section", { title: extractPlainText(props.title ?? "") }, bounds);
+    case "prism-block": {
+      const text = extractPlainText(props.label ?? "");
+      return makeComponent(
+        "container",
+        {
+          text: text || "Block",
+          kind: typeof props.kind === "string" ? props.kind : "card",
+          bg: typeof props.bg === "string" ? props.bg : "",
+          fg: typeof props.fg === "string" ? props.fg : "",
+          border: typeof props.border === "string" ? props.border : "",
+          radius: typeof props.radius === "string" ? props.radius : "",
+        },
+        bounds
+      );
+    }
     case "image": {
       const assetId = typeof props.assetId === "string" ? props.assetId : "";
       const asset = assets.get(assetId);

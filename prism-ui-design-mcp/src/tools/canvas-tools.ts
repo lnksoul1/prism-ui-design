@@ -6,6 +6,7 @@
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
 import { stateStore } from "../state.js";
 import { canvasShapeCount, shapesToComponents } from "../canvas-shapes.js";
 
@@ -115,7 +116,74 @@ function registerDesignApplyCanvasTool(server: McpServer): void {
   );
 }
 
+/** Queue AI drawing commands onto the user's canvas. */
+function registerDesignDrawCanvasTool(server: McpServer): void {
+  server.registerTool(
+    "design_draw_canvas",
+    {
+      title: "Draw on Canvas",
+      description:
+        `Queue drawing commands that appear on the user's tldraw canvas (live if the drawing canvas is open). ` +
+        `Each command is a simple shape: rect, text, arrow, image, or prism (token-colored block). ` +
+        `Coordinates are in canvas pixels; the canvas is infinite, so negative values are allowed. ` +
+        `The user can then move/resize and apply the result back to the page with "apply to preview".`,
+      inputSchema: {
+        shapes: z
+          .array(
+            z.object({
+              type: z.enum(["rect", "text", "arrow", "image", "prism"]).describe("Shape kind"),
+              x: z.number().describe("Left position in canvas px"),
+              y: z.number().describe("Top position in canvas px"),
+              w: z.number().positive().optional().describe("Width in px"),
+              h: z.number().positive().optional().describe("Height in px"),
+              label: z.string().optional().describe("Text shown on/inside the shape"),
+              src: z.string().optional().describe("Image URL or data URI (image kind)"),
+              color: z.string().optional().describe("CSS color override"),
+              kind: z.string().optional().describe("prism block kind: card|button|hero|cta|navbar|footer|image|text"),
+            })
+          )
+          .min(1)
+          .max(50)
+          .describe("Drawing commands"),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (params) => {
+      try {
+        const state = store.getState();
+        const queued = store.addCanvasDraws(params.shapes, state.currentPageId, "ai");
+        return {
+          content: [
+            {
+              type: "text",
+              text:
+                `Queued ${queued.length} drawing command(s) for page "${state.currentPageId}". ` +
+                `They will appear on the user's canvas (live if the drawing canvas is open).`,
+            },
+          ],
+          structuredContent: {
+            success: true,
+            page_id: state.currentPageId,
+            queued_count: queued.length,
+            draws: queued,
+          },
+        };
+      } catch (error) {
+        return {
+          content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        };
+      }
+    }
+  );
+}
+
 export function registerCanvasTools(server: McpServer): void {
   registerDesignGetCanvasTool(server);
   registerDesignApplyCanvasTool(server);
+  registerDesignDrawCanvasTool(server);
 }

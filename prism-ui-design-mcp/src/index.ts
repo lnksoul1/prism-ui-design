@@ -544,6 +544,33 @@ app.post("/api/canvas/export", async (_req, res) => {
   }
 });
 
+// API: Queue AI drawing commands for the current page's canvas
+app.post("/api/canvas/draw", (req, res) => {
+  const state = stateStore.getState();
+  const shapes = (req.body || {}).shapes;
+  if (!Array.isArray(shapes) || shapes.length === 0) {
+    res.status(400).json({ error: "Missing shapes array" });
+    return;
+  }
+  try {
+    const queued = stateStore.addCanvasDraws(shapes, state.currentPageId, "ai");
+    res.json({ success: true, page_id: state.currentPageId, queued: queued.length });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+// API: Clear the applied draw queue for a page
+app.post("/api/canvas/draws/clear", (req, res) => {
+  const state = stateStore.getState();
+  const pageId =
+    typeof (req.body || {}).pageId === "string"
+      ? (req.body as { pageId: string }).pageId
+      : state.currentPageId;
+  const cleared = stateStore.clearCanvasDraws(pageId, "user");
+  res.json({ success: true, cleared });
+});
+
 // API: Initialize design project (mirrors design_init MCP tool)
 app.post("/api/init", (req, res) => {
   const { project_name, style, base_color } = req.body;

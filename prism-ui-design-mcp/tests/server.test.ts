@@ -794,6 +794,39 @@ test(
         body: JSON.stringify({ pageId, doc: "not-an-object" }),
       });
       assert.equal(badSave.status, 400);
+
+      // 6) AI draw queue endpoints
+      const drawRes = await fetch(`${base}/api/canvas/draw`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          shapes: [
+            { type: "rect", x: 0, y: 0, w: 240, h: 120, label: "Drawn box" },
+            { type: "text", x: 20, y: 140, label: "AI note" },
+          ],
+        }),
+      });
+      const draw = (await drawRes.json()) as { success: boolean; queued: number };
+      assert.equal(draw.success, true);
+      assert.equal(draw.queued, 2);
+
+      const withDraws = (await (await fetch(`${base}/api/state`)).json()) as {
+        canvasDraws: Record<string, Array<{ id: string; label?: string }>>;
+      };
+      assert.equal(withDraws.canvasDraws[newPage.page_id].length, 2);
+
+      const clearRes = await fetch(`${base}/api/canvas/draws/clear`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pageId: newPage.page_id }),
+      });
+      const cleared = (await clearRes.json()) as { success: boolean; cleared: boolean };
+      assert.equal(cleared.success, true);
+      assert.equal(cleared.cleared, true);
+      const afterClear = (await (await fetch(`${base}/api/state`)).json()) as {
+        canvasDraws: Record<string, unknown[]>;
+      };
+      assert.equal((afterClear.canvasDraws[newPage.page_id] || []).length, 0);
     } catch (error) {
       throw new Error(
         `${error instanceof Error ? error.message : String(error)}\n--- server logs ---\n${logs}`,

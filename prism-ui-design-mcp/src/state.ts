@@ -77,6 +77,8 @@ export interface DesignState {
   revision: number;
   /** tldraw canvas snapshots keyed by page id (方案A canvas-first editing). */
   canvasDocs: Record<string, unknown>;
+  /** AI draw commands waiting to be applied to each page's canvas. */
+  canvasDraws: Record<string, CanvasDraw[]>;
 }
 
 export interface PlatformSnapshot {
@@ -91,6 +93,21 @@ export interface DesignComment {
   component_id: string;
   author: string;
   text: string;
+  createdAt: string;
+}
+
+/** A simple drawing command queued by the AI (`design_draw_canvas`). */
+export interface CanvasDraw {
+  id: string;
+  type: "rect" | "text" | "arrow" | "image" | "prism";
+  x: number;
+  y: number;
+  w?: number;
+  h?: number;
+  label?: string;
+  src?: string;
+  color?: string;
+  kind?: string;
   createdAt: string;
 }
 
@@ -136,6 +153,7 @@ class DesignStateStore extends EventEmitter {
       comments: [],
       revision: 0,
       canvasDocs: {},
+      canvasDraws: {},
     };
     // Initialize history with the initial state
     this.history = [JSON.parse(JSON.stringify(this.state))];
@@ -688,6 +706,7 @@ class DesignStateStore extends EventEmitter {
     this.state.components = defaultPage.components;
     this.state.themeMode = "light";
     this.state.canvasDocs = {};
+    this.state.canvasDraws = {};
 
     this.logActivity("clear_all", "system", "Cleared all design state", source);
     this.commit({ type: "clearAll" });
@@ -748,6 +767,10 @@ class DesignStateStore extends EventEmitter {
         snapshot.canvasDocs && typeof snapshot.canvasDocs === "object"
           ? JSON.parse(JSON.stringify(snapshot.canvasDocs))
           : {},
+      canvasDraws:
+        snapshot.canvasDraws && typeof snapshot.canvasDraws === "object"
+          ? JSON.parse(JSON.stringify(snapshot.canvasDraws))
+          : {},
     };
     this.fixComponentsReference();
 
@@ -807,6 +830,7 @@ class DesignStateStore extends EventEmitter {
       comments: [],
       revision: 0,
       canvasDocs: {},
+      canvasDraws: {},
     };
     this.history = [JSON.parse(JSON.stringify(this.state))];
     this.historyIndex = 0;
@@ -871,6 +895,58 @@ class DesignStateStore extends EventEmitter {
       source
     );
     this.commit({ type: "replaceComponents", pageId, count: components.length });
+    return true;
+  }
+
+  /**
+   * Queue AI draw commands for a page (defaults to the current page). The
+   * browser canvas applies them on next load or via live WS broadcast.
+   */
+  addCanvasDraws(
+    draws: Array<Partial<CanvasDraw>>,
+    pageId?: string | null,
+    source: "ai" | "user" = "ai"
+  ): CanvasDraw[] {
+    const pid = pageId || this.state.currentPageId;
+    if (!pid || !Array.isArray(draws) || draws.length === 0) return [];
+    const now = new Date().toISOString();
+    const normalized: CanvasDraw[] = draws
+      .filter((d) => d && typeof d.type === "string")
+      .map((d) => ({
+        id: d.id || `draw_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        type: (d.type as CanvasDraw["type"]) || "rect",
+        x: typeof d.x === "number" ? d.x : 0,
+        y: typeof d.y === "number" ? d.y : 0,
+        w: typeof d.w === "number" ? d.w : undefined,
+        h: typeof d.h === "number" ? d.h : undefined,
+        label: typeof d.label === "string" ? d.label : undefined,
+        src: typeof d.src === "string" ? d.src : undefined,
+        color: typeof d.color === "string" ? d.color : undefined,
+        kind: typeof d.kind === "string" ? d.kind : undefined,
+        createdAt: d.createdAt || now,
+      }));
+    if (normalized.length === 0) return [];
+    this.state.canvasDraws[pid] = [...(this.state.canvasDraws[pid] || []), ...normalized];
+    this.logActivity("canvas_draw", "canvas", `Queued ${normalized.length} AI draw commands`, source);
+    this.commit({ type: "canvasDraw", pageId: pid, count: normalized.length });
+    return normalized;
+  }
+
+  /** Return queued draw commands for a page (defaults to current). */
+  getCanvasDraws(pageId?: string | null): CanvasDraw[] {
+    const pid = pageId || this.state.currentPageId;
+    if (!pid) return [];
+    return JSON.parse(JSON.stringify(this.state.canvasDraws[pid] || [])) as CanvasDraw[];
+  }
+
+  /** Clear the draw queue for a page (after the client applied them). */
+  clearCanvasDraws(pageId?: string | null, source: "ai" | "user" = "user"): boolean {
+    const pid = pageId || this.state.currentPageId;
+    if (!pid || !this.state.canvasDraws[pid]) return false;
+    const count = this.state.canvasDraws[pid].length;
+    delete this.state.canvasDraws[pid];
+    this.logActivity("canvas_draws_cleared", "canvas", `Cleared ${count} draw commands`, source);
+    this.commit({ type: "canvasDrawsCleared", pageId: pid, count });
     return true;
   }
 

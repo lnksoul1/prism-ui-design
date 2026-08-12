@@ -26,7 +26,7 @@
 - **用户通道（WebSocket）**：浏览器客户端实时显示 AI 的操作，用户可调整令牌、删除组件
 - **双向同步**：AI 的操作实时推送到客户端，用户的调整也同步回状态存储，AI 下次查询时可见
 
-### 70 个工具
+### 71 个工具
 
 | 工具 | 类型 | 功能说明 |
 |------|------|----------|
@@ -57,6 +57,7 @@
 | `design_render_preview` | 实时 | 渲染设计为 HTML（安装 Playwright 后可输出 PNG 截图） |
 | `design_get_canvas` | 实时 | 查看当前页 tldraw 画布（形状数、可映射组件） |
 | `design_apply_canvas` | 实时 | 把用户绘制的画布采纳为组件并替换当前页 |
+| `design_draw_canvas` | 实时 | AI 以简单指令（rect/text/arrow/image/prism）在画布上实时绘制 |
 | `design_save_template` | 实时 | 将当前设计保存为可复用模板 |
 | `design_load_template` | 实时 | 加载已保存的模板 |
 | `design_list_templates` | 实时 | 列出已保存的模板 |
@@ -169,7 +170,9 @@ AI 会依次调用 `design_init` 初始化项目、`design_add_component` 添加
 Dashboard 顶部"预览 / 画布"切换。**画布模式**内置 tldraw 无限画布，面向不写代码的用户：
 
 - 自由绘制：选择/平移/缩放、矩形/椭圆/箭头/线条/文字/便签/图片/框选/对齐/分布/图层顺序，撤销重做
-- 组件 ↔ 画布双向映射：进入画布时把当前页面组件变成可编辑形状；"应用到预览"把绘制结果转回组件树
+- 组件 ↔ 画布双向映射：进入画布时把当前页面组件变成**按设计令牌着色的 UI 块**（按钮主色、卡片表面色、Hero/CTA 主色浅底）；"应用到预览"把绘制结果转回组件树
+- AI 可实时绘制：Agent 调用 `design_draw_canvas` 后，形状会直接出现在你的画布上（无需刷新）
+- 自动排列：选中多个形状一键排成整齐纵列
 - 模板优先：空白画布自动弹出模板选择（SaaS/电商/博客/作品集/看板/空白画布），一键生成后继续手绘
 - 自动保存：绘制变更防抖自动保存到 `/api/canvas`；"写回页面文件"把整张画布导出为真实 HTML（`client/canvas-page.html`）
 - AI 可感知：`design_get_canvas`（查看用户画了什么）、`design_apply_canvas`（把画布采纳为组件）

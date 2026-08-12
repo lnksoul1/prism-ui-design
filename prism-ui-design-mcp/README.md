@@ -12,7 +12,7 @@ An MCP (Model Context Protocol) server that provides comprehensive UI design ass
 
 ## Features
 
-- **70 MCP tools** covering the full spectrum of UI design needs
+- **71 MCP tools** covering the full spectrum of UI design needs
 - **Color theory engine** with HSL-based harmony generation (monochromatic, analogous, complementary, split-complementary, triadic, tetradic)
 - **WCAG 2.1 contrast checker** with AA/AAA compliance scoring
 - **Curated font pairings** with Google Fonts integration
@@ -28,7 +28,9 @@ An MCP (Model Context Protocol) server that provides comprehensive UI design ass
 The dashboard has a **Preview / Draw** toggle in the canvas toolbar. Draw mode embeds a full tldraw infinite canvas for non-coders:
 
 - Real drawing tools: select, pan/zoom, rectangles, ellipses, arrows, lines, text, sticky notes, images, box-select, align/distribute, z-order, undo/redo
-- Two-way mapping: entering Draw mode turns the current page components into editable shapes (identity kept in shape `meta`); "Apply to preview" converts the drawing back into components
+- Two-way mapping: entering Draw mode turns the current page components into **token-colored UI blocks** (primary-colored buttons, surface cards, tinted heroes); "Apply to preview" converts the drawing back into components
+- AI can draw live: `design_draw_canvas` queues rect/text/arrow/image/prism commands that appear on the canvas immediately
+- Auto-arrange: select shapes and arrange them into a tidy column with one click
 - Template-first start: a blank canvas offers one-click templates (SaaS, e-commerce, blog, portfolio, dashboard, blank)
 - Autosave with debounce to `POST /api/canvas`; "Write back page file" exports the drawing as a real HTML page (`client/canvas-page.html`)
 - Agent-visible: `design_get_canvas` / `design_apply_canvas` let the AI inspect and adopt what the user drew

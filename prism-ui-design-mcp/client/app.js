@@ -178,6 +178,8 @@ const I18N = {
     startWithCanvasDesc: "在无限画布上自由绘制、排版、加图",
     clearCanvasConfirm: "确定清空当前画布？清空后仍会自动保存空白画布。",
     canvasLoading: "画布引擎加载中…",
+    canvasDrawsApplied: "已应用 {n} 条 AI 绘制",
+    canvasAutoLayoutDone: "已自动排列 {n} 个形状",
   },
   en: {
     connected: "Connected",
@@ -297,6 +299,8 @@ const I18N = {
     startWithCanvasDesc: "Draw, arrange, and add images on an infinite canvas",
     clearCanvasConfirm: "Clear the current canvas? The blank canvas will still be saved.",
     canvasLoading: "Canvas engine loading…",
+    canvasDrawsApplied: "Applied {n} AI drawings",
+    canvasAutoLayoutDone: "Arranged {n} shapes",
   },
 };
 
@@ -527,11 +531,23 @@ function handleChange(change) {
       renderTokenPanel();
       applyTokensToCanvas();
       checkConflicts();
+      if (canvasEditorMode && window.PrismCanvas && window.PrismCanvas.isReady()) {
+        window.PrismCanvas.setDesignContext({
+          tokens: currentState.tokens,
+          themeMode: currentState.themeMode,
+        });
+      }
       break;
     case "tokenBatch":
       renderTokenPanel();
       applyTokensToCanvas();
       checkConflicts();
+      if (canvasEditorMode && window.PrismCanvas && window.PrismCanvas.isReady()) {
+        window.PrismCanvas.setDesignContext({
+          tokens: currentState.tokens,
+          themeMode: currentState.themeMode,
+        });
+      }
       break;
     case "addComponent":
     case "updateComponent":
@@ -569,6 +585,15 @@ function handleChange(change) {
       if (canvasEditorMode && !canvasLoading && Date.now() - canvasOwnSaveAt > 3000) {
         loadCanvasIntoEditor();
       }
+      break;
+    case "canvasDraw":
+      // The AI queued drawing commands: apply them live if the canvas is open.
+      if (canvasEditorMode && !canvasLoading) {
+        applyPendingCanvasDraws();
+      }
+      break;
+    case "canvasDrawsCleared":
+      appliedDrawIds.clear();
       break;
     // New: theme
     case "setTheme":
@@ -4343,6 +4368,7 @@ let canvasDirty = false;
 let canvasTemplateShownForPage = null;
 let toastTimer = null;
 let canvasBundlePromise = null;
+const appliedDrawIds = new Set();
 
 const BUILTIN_TEMPLATES = [
   { id: "saas_landing", icon: "🚀", nameKey: "tplSaaS", descKey: "tplDescSaaS" },
@@ -4394,6 +4420,14 @@ function setupCanvasEditor() {
   if (applyBtn) applyBtn.addEventListener("click", applyCanvasToPreview);
   const exportBtn = $("canvas-export-btn");
   if (exportBtn) exportBtn.addEventListener("click", exportCanvasToFile);
+  const autoLayoutBtn = $("canvas-autolayout-btn");
+  if (autoLayoutBtn) {
+    autoLayoutBtn.addEventListener("click", () => {
+      if (!window.PrismCanvas || !window.PrismCanvas.isReady()) return;
+      const count = window.PrismCanvas.autoLayout();
+      showToastMsg(t("canvasAutoLayoutDone", { n: count }));
+    });
+  }
   const clearBtn = $("canvas-clear-btn");
   if (clearBtn) clearBtn.addEventListener("click", clearCanvasEditor);
 
@@ -4512,7 +4546,10 @@ async function loadCanvasIntoEditor(forceFromComponents) {
     if (data.doc) {
       window.PrismCanvas.loadSnapshot(data.doc);
     } else if (forceFromComponents || (components && components.length > 0)) {
-      window.PrismCanvas.loadComponents(components || []);
+      window.PrismCanvas.loadComponents(components || [], {
+        tokens: currentState.tokens,
+        themeMode: currentState.themeMode,
+      });
       if (components && components.length > 0) saveCurrentCanvas(false);
     } else {
       window.PrismCanvas.clear();
@@ -4522,6 +4559,8 @@ async function loadCanvasIntoEditor(forceFromComponents) {
         if (modal) modal.style.display = "flex";
       }
     }
+    // Apply any AI draw commands that were queued while the canvas was closed.
+    applyPendingCanvasDraws();
   } catch (err) {
     console.error("Load canvas failed:", err);
   } finally {
@@ -4529,6 +4568,32 @@ async function loadCanvasIntoEditor(forceFromComponents) {
       canvasLoading = false;
     }, 180);
   }
+}
+
+/**
+ * Apply queued AI drawing commands (`design_draw_canvas`) to the live
+ * editor, then clear the server queue and persist the merged drawing.
+ */
+async function applyPendingCanvasDraws() {
+  if (!window.PrismCanvas || !window.PrismCanvas.isReady() || !currentState) return;
+  const pageId = currentState.currentPageId;
+  const draws = (currentState.canvasDraws && currentState.canvasDraws[pageId]) || [];
+  const pending = draws.filter((d) => d && !appliedDrawIds.has(d.id));
+  if (pending.length === 0) return;
+
+  const created = window.PrismCanvas.applyDraws(pending);
+  pending.forEach((d) => appliedDrawIds.add(d.id));
+  try {
+    await fetch("/api/canvas/draws/clear", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pageId }),
+    });
+  } catch (err) {
+    console.error("Clear draw queue failed:", err);
+  }
+  saveCurrentCanvas(false);
+  if (created > 0) showToastMsg(t("canvasDrawsApplied", { n: created }));
 }
 
 async function saveCurrentCanvas(showToast, snapshot) {

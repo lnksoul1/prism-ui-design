@@ -140,6 +140,69 @@ test("shapesToComponents maps image shapes to image components with asset src", 
   assert.equal(components[0].props.alt, "photo.png");
 });
 
+test("shapesToComponents maps prism-block shapes to containers with style hints", () => {
+  const doc = docWithShapes([
+    {
+      id: "shape:block",
+      typeName: "shape",
+      type: "prism-block",
+      x: 12,
+      y: 34,
+      props: {
+        w: 500,
+        h: 120,
+        label: "Buy now",
+        kind: "button",
+        bg: "#7C3AED",
+        fg: "#ffffff",
+        border: "#5b21b6",
+        radius: "8px",
+      },
+      meta: {},
+    },
+  ]);
+
+  const components = shapesToComponents(doc);
+  assert.equal(components.length, 1);
+  assert.equal(components[0].type, "container");
+  assert.equal(components[0].props.text, "Buy now");
+  assert.equal(components[0].props.kind, "button");
+  assert.equal(components[0].props.bg, "#7C3AED");
+  assert.deepEqual(components[0].layout, { x: 12, y: 34, w: 500, h: 120 });
+});
+
+test("canvas draw queue: add, read, clear per page", () => {
+  const pageId = stateStore.getState().currentPageId as string;
+  const queued = stateStore.addCanvasDraws(
+    [
+      { type: "rect", x: 0, y: 0, w: 200, h: 100, label: "Hero box" },
+      { type: "text", x: 10, y: 120, label: "Welcome" },
+      { type: "arrow", x: 20, y: 20 },
+    ],
+    pageId,
+    "ai"
+  );
+  assert.equal(queued.length, 3);
+  assert.ok(queued.every((d) => d.id && d.createdAt));
+
+  const read = stateStore.getCanvasDraws(pageId);
+  assert.equal(read.length, 3);
+  assert.equal(read[0].label, "Hero box");
+
+  // Unknown types are normalized to rect; invalid entries are dropped.
+  const mixed = stateStore.addCanvasDraws(
+    [{ type: "prism", x: 5, y: 5, kind: "button", label: "CTA" }, { bad: true } as never],
+    pageId,
+    "ai"
+  );
+  assert.equal(mixed.length, 1);
+  assert.equal(mixed[0].type, "prism");
+
+  const cleared = stateStore.clearCanvasDraws(pageId);
+  assert.equal(cleared, true);
+  assert.equal(stateStore.getCanvasDraws(pageId).length, 0);
+});
+
 test("canvasShapeCount counts shape records only", () => {
   const doc = docWithShapes([
     { id: "shape:a", typeName: "shape", type: "geo", x: 0, y: 0, props: { w: 1, h: 1 } },

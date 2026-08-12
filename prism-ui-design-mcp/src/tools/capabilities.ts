@@ -81,6 +81,16 @@ const TOOL_MANIFEST: Array<{ name: string; group: string; summary: string; examp
   { name: "design_reflow", group: "review", summary: "Reorder page into canonical section order", example: "design_reflow()" },
   { name: "design_auto_improve", group: "review", summary: "Apply common structural fixes (tokens/navbar/hero/footer)", example: "design_auto_improve()" },
   { name: "design_set_platform", group: "design", summary: "Set the preview platform", example: 'design_set_platform(platform="mobile-ios")' },
+  // C2 platform snapshots
+  { name: "design_save_platform", group: "design", summary: "Save current pages as a platform design", example: 'design_save_platform(platform="mobile-ios")' },
+  { name: "design_load_platform", group: "design", summary: "Restore a platform design", example: 'design_load_platform(platform="mobile-ios")' },
+  { name: "design_list_platforms", group: "design", summary: "List saved platform designs", example: "design_list_platforms()" },
+  // C5 comments
+  { name: "design_add_comment", group: "collaboration", summary: "Attach a review comment to a component", example: 'design_add_comment(component_id="comp_x", text="按钮对比度偏低", author="designer")' },
+  { name: "design_list_comments", group: "collaboration", summary: "List review comments", example: "design_list_comments()" },
+  { name: "design_remove_comment", group: "collaboration", summary: "Remove a comment", example: 'design_remove_comment(comment_id="cmt_x")' },
+  // C6 one-shot generation
+  { name: "design_generate_page", group: "semantics", summary: "Generate a page from a brief (template + semantic style)", example: 'design_generate_page(brief="电商促销首页", adjectives=["温暖","简约"])' },
 ];
 
 export function registerCapabilitiesTool(server: McpServer): void {

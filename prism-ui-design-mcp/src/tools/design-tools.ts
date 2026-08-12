@@ -1683,6 +1683,95 @@ Example:
 
 // ===== Tool: design_apply_template =====
 
+/**
+ * Apply one of the built-in page templates and return the created component
+ * IDs. Shared by `design_apply_template` and `design_generate_page` so the
+ * template definitions never drift apart.
+ */
+export function applyPageTemplate(template: string): string[] {
+  const addedIds: string[] = [];
+  const templates: Record<string, () => void> = {
+    ecommerce_home: () => {
+      addedIds.push(stateStore.addComponent("navbar", undefined, { brand: "ShopMax", links: ["首页", "商品", "优惠", "关于"] }, null, "ai").id);
+      addedIds.push(stateStore.addComponent("hero", "centered", { title: "夏季大促", subtitle: "精选商品5折起", button_text: "立即抢购" }, null, "ai").id);
+      addedIds.push(stateStore.addComponent("card_grid", "3col", { items: [
+        { title: "商品A", price: "¥99", description: "优质好物" },
+        { title: "商品B", price: "¥199", description: "精挑细选" },
+        { title: "商品C", price: "¥299", description: "品质之选" },
+      ] }, null, "ai").id);
+      addedIds.push(stateStore.addComponent("cta", "centered", { title: "立即下单", subtitle: "限时优惠，不容错过", button_text: "去购物" }, null, "ai").id);
+      addedIds.push(stateStore.addComponent("footer", undefined, { copyright: "© 2024 ShopMax", links: ["关于我们", "联系方式", "隐私政策"] }, null, "ai").id);
+    },
+    saas_landing: () => {
+      addedIds.push(stateStore.addComponent("navbar", "with_cta", { brand: "CloudFlow", links: ["功能", "价格", "文档", "博客"], cta_text: "免费试用" }, null, "ai").id);
+      addedIds.push(stateStore.addComponent("hero", "split", { title: "提升团队效率十倍", subtitle: "一站式协作平台，让工作更高效", button_text: "开始使用", image_url: "https://picsum.photos/seed/saas/600/400" }, null, "ai").id);
+      addedIds.push(stateStore.addComponent("feature_list", undefined, { title: "核心功能", items: [
+        { title: "任务管理", description: "可视化任务看板，高效追踪进度" },
+        { title: "实时协作", description: "多人同时编辑，无缝协作" },
+        { title: "数据报表", description: "智能数据分析，洞察业务趋势" },
+      ] }, null, "ai").id);
+      addedIds.push(stateStore.addComponent("stats", undefined, { title: "数据见证", items: [
+        { label: "活跃用户", value: "50万+" },
+        { label: "企业客户", value: "3000+" },
+        { label: "好评率", value: "98%" },
+        { label: "服务年限", value: "8年" },
+      ] }, null, "ai").id);
+      addedIds.push(stateStore.addComponent("pricing", undefined, { title: "价格方案", plans: [
+        { name: "基础版", price: "¥99/月", features: ["10人团队", "5GB存储", "基础支持"] },
+        { name: "专业版", price: "¥299/月", features: ["50人团队", "50GB存储", "优先支持", "高级报表"] },
+        { name: "企业版", price: "定制", features: ["不限人数", "无限存储", "专属客服", "定制开发"] },
+      ] }, null, "ai").id);
+      addedIds.push(stateStore.addComponent("cta", "banner", { title: "立即开启高效协作", subtitle: "14天免费试用，无需信用卡", button_text: "免费开始" }, null, "ai").id);
+      addedIds.push(stateStore.addComponent("footer", undefined, { copyright: "© 2024 CloudFlow", links: ["关于我们", "联系方式", "隐私政策", "服务条款"] }, null, "ai").id);
+    },
+    blog_post: () => {
+      addedIds.push(stateStore.addComponent("navbar", undefined, { brand: "技术博客", links: ["首页", "文章", "分类", "关于"] }, null, "ai").id);
+      addedIds.push(stateStore.addComponent("text_section", undefined, { title: "深入理解 TypeScript 类型系统", body: "TypeScript 的类型系统是其最强大的特性之一。通过静态类型检查，我们可以在编译时捕获大量潜在错误，提升代码质量和可维护性。" }, null, "ai").id);
+      addedIds.push(stateStore.addComponent("image", undefined, { src: "https://picsum.photos/seed/blog/800/400", alt: "TypeScript 类型系统图解" }, null, "ai").id);
+      addedIds.push(stateStore.addComponent("text_section", undefined, { title: "高级类型技巧", body: "条件类型和映射类型是 TypeScript 中最强大但也最复杂的特性。掌握它们可以让你写出更加灵活和可复用的类型定义。" }, null, "ai").id);
+      addedIds.push(stateStore.addComponent("footer", undefined, { copyright: "© 2024 技术博客", links: ["关于", "订阅", "归档"] }, null, "ai").id);
+    },
+    portfolio: () => {
+      addedIds.push(stateStore.addComponent("navbar", undefined, { brand: "Design Studio", links: ["作品", "关于", "服务", "联系"] }, null, "ai").id);
+      addedIds.push(stateStore.addComponent("hero", "centered", { title: "创意设计工作室", subtitle: "用设计连接品牌与用户", button_text: "查看作品" }, null, "ai").id);
+      addedIds.push(stateStore.addComponent("card_grid", "4col", { items: [
+        { title: "品牌设计", description: "视觉识别系统" },
+        { title: "网页设计", description: "响应式网站" },
+        { title: "UI/UX设计", description: "用户体验优化" },
+        { title: "插画设计", description: "商业插画创作" },
+      ] }, null, "ai").id);
+      addedIds.push(stateStore.addComponent("text_section", undefined, { title: "关于我们", body: "我们是一支充满激情的设计团队，专注于为品牌打造独特的视觉体验。" }, null, "ai").id);
+      addedIds.push(stateStore.addComponent("footer", undefined, { copyright: "© 2024 Design Studio", links: ["作品", "关于", "联系"] }, null, "ai").id);
+    },
+    dashboard: () => {
+      addedIds.push(stateStore.addComponent("navbar", undefined, { brand: "数据看板", links: ["概览", "分析", "设置"] }, null, "ai").id);
+      addedIds.push(stateStore.addComponent("stats", undefined, { title: "今日数据", items: [
+        { label: "访问量", value: "12,345" },
+        { label: "订单数", value: "328" },
+        { label: "收入", value: "¥45,600" },
+        { label: "转化率", value: "2.6%" },
+      ] }, null, "ai").id);
+      addedIds.push(stateStore.addComponent("card_grid", "2col", { items: [
+        { title: "销售趋势", description: "近30天销售数据走势" },
+        { title: "用户分析", description: "用户行为深度分析" },
+        { title: "热销商品", description: "TOP10商品排行" },
+        { title: "地区分布", description: "销售地区分布图" },
+      ] }, null, "ai").id);
+      addedIds.push(stateStore.addComponent("feature_list", undefined, { title: "快捷操作", items: [
+        { title: "导出报表", description: "一键导出数据报表" },
+        { title: "添加商品", description: "快速上架新商品" },
+        { title: "消息通知", description: "查看系统消息通知" },
+      ] }, null, "ai").id);
+    },
+  };
+  const fn = templates[template];
+  if (!fn) {
+    throw new Error(`Unknown template "${template}". Available: ${Object.keys(templates).join(", ")}`);
+  }
+  fn();
+  return addedIds;
+}
+
 export function registerDesignApplyTemplateTool(server: McpServer): void {
   server.registerTool(
     "design_apply_template",
@@ -1716,91 +1805,7 @@ Example:
     },
     async (params) => {
       try {
-        const addedIds: string[] = [];
-
-        const templates: Record<string, () => void> = {
-          ecommerce_home: () => {
-            addedIds.push(stateStore.addComponent("navbar", undefined, { brand: "ShopMax", links: ["首页", "商品", "优惠", "关于"] }, null, "ai").id);
-            addedIds.push(stateStore.addComponent("hero", "centered", { title: "夏季大促", subtitle: "精选商品5折起", button_text: "立即抢购" }, null, "ai").id);
-            addedIds.push(stateStore.addComponent("card_grid", "3col", { items: [
-              { title: "商品A", price: "¥99", description: "优质好物" },
-              { title: "商品B", price: "¥199", description: "精挑细选" },
-              { title: "商品C", price: "¥299", description: "品质之选" },
-            ] }, null, "ai").id);
-            addedIds.push(stateStore.addComponent("cta", "centered", { title: "立即下单", subtitle: "限时优惠，不容错过", button_text: "去购物" }, null, "ai").id);
-            addedIds.push(stateStore.addComponent("footer", undefined, { copyright: "© 2024 ShopMax", links: ["关于我们", "联系方式", "隐私政策"] }, null, "ai").id);
-          },
-          saas_landing: () => {
-            addedIds.push(stateStore.addComponent("navbar", "with_cta", { brand: "CloudFlow", links: ["功能", "价格", "文档", "博客"], cta_text: "免费试用" }, null, "ai").id);
-            addedIds.push(stateStore.addComponent("hero", "split", { title: "提升团队效率十倍", subtitle: "一站式协作平台，让工作更高效", button_text: "开始使用", image_url: "https://picsum.photos/seed/saas/600/400" }, null, "ai").id);
-            addedIds.push(stateStore.addComponent("feature_list", undefined, { title: "核心功能", items: [
-              { title: "任务管理", description: "可视化任务看板，高效追踪进度" },
-              { title: "实时协作", description: "多人同时编辑，无缝协作" },
-              { title: "数据报表", description: "智能数据分析，洞察业务趋势" },
-            ] }, null, "ai").id);
-            addedIds.push(stateStore.addComponent("stats", undefined, { title: "数据见证", items: [
-              { label: "活跃用户", value: "50万+" },
-              { label: "企业客户", value: "3000+" },
-              { label: "好评率", value: "98%" },
-              { label: "服务年限", value: "8年" },
-            ] }, null, "ai").id);
-            addedIds.push(stateStore.addComponent("pricing", undefined, { title: "价格方案", plans: [
-              { name: "基础版", price: "¥99/月", features: ["10人团队", "5GB存储", "基础支持"] },
-              { name: "专业版", price: "¥299/月", features: ["50人团队", "50GB存储", "优先支持", "高级报表"] },
-              { name: "企业版", price: "定制", features: ["不限人数", "无限存储", "专属客服", "定制开发"] },
-            ] }, null, "ai").id);
-            addedIds.push(stateStore.addComponent("cta", "banner", { title: "立即开启高效协作", subtitle: "14天免费试用，无需信用卡", button_text: "免费开始" }, null, "ai").id);
-            addedIds.push(stateStore.addComponent("footer", undefined, { copyright: "© 2024 CloudFlow", links: ["关于我们", "联系方式", "隐私政策", "服务条款"] }, null, "ai").id);
-          },
-          blog_post: () => {
-            addedIds.push(stateStore.addComponent("navbar", undefined, { brand: "技术博客", links: ["首页", "文章", "分类", "关于"] }, null, "ai").id);
-            addedIds.push(stateStore.addComponent("text_section", undefined, { title: "深入理解 TypeScript 类型系统", body: "TypeScript 的类型系统是其最强大的特性之一。通过静态类型检查，我们可以在编译时捕获大量潜在错误，提升代码质量和可维护性。本文将深入探讨 TypeScript 类型系统的核心概念和高级用法。" }, null, "ai").id);
-            addedIds.push(stateStore.addComponent("image", undefined, { src: "https://picsum.photos/seed/blog/800/400", alt: "TypeScript 类型系统图解" }, null, "ai").id);
-            addedIds.push(stateStore.addComponent("text_section", undefined, { title: "高级类型技巧", body: "条件类型和映射类型是 TypeScript 中最强大但也最复杂的特性。掌握它们可以让你写出更加灵活和可复用的类型定义，显著提升开发效率。" }, null, "ai").id);
-            addedIds.push(stateStore.addComponent("footer", undefined, { copyright: "© 2024 技术博客", links: ["关于", "订阅", "归档"] }, null, "ai").id);
-          },
-          portfolio: () => {
-            addedIds.push(stateStore.addComponent("navbar", undefined, { brand: "Design Studio", links: ["作品", "关于", "服务", "联系"] }, null, "ai").id);
-            addedIds.push(stateStore.addComponent("hero", "centered", { title: "创意设计工作室", subtitle: "用设计连接品牌与用户", button_text: "查看作品" }, null, "ai").id);
-            addedIds.push(stateStore.addComponent("card_grid", "4col", { items: [
-              { title: "品牌设计", description: "视觉识别系统" },
-              { title: "网页设计", description: "响应式网站" },
-              { title: "UI/UX设计", description: "用户体验优化" },
-              { title: "插画设计", description: "商业插画创作" },
-            ] }, null, "ai").id);
-            addedIds.push(stateStore.addComponent("text_section", undefined, { title: "关于我们", body: "我们是一支充满激情的设计团队，专注于为品牌打造独特的视觉体验。从概念到落地，我们用心对待每一个项目。" }, null, "ai").id);
-            addedIds.push(stateStore.addComponent("footer", undefined, { copyright: "© 2024 Design Studio", links: ["作品", "关于", "联系"] }, null, "ai").id);
-          },
-          dashboard: () => {
-            addedIds.push(stateStore.addComponent("navbar", undefined, { brand: "数据看板", links: ["概览", "分析", "设置"] }, null, "ai").id);
-            addedIds.push(stateStore.addComponent("stats", undefined, { title: "今日数据", items: [
-              { label: "访问量", value: "12,345" },
-              { label: "订单数", value: "328" },
-              { label: "收入", value: "¥45,600" },
-              { label: "转化率", value: "2.6%" },
-            ] }, null, "ai").id);
-            addedIds.push(stateStore.addComponent("card_grid", "2col", { items: [
-              { title: "销售趋势", description: "近30天销售数据走势" },
-              { title: "用户分析", description: "用户行为深度分析" },
-              { title: "热销商品", description: "TOP10商品排行" },
-              { title: "地区分布", description: "销售地区分布图" },
-            ] }, null, "ai").id);
-            addedIds.push(stateStore.addComponent("feature_list", undefined, { title: "快捷操作", items: [
-              { title: "导出报表", description: "一键导出数据报表" },
-              { title: "添加商品", description: "快速上架新商品" },
-              { title: "消息通知", description: "查看系统消息通知" },
-            ] }, null, "ai").id);
-          },
-        };
-
-        const templateFn = templates[params.template];
-        if (!templateFn) {
-          return {
-            content: [{ type: "text", text: `Error: Unknown template "${params.template}".` }],
-          };
-        }
-
-        templateFn();
+        const addedIds = applyPageTemplate(params.template);
 
         return {
           content: [{ type: "text", text: `Template "${params.template}" applied.\n${addedIds.length} components added.\nComponent IDs: ${addedIds.join(", ")}` }],

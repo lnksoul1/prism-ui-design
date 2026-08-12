@@ -26,7 +26,7 @@
 - **用户通道（WebSocket）**：浏览器客户端实时显示 AI 的操作，用户可调整令牌、删除组件
 - **双向同步**：AI 的操作实时推送到客户端，用户的调整也同步回状态存储，AI 下次查询时可见
 
-### 60 个工具
+### 67 个工具
 
 | 工具 | 类型 | 功能说明 |
 |------|------|----------|
@@ -80,6 +80,13 @@
 | `design_reflow` | 实时 | 按规范章节顺序重排页面组件 |
 | `design_auto_improve` | 实时 | 自动补齐常见结构缺失（令牌/导航/首屏/页脚） |
 | `design_set_platform` | 实时 | 设置预览平台（Web/桌面/移动） |
+| `design_save_platform` | 实时 | 将当前页面保存为指定平台的独立设计 |
+| `design_load_platform` | 实时 | 恢复指定平台的已保存设计 |
+| `design_list_platforms` | 实时 | 列出已保存的平台设计 |
+| `design_add_comment` | 实时 | 在组件上添加评审评论 |
+| `design_list_comments` | 实时 | 列出评审评论 |
+| `design_remove_comment` | 实时 | 删除评审评论 |
+| `design_generate_page` | 实时 | 从一句话需求生成完整页面（模板 + 语义风格） |
 | `ui_generate_color_palette` | 生成 | 基于色彩理论生成六种和谐配色方案 |
 | `ui_suggest_typography` | 生成 | 精选字体配对，附带 Google Fonts 链接 |
 | `ui_generate_type_scale` | 生成 | 模数化字号系统（8 种比率） |

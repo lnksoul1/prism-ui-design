@@ -72,6 +72,23 @@ export interface DesignState {
   currentPageId: string | null;
   themeMode: "light" | "dark";
   activePlatform: string;
+  platforms: Record<string, PlatformSnapshot>;
+  comments: DesignComment[];
+}
+
+export interface PlatformSnapshot {
+  platform: string;
+  savedAt: string;
+  pages: PageDef[];
+  currentPageId: string | null;
+}
+
+export interface DesignComment {
+  id: string;
+  component_id: string;
+  author: string;
+  text: string;
+  createdAt: string;
 }
 
 // ===== State Store (Singleton) =====
@@ -112,6 +129,8 @@ class DesignStateStore extends EventEmitter {
       currentPageId: defaultPage.id,
       themeMode: "light",
       activePlatform: "web-desktop",
+      platforms: {},
+      comments: [],
     };
     // Initialize history with the initial state
     this.history = [JSON.parse(JSON.stringify(this.state))];
@@ -566,6 +585,78 @@ class DesignStateStore extends EventEmitter {
     return true;
   }
 
+  // ===== Platform Snapshots (C2) =====
+
+  savePlatformSnapshot(platform: string, source: "ai" | "user" = "user"): PlatformSnapshot {
+    const snapshot: PlatformSnapshot = {
+      platform,
+      savedAt: new Date().toISOString(),
+      pages: JSON.parse(JSON.stringify(this.state.pages)),
+      currentPageId: this.state.currentPageId,
+    };
+    this.state.platforms[platform] = snapshot;
+    this.logActivity("save_platform", "platform", `Saved ${platform} platform design`, source);
+    this.commit({ type: "savePlatform", platform, savedAt: snapshot.savedAt });
+    return snapshot;
+  }
+
+  loadPlatformSnapshot(platform: string, source: "ai" | "user" = "user"): PlatformSnapshot {
+    const snapshot = this.state.platforms[platform];
+    if (!snapshot) {
+      throw new Error(`No saved design for platform "${platform}". Call design_save_platform first.`);
+    }
+    const pages = JSON.parse(JSON.stringify(snapshot.pages)) as PageDef[];
+    this.state.pages = pages;
+    this.state.currentPageId = pages.some((p) => p.id === snapshot.currentPageId)
+      ? snapshot.currentPageId
+      : pages[0]?.id ?? null;
+    this.fixComponentsReference();
+    this.logActivity("load_platform", "platform", `Restored ${platform} platform design`, source);
+    this.commit({ type: "loadPlatform", platform });
+    return snapshot;
+  }
+
+  listPlatformSnapshots(): Array<{ platform: string; savedAt: string; pageCount: number; componentCount: number }> {
+    return Object.entries(this.state.platforms).map(([platform, s]) => ({
+      platform,
+      savedAt: s.savedAt,
+      pageCount: s.pages.length,
+      componentCount: s.pages.reduce((sum, p) => sum + p.components.length, 0),
+    }));
+  }
+
+  // ===== Comments (C5) =====
+
+  addComment(componentId: string, text: string, author: string = "user", source: "ai" | "user" = "user"): DesignComment {
+    const node = this.findComponent(componentId);
+    if (!node) {
+      throw new Error(`Component not found: ${componentId}`);
+    }
+    const comment: DesignComment = {
+      id: `cmt_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      component_id: componentId,
+      author,
+      text,
+      createdAt: new Date().toISOString(),
+    };
+    this.state.comments.push(comment);
+    if (this.state.comments.length > 200) {
+      this.state.comments = this.state.comments.slice(-200);
+    }
+    this.logActivity("add_comment", "comment", `Comment on ${node.type} (${componentId})`, source);
+    this.commit({ type: "addComment", comment });
+    return comment;
+  }
+
+  removeComment(commentId: string, source: "ai" | "user" = "user"): boolean {
+    const idx = this.state.comments.findIndex((c) => c.id === commentId);
+    if (idx === -1) return false;
+    this.state.comments.splice(idx, 1);
+    this.logActivity("remove_comment", "comment", `Removed comment ${commentId}`, source);
+    this.commit({ type: "removeComment", commentId });
+    return true;
+  }
+
   // ===== Clear All =====
 
   clearAll(source: "ai" | "user" = "ai"): void {
@@ -641,6 +732,8 @@ class DesignStateStore extends EventEmitter {
       themeMode: snapshot.themeMode === "dark" ? "dark" : "light",
       activePlatform:
         typeof snapshot.activePlatform === "string" ? snapshot.activePlatform : "web-desktop",
+      platforms: snapshot.platforms && typeof snapshot.platforms === "object" ? snapshot.platforms : {},
+      comments: Array.isArray(snapshot.comments) ? snapshot.comments.slice(0, 200) : [],
     };
     this.fixComponentsReference();
 
@@ -696,6 +789,8 @@ class DesignStateStore extends EventEmitter {
       currentPageId: defaultPage.id,
       themeMode: "light",
       activePlatform: "web-desktop",
+      platforms: {},
+      comments: [],
     };
     this.history = [JSON.parse(JSON.stringify(this.state))];
     this.historyIndex = 0;

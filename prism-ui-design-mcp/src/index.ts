@@ -79,6 +79,9 @@ import { registerSemanticStyleTool } from "./tools/semantic-tools.js";
 import { registerCapabilitiesTool } from "./tools/capabilities.js";
 import { registerWebpageImportTool } from "./tools/webpage-import.js";
 import { registerSpecTools } from "./tools/spec-tools.js";
+import { registerPlatformTools } from "./tools/platform-tools.js";
+import { registerCollabTools } from "./tools/collab-tools.js";
+import { registerGeneratePageTool } from "./tools/generate-tools.js";
 import {
   registerSuggestTool,
   registerBrandStyleTool,
@@ -144,6 +147,11 @@ registerSuggestTool(server);
 registerBrandStyleTool(server);
 registerReflowTool(server);
 registerAutoImproveTool(server);
+
+// C2 platform snapshots, C5 comments, C6 one-shot page generation
+registerPlatformTools(server);
+registerCollabTools(server);
+registerGeneratePageTool(server);
 
 // MCP Resources + Prompts for agent context
 registerResources(server);

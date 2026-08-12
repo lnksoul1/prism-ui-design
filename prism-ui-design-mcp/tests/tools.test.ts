@@ -33,6 +33,9 @@ import {
   registerReflowTool,
   registerAutoImproveTool,
 } from "../src/tools/design-review.js";
+import { registerPlatformTools } from "../src/tools/platform-tools.js";
+import { registerCollabTools } from "../src/tools/collab-tools.js";
+import { registerGeneratePageTool } from "../src/tools/generate-tools.js";
 
 interface CapturedTool {
   name: string;
@@ -78,6 +81,9 @@ registerSuggestTool(fakeServer as never);
 registerBrandStyleTool(fakeServer as never);
 registerReflowTool(fakeServer as never);
 registerAutoImproveTool(fakeServer as never);
+registerPlatformTools(fakeServer as never);
+registerCollabTools(fakeServer as never);
+registerGeneratePageTool(fakeServer as never);
 
 stateStore.resetForTests();
 
@@ -163,6 +169,13 @@ const VALID_PARAMS: Record<string, Record<string, unknown>> = {
   design_reflow: {},
   design_auto_improve: {},
   design_set_platform: { platform: "mobile-ios" },
+  design_save_platform: { platform: "web-mobile" },
+  design_load_platform: { platform: "mobile-ios" },
+  design_list_platforms: {},
+  design_add_comment: { component_id: "missing", text: "hi" },
+  design_list_comments: {},
+  design_remove_comment: { comment_id: "missing" },
+  design_generate_page: { brief: "电商促销首页", adjectives: ["温暖", "简约"] },
 };
 
 const EXPECT_STRUCTURED = new Set([
@@ -216,6 +229,11 @@ const EXPECT_STRUCTURED = new Set([
   "design_reflow",
   "design_auto_improve",
   "design_set_platform",
+  "design_save_platform",
+  "design_list_platforms",
+  "design_list_comments",
+  "design_remove_comment",
+  "design_generate_page",
 ]);
 
 const INVALID_PARAMS: Record<string, Record<string, unknown>> = {
@@ -246,11 +264,16 @@ const INVALID_PARAMS: Record<string, Record<string, unknown>> = {
   design_delete_token: {},
   design_create_brand_style: { name: "x", colors: [] },
   design_set_platform: { platform: "tablet" },
+  design_save_platform: { platform: "tablet" },
+  design_load_platform: {},
+  design_add_comment: { text: "x" },
+  design_remove_comment: {},
+  design_generate_page: { brief: "" },
 };
 
-test("registers all 60 tools with unique names", () => {
-  assert.equal(captured.length, 60);
-  assert.equal(new Set(captured.map((t) => t.name)).size, 60);
+test("registers all 67 tools with unique names", () => {
+  assert.equal(captured.length, 67);
+  assert.equal(new Set(captured.map((t) => t.name)).size, 67);
   for (const tool of captured) {
     assert.equal(typeof tool.handler, "function");
   }

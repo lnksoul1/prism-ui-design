@@ -12,7 +12,7 @@ An MCP (Model Context Protocol) server that provides comprehensive UI design ass
 
 ## Features
 
-- **60 MCP tools** covering the full spectrum of UI design needs
+- **67 MCP tools** covering the full spectrum of UI design needs
 - **Color theory engine** with HSL-based harmony generation (monochromatic, analogous, complementary, split-complementary, triadic, tetradic)
 - **WCAG 2.1 contrast checker** with AA/AAA compliance scoring
 - **Curated font pairings** with Google Fonts integration
@@ -108,6 +108,13 @@ TRANSPORT=http PORT=3100 npm start
 | `design_reflow` | Reorder the page into canonical section order |
 | `design_auto_improve` | Apply common structural fixes (tokens / navbar / hero / footer) |
 | `design_set_platform` | Set the preview platform (web / desktop / mobile) |
+| `design_save_platform` | Save current pages as a platform-specific design |
+| `design_load_platform` | Restore a saved platform design |
+| `design_list_platforms` | List saved platform designs |
+| `design_add_comment` | Attach a review comment to a component |
+| `design_list_comments` | List review comments |
+| `design_remove_comment` | Remove a review comment |
+| `design_generate_page` | Generate a page from a brief (template + semantic style) |
 
 ## Testing
 
@@ -118,7 +125,7 @@ npm test
 The test suite covers the state store (undo/redo, pages, tokens, conflicts),
 style-preset token generation, all MCP tool schemas, the shared service layer,
 project persistence, DTCG token interop, accessibility audit, render preview,
-and an HTTP + WebSocket integration chain (**229 tests passing**).
+and an HTTP + WebSocket integration chain (**246 tests passing**).
 
 ## Templates, versions, semantics & style guides
 
@@ -150,6 +157,13 @@ and an HTTP + WebSocket integration chain (**229 tests passing**).
   tokens / navbar / hero / footer in one call.
 - **Presence**: the dashboard shows how many clients are online, and the
   active preview platform syncs between server state and every client.
+- **Platform designs** (`design_save_platform` / `design_load_platform`):
+  keep a separate page layout per platform (web / desktop / mobile) while
+  sharing style + tokens.
+- **Comments** (`design_add_comment` / `design_list_comments`): attach review
+  feedback to any component without changing the design.
+- **One-shot generation** (`design_generate_page`): turn a brief into a
+  complete page — template detection + semantic adjectives in one call.
 - **Freeform canvas**: toggle between flow layout and free positioning —
   drag components anywhere, resize with 8 handles, edit X/Y/W/H in the
   inspector, and auto-arrange into a clean vertical stack.

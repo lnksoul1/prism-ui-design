@@ -150,6 +150,34 @@ const I18N = {
     writebackConfirm: "将设计令牌写回 client/style.css（自动备份）并生成 design-writeback.html 预览？",
     writebackDone: "已写回 {count} 个令牌到 {files}，备份：{backup}",
     writebackError: "写回失败",
+    previewMode: "预览",
+    designMode: "画布",
+    saveCanvas: "保存画布",
+    applyCanvas: "应用到预览",
+    exportCanvas: "写回页面文件",
+    clearCanvas: "清空",
+    canvasEditorHint: "无限画布：拖拽移动、滚轮缩放；用右侧工具栏画形状/文字/箭头/图片，完成后点“应用到预览”",
+    templatePickerDesc: "选择一个起点，或直接在空白画布上开始绘制",
+    tplSaaS: "SaaS 落地页",
+    tplEcommerce: "电商首页",
+    tplBlog: "博客文章",
+    tplPortfolio: "作品集",
+    tplDashboard: "数据看板",
+    tplBlank: "空白画布",
+    tplDescSaaS: "导航 + 首屏 + 功能 + 定价",
+    tplDescEcommerce: "导航 + 首屏 + 商品 + CTA",
+    tplDescBlog: "导航 + 正文 + 图片",
+    tplDescPortfolio: "导航 + 首屏 + 作品",
+    tplDescDashboard: "导航 + 数据 + 卡片",
+    canvasSaved: "画布已保存",
+    canvasApplied: "已应用到预览：{n} 个组件",
+    canvasExported: "已写回页面文件：{file}",
+    canvasCleared: "画布已清空",
+    canvasSaveError: "保存画布失败",
+    startWithCanvas: "打开画布编辑器",
+    startWithCanvasDesc: "在无限画布上自由绘制、排版、加图",
+    clearCanvasConfirm: "确定清空当前画布？清空后仍会自动保存空白画布。",
+    canvasLoading: "画布引擎加载中…",
   },
   en: {
     connected: "Connected",
@@ -241,6 +269,34 @@ const I18N = {
     writebackConfirm: "Write design tokens back to client/style.css (auto-backup) and generate design-writeback.html?",
     writebackDone: "Wrote {count} tokens to {files}. Backup: {backup}",
     writebackError: "Write-back failed",
+    previewMode: "Preview",
+    designMode: "Draw",
+    saveCanvas: "Save canvas",
+    applyCanvas: "Apply to preview",
+    exportCanvas: "Write back page file",
+    clearCanvas: "Clear",
+    canvasEditorHint: "Infinite canvas: drag to move, scroll to zoom. Use the right toolbar to draw shapes, text, arrows, and images, then click Apply",
+    templatePickerDesc: "Pick a starting point, or start drawing on a blank canvas",
+    tplSaaS: "SaaS landing",
+    tplEcommerce: "E-commerce home",
+    tplBlog: "Blog post",
+    tplPortfolio: "Portfolio",
+    tplDashboard: "Dashboard",
+    tplBlank: "Blank canvas",
+    tplDescSaaS: "Nav + hero + features + pricing",
+    tplDescEcommerce: "Nav + hero + products + CTA",
+    tplDescBlog: "Nav + article + image",
+    tplDescPortfolio: "Nav + hero + portfolio",
+    tplDescDashboard: "Nav + stats + cards",
+    canvasSaved: "Canvas saved",
+    canvasApplied: "Applied {n} components to preview",
+    canvasExported: "Wrote page file: {file}",
+    canvasCleared: "Canvas cleared",
+    canvasSaveError: "Failed to save canvas",
+    startWithCanvas: "Open the drawing canvas",
+    startWithCanvasDesc: "Draw, arrange, and add images on an infinite canvas",
+    clearCanvasConfirm: "Clear the current canvas? The blank canvas will still be saved.",
+    canvasLoading: "Canvas engine loading…",
   },
 };
 
@@ -287,6 +343,10 @@ function setupI18n() {
         // ignore storage errors
       }
       applyI18n();
+      if (canvasEditorMode && $("canvas-editor-hint")) {
+        $("canvas-editor-hint").textContent = t("canvasEditorHint");
+      }
+      renderCanvasTemplateCards();
       renderAll();
     });
   }
@@ -426,6 +486,9 @@ function handleMessage(msg) {
       myClientId = msg.clientId || null;
       currentState = msg.state;
       renderAll();
+      if (canvasEditorMode) {
+        loadCanvasIntoEditor();
+      }
       break;
     case "change":
       currentState = msg.state;
@@ -496,6 +559,16 @@ function handleChange(change) {
     case "renamePage":
       renderPageSwitcher();
       renderCanvas();
+      if (canvasEditorMode) {
+        loadCanvasIntoEditor();
+      }
+      break;
+    case "canvasSave":
+      // A canvas document was saved (ours or another client's). Reload the
+      // drawing for the current page unless this is our own recent echo.
+      if (canvasEditorMode && !canvasLoading && Date.now() - canvasOwnSaveAt > 3000) {
+        loadCanvasIntoEditor();
+      }
       break;
     // New: theme
     case "setTheme":
@@ -619,6 +692,10 @@ function renderCanvas() {
               <span class="pa-icon">📷</span>
               <span><span class="pa-title">${t("captureActualUi")}</span><br><span class="pa-desc">${t("captureActualUiDesc")}</span></span>
             </button>
+            <button class="placeholder-action" id="empty-canvas">
+              <span class="pa-icon">✏️</span>
+              <span><span class="pa-title">${t("startWithCanvas")}</span><br><span class="pa-desc">${t("startWithCanvasDesc")}</span></span>
+            </button>
           </div>
         </div>
       </div>
@@ -691,6 +768,12 @@ function renderCanvas() {
         } catch (err) {
           console.error("Capture failed:", err);
         }
+      });
+    }
+    const canvasBtn = $("empty-canvas");
+    if (canvasBtn) {
+      canvasBtn.addEventListener("click", () => {
+        setCanvasEditorMode(true);
       });
     }
     meta.textContent = "0 个组件";
@@ -4248,6 +4331,313 @@ function getAnimationTarget(components) {
   return components[components.length - 1] || null;
 }
 
+// ===== Canvas Editor (方案A: tldraw drawing canvas) =====
+
+let canvasEditorMode = false;
+let canvasEditorMounted = false;
+let canvasReady = false;
+let canvasLoading = false;
+let canvasOwnSaveAt = 0;
+let canvasSaveTimer = null;
+let canvasDirty = false;
+let canvasTemplateShownForPage = null;
+let toastTimer = null;
+let canvasBundlePromise = null;
+
+const BUILTIN_TEMPLATES = [
+  { id: "saas_landing", icon: "🚀", nameKey: "tplSaaS", descKey: "tplDescSaaS" },
+  { id: "ecommerce_home", icon: "🛍️", nameKey: "tplEcommerce", descKey: "tplDescEcommerce" },
+  { id: "blog_post", icon: "📝", nameKey: "tplBlog", descKey: "tplDescBlog" },
+  { id: "portfolio", icon: "🎨", nameKey: "tplPortfolio", descKey: "tplDescPortfolio" },
+  { id: "dashboard", icon: "📊", nameKey: "tplDashboard", descKey: "tplDescDashboard" },
+];
+
+function showToastMsg(text, isError) {
+  const toast = $("prism-toast");
+  if (!toast) return;
+  toast.textContent = text;
+  toast.className = "prism-toast" + (isError ? " toast-error" : "");
+  toast.style.display = "block";
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    toast.style.display = "none";
+  }, 3600);
+}
+
+function renderCanvasTemplateCards() {
+  const container = $("canvas-template-cards");
+  if (!container) return;
+  container.innerHTML = "";
+  const cards = [
+    ...BUILTIN_TEMPLATES,
+    { id: "blank", icon: "▢", nameKey: "tplBlank", descKey: null },
+  ];
+  cards.forEach((card) => {
+    const node = el("button", "template-card");
+    node.type = "button";
+    const desc = card.descKey ? `<span class="tc-desc">${t(card.descKey)}</span>` : "";
+    node.innerHTML = `<span class="tc-icon">${card.icon}</span><span class="tc-name">${t(card.nameKey)}</span>${desc}`;
+    node.addEventListener("click", () => applyTemplateForCanvas(card.id));
+    container.appendChild(node);
+  });
+}
+
+function setupCanvasEditor() {
+  const previewBtn = $("canvas-mode-preview");
+  const designBtn = $("canvas-mode-design");
+  if (previewBtn) previewBtn.addEventListener("click", () => setCanvasEditorMode(false));
+  if (designBtn) designBtn.addEventListener("click", () => setCanvasEditorMode(true));
+
+  const saveBtn = $("canvas-save-btn");
+  if (saveBtn) saveBtn.addEventListener("click", () => saveCurrentCanvas(true));
+  const applyBtn = $("canvas-apply-btn");
+  if (applyBtn) applyBtn.addEventListener("click", applyCanvasToPreview);
+  const exportBtn = $("canvas-export-btn");
+  if (exportBtn) exportBtn.addEventListener("click", exportCanvasToFile);
+  const clearBtn = $("canvas-clear-btn");
+  if (clearBtn) clearBtn.addEventListener("click", clearCanvasEditor);
+
+  const tplModal = $("canvas-template-modal");
+  const tplClose = $("canvas-template-close");
+  if (tplClose) {
+    tplClose.addEventListener("click", () => {
+      if (tplModal) tplModal.style.display = "none";
+    });
+  }
+  if (tplModal) {
+    tplModal.addEventListener("click", (e) => {
+      if (e.target === tplModal) tplModal.style.display = "none";
+    });
+  }
+
+  renderCanvasTemplateCards();
+}
+
+/** Lazily load the tldraw bundle (client/vendor/prism-canvas.js). */
+function ensureCanvasBundle() {
+  if (window.PrismCanvas) return Promise.resolve();
+  if (!canvasBundlePromise) {
+    canvasBundlePromise = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "vendor/prism-canvas.js";
+      script.onload = () => resolve();
+      script.onerror = () => {
+        canvasBundlePromise = null;
+        reject(new Error("canvas bundle failed to load"));
+      };
+      document.head.appendChild(script);
+    });
+  }
+  return canvasBundlePromise;
+}
+
+function setCanvasEditorMode(design) {
+  if (design === canvasEditorMode) {
+    if (design) loadCanvasIntoEditor();
+    return;
+  }
+
+  const previewBtn = $("canvas-mode-preview");
+  const designBtn = $("canvas-mode-design");
+  const scrollWrap = $("canvas-scroll-wrap");
+  const editorWrap = $("canvas-editor-wrap");
+  const actions = $("canvas-editor-actions");
+  const label = $("canvas-label");
+
+  if (!design) {
+    if (canvasReady) saveCurrentCanvas(false);
+    canvasEditorMode = false;
+    if (scrollWrap) scrollWrap.style.display = "block";
+    if (editorWrap) editorWrap.style.display = "none";
+    if (actions) actions.style.display = "none";
+    if (label) label.textContent = t("canvasLabel");
+  } else {
+    canvasEditorMode = true;
+    if (scrollWrap) scrollWrap.style.display = "none";
+    if (editorWrap) editorWrap.style.display = "flex";
+    if (actions) actions.style.display = "inline-flex";
+    if (label) label.textContent = t("designMode");
+    const hint = $("canvas-editor-hint");
+    if (hint) hint.textContent = t("canvasEditorHint");
+
+    showToastMsg(t("canvasLoading"));
+    ensureCanvasBundle()
+      .then(() => {
+        if (!canvasEditorMounted) {
+          canvasEditorMounted = true;
+          window.PrismCanvas.mount($("canvas-editor"), {
+            locale: "en",
+            onMount: () => {
+              canvasReady = true;
+              loadCanvasIntoEditor();
+            },
+            onChange: (snapshot) => {
+              canvasDirty = true;
+              clearTimeout(canvasSaveTimer);
+              canvasSaveTimer = setTimeout(() => saveCurrentCanvas(false, snapshot), 900);
+            },
+          });
+        } else {
+          loadCanvasIntoEditor();
+        }
+      })
+      .catch((err) => {
+        console.error("Canvas bundle failed:", err);
+        showToastMsg(t("canvasSaveError"), true);
+        setCanvasEditorMode(false);
+      });
+  }
+
+  if (previewBtn) previewBtn.classList.toggle("active", !design);
+  if (designBtn) designBtn.classList.toggle("active", design);
+}
+
+/**
+ * Load the current page's drawing into the editor. If no drawing has been
+ * saved yet, materialize the current components as editable shapes; if the
+ * page is completely empty, offer a template-first start.
+ */
+async function loadCanvasIntoEditor(forceFromComponents) {
+  if (!window.PrismCanvas || !window.PrismCanvas.isReady() || !currentState) return;
+  const pageId = currentState.currentPageId;
+  if (!pageId) return;
+
+  canvasLoading = true;
+  window.PrismCanvas.suppressAutoSave(1800);
+  try {
+    const res = await fetch(`/api/canvas?pageId=${encodeURIComponent(pageId)}`);
+    const data = await res.json().catch(() => ({}));
+    const components = getCurrentComponents();
+
+    if (data.doc) {
+      window.PrismCanvas.loadSnapshot(data.doc);
+    } else if (forceFromComponents || (components && components.length > 0)) {
+      window.PrismCanvas.loadComponents(components || []);
+      if (components && components.length > 0) saveCurrentCanvas(false);
+    } else {
+      window.PrismCanvas.clear();
+      if (canvasTemplateShownForPage !== pageId) {
+        canvasTemplateShownForPage = pageId;
+        const modal = $("canvas-template-modal");
+        if (modal) modal.style.display = "flex";
+      }
+    }
+  } catch (err) {
+    console.error("Load canvas failed:", err);
+  } finally {
+    setTimeout(() => {
+      canvasLoading = false;
+    }, 180);
+  }
+}
+
+async function saveCurrentCanvas(showToast, snapshot) {
+  if (!window.PrismCanvas || !window.PrismCanvas.isReady() || !currentState) return false;
+  const snap = snapshot || window.PrismCanvas.getSnapshot();
+  if (!snap) return false;
+  canvasOwnSaveAt = Date.now();
+  canvasDirty = false;
+  try {
+    const res = await fetch("/api/canvas", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        pageId: currentState.currentPageId,
+        doc: snap,
+      }),
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    if (showToast) showToastMsg(t("canvasSaved"));
+    return true;
+  } catch (err) {
+    console.error("Save canvas failed:", err);
+    if (showToast) showToastMsg(t("canvasSaveError"), true);
+    return false;
+  }
+}
+
+async function applyCanvasToPreview() {
+  if (!window.PrismCanvas || !window.PrismCanvas.isReady()) return;
+  await saveCurrentCanvas(false);
+  try {
+    const res = await fetch("/api/canvas/apply", { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) {
+      showToastMsg(data.error || t("canvasSaveError"), true);
+      return;
+    }
+    await fetchInitialState();
+    setCanvasEditorMode(false);
+    showToastMsg(t("canvasApplied", { n: data.component_count }));
+  } catch (err) {
+    console.error("Apply canvas failed:", err);
+    showToastMsg(t("canvasSaveError"), true);
+  }
+}
+
+async function exportCanvasToFile() {
+  if (!window.PrismCanvas || !window.PrismCanvas.isReady()) return;
+  await saveCurrentCanvas(false);
+  try {
+    const res = await fetch("/api/canvas/export", { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) {
+      showToastMsg(data.error || t("canvasSaveError"), true);
+      return;
+    }
+    showToastMsg(t("canvasExported", { file: data.file }));
+  } catch (err) {
+    console.error("Export canvas failed:", err);
+    showToastMsg(t("canvasSaveError"), true);
+  }
+}
+
+function clearCanvasEditor() {
+  if (!window.PrismCanvas || !window.PrismCanvas.isReady()) return;
+  if (!window.confirm(t("clearCanvasConfirm"))) return;
+  window.PrismCanvas.clear();
+  saveCurrentCanvas(true);
+  showToastMsg(t("canvasCleared"));
+}
+
+async function applyTemplateForCanvas(templateId) {
+  const modal = $("canvas-template-modal");
+  if (modal) modal.style.display = "none";
+
+  if (templateId === "blank") {
+    if (window.PrismCanvas && window.PrismCanvas.isReady()) {
+      window.PrismCanvas.clear();
+      saveCurrentCanvas(false);
+    } else {
+      setCanvasEditorMode(true);
+    }
+    return;
+  }
+
+  try {
+    const res = await fetch("/api/template", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ template: templateId }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      showToastMsg(data.error || t("canvasSaveError"), true);
+      return;
+    }
+    await fetchInitialState();
+    if (currentState) canvasTemplateShownForPage = currentState.currentPageId;
+    if (canvasEditorMode && window.PrismCanvas && window.PrismCanvas.isReady()) {
+      loadCanvasIntoEditor(true);
+    } else {
+      setCanvasEditorMode(true);
+    }
+  } catch (err) {
+    console.error("Apply template failed:", err);
+    showToastMsg(t("canvasSaveError"), true);
+  }
+}
+
 // ===== Initialize =====
 
 function init() {
@@ -4275,6 +4665,7 @@ function init() {
   setupPromptBar();
   setupConflictCheck();
   setupDesignLibrary();
+  setupCanvasEditor();
   connect();
 
   // Also try fetching state via HTTP as fallback

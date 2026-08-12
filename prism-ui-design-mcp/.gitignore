@@ -21,6 +21,11 @@ Thumbs.db
 *.log
 npm-debug.log*
 
+# Generated design artifacts (regenerated on demand)
+client/canvas-page.html
+client/design-writeback.html
+.prism-previews/
+
 # Environment
 .env
 .env.local

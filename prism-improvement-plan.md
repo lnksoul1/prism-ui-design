@@ -60,6 +60,17 @@
 > - ✅ 自由调整修复：自由模式拖拽不再被 `.comp-overlay` 拦截（整块组件可拖动），切换时给出操作提示
 > - ✅ 实际界面参照：`POST /api/capture-client` 用 Playwright 自截图真实 Dashboard，`/previews` 静态服务，截图以 image 组件落入画布作为参考
 > - ✅ 一键写回项目文件：`src/writeback.ts` + `POST /api/writeback`——设计令牌写回 `client/style.css`（时间戳备份，仅替换映射变量、保留其余规则），完整设计导出 `client/design-writeback.html`；顶栏"✍ 写回"按钮
+> - ✅ **方案A（画布优先，tldraw 内核）**：
+>   - 评估结论：以 tldraw（MIT，无限画布 + 框选/对齐/分布 + 形状/文字/箭头/图片工具）叠加现有 Dashboard，而非自研画布或全量 React 重建；MCP 服务端保留为 AI 侧通道
+>   - 接入方式：`@tldraw/tldraw` + React 19 用 esbuild 打成 IIFE bundle（`client/vendor/prism-canvas.js` + `.css`，约 1.9MB，离线可用），`npm run build:canvas` 构建；Dashboard 保持零构建原生 JS
+>   - 画布模式：顶栏"预览/画布"切换；设计模式下 tldraw 全功能画布（选择/平移/缩放/形状/文字/箭头/图片/框选/对齐/分布/撤销重做）
+>   - 双向映射：组件 → 形状（geo 矩形 + meta 携带 componentId/type/props）；形状 → 组件（`src/canvas-shapes.ts`，meta 还原原始组件类型与属性，新绘形状按几何/文字/图片启发式映射，装饰性箭头/线条跳过）
+>   - 新端点：`GET/POST /api/canvas`（每页 tldraw 快照）、`POST /api/canvas/apply`（画布 → 组件树替换当前页）、`POST /api/canvas/export`（画布 → `client/canvas-page.html` 真实页面文件）
+>   - 新 MCP 工具：`design_get_canvas` / `design_apply_canvas`（AI 可查看并采纳用户绘制）
+>   - 模板优先：空白画布自动弹出模板选择（SaaS/电商/博客/作品集/看板/空白），一键应用后转为可编辑形状
+>   - 自动保存：绘制变更 900ms 防抖自动保存；切页/切模式自动持久化；多客户端画布保存广播回读
+>   - 测试：266 项单测/服务端测试全绿（新增画布转换单测 + 服务端画布端点集成测试）；e2e 新增"画布挂载 + 模板选择"用例
+> - 🔄 待办：C6 完整智能体、F9 更多框架、规格 Phase 2 截图转 UI（依赖视觉模型）、数据库/多项目工作区、画布多端实时协作编辑（当前为保存级同步）
 > - 🔄 待办：C6 完整智能体、F9 更多框架、规格 Phase 2 截图转 UI（依赖视觉模型）、数据库/多项目工作区
 
 ---

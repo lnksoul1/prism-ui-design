@@ -6,7 +6,16 @@ import globals from "globals";
 
 export default [
   {
-    ignores: ["dist/**", ".test-build/**", "node_modules/**", "test-output.log"],
+    ignores: [
+      "dist/**",
+      ".test-build/**",
+      "node_modules/**",
+      "test-output.log",
+      "e2e-output.log",
+      "lint-err.txt",
+      "client/vendor/**",
+      "client/src/**",
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

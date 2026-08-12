@@ -43,7 +43,7 @@ async function waitForHealth(url: string, timeoutMs: number): Promise<void> {
 let server: ChildProcess | null = null;
 let port = 0;
 
-test.beforeAll(async () => {
+test.beforeEach(async () => {
   port = await getFreePort();
   server = spawn(process.execPath, [path.resolve(__dirname, "..", "..", "dist", "index.js")], {
     cwd: path.resolve(__dirname, "..", ".."),
@@ -52,15 +52,16 @@ test.beforeAll(async () => {
       DASHBOARD_PORT: String(port),
       PRISM_AUTOIMPORT: "off",
       PRISM_AUTOLOAD: "off",
-      PRISM_PROJECT_DIR: path.join(os.tmpdir(), "prism-e2e"),
+      PRISM_PROJECT_DIR: path.join(os.tmpdir(), `prism-e2e-${Date.now()}`),
     },
     stdio: "ignore",
   });
   await waitForHealth(`http://127.0.0.1:${port}/health`, 20000);
 });
 
-test.afterAll(() => {
+test.afterEach(() => {
   if (server) server.kill();
+  server = null;
 });
 
 test("dashboard loads with the premium empty state", async ({ page }: { page: Page }) => {
@@ -70,7 +71,7 @@ test("dashboard loads with the premium empty state", async ({ page }: { page: Pa
   });
   page.on("pageerror", (err) => errors.push(String(err)));
 
-  await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "domcontentloaded" });
+  await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "domcontentloaded", timeout: 60000 });
   await expect(page.locator(".topbar")).toBeVisible();
   await expect(page.locator(".placeholder-guide")).toBeVisible();
   await expect(page.locator("#prompt-input")).toBeVisible();
@@ -78,8 +79,26 @@ test("dashboard loads with the premium empty state", async ({ page }: { page: Pa
   expect(errors).toEqual([]);
 });
 
+test("drawing canvas mounts and offers a template-first start", async ({ page }: { page: Page }) => {
+  const errors: string[] = [];
+  page.on("console", (msg) => {
+    if (msg.type() === "error") errors.push(msg.text());
+  });
+  page.on("pageerror", (err) => errors.push(String(err)));
+
+  await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "domcontentloaded", timeout: 60000 });
+  await page.locator("#canvas-mode-design").click();
+  await expect(page.locator("#canvas-editor-wrap")).toBeVisible();
+  // tldraw mounts its editor surface inside #canvas-editor
+  await expect(page.locator("#canvas-editor .tl-container")).toBeVisible({ timeout: 15000 });
+  // Empty page => the template picker appears
+  await expect(page.locator("#canvas-template-modal")).toBeVisible({ timeout: 10000 });
+  await expect(page.locator(".template-card").first()).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
 test("start-from-template creates a page", async ({ page }: { page: Page }) => {
-  await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "domcontentloaded" });
+  await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "domcontentloaded", timeout: 60000 });
   await page.locator("#empty-template").click();
   await expect(page.locator(".comp-wrapper").first()).toBeVisible({ timeout: 10000 });
 });

@@ -86,6 +86,8 @@ import { registerSpecTools } from "./tools/spec-tools.js";
 import { registerPlatformTools } from "./tools/platform-tools.js";
 import { registerCollabTools } from "./tools/collab-tools.js";
 import { registerGeneratePageTool } from "./tools/generate-tools.js";
+import { registerCanvasTools } from "./tools/canvas-tools.js";
+import { canvasToHtml, shapesToComponents } from "./canvas-shapes.js";
 import {
   registerSuggestTool,
   registerBrandStyleTool,
@@ -158,6 +160,7 @@ registerReviewAndImproveTool(server);
 registerPlatformTools(server);
 registerCollabTools(server);
 registerGeneratePageTool(server);
+registerCanvasTools(server);
 
 // MCP Resources + Prompts for agent context
 registerResources(server);
@@ -460,6 +463,82 @@ app.post("/api/writeback", (req, res) => {
           ? writebackPreview(clientDir)
           : writebackTokens(clientDir);
     res.json({ success: true, ...result });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+// API: Get the tldraw canvas document for a page (defaults to current page)
+app.get("/api/canvas", (req, res) => {
+  const state = stateStore.getState();
+  const pageId =
+    typeof req.query.pageId === "string" ? req.query.pageId : state.currentPageId;
+  if (!pageId) {
+    res.status(400).json({ error: "No page id" });
+    return;
+  }
+  const doc = stateStore.getCanvasDoc(pageId);
+  res.json({ success: true, page_id: pageId, doc });
+});
+
+// API: Save the tldraw canvas document for a page
+app.post("/api/canvas", (req, res) => {
+  const state = stateStore.getState();
+  const pageId =
+    typeof (req.body || {}).pageId === "string"
+      ? (req.body as { pageId: string }).pageId
+      : state.currentPageId;
+  const doc = (req.body || {}).doc;
+  if (!pageId || !doc || typeof doc !== "object") {
+    res.status(400).json({ error: "Missing pageId or canvas doc" });
+    return;
+  }
+  try {
+    stateStore.saveCanvasDoc(pageId, doc, "user");
+    res.json({ success: true, page_id: pageId, revision: stateStore.getState().revision });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+// API: Apply the current page's canvas drawing to the component model
+app.post("/api/canvas/apply", (_req, res) => {
+  const state = stateStore.getState();
+  const pageId = state.currentPageId;
+  const doc = stateStore.getCanvasDoc(pageId);
+  if (!pageId || !doc) {
+    res.status(400).json({ error: "No canvas document for the current page" });
+    return;
+  }
+  try {
+    const components = shapesToComponents(doc);
+    stateStore.replacePageComponents(pageId, components, "user");
+    res.json({
+      success: true,
+      page_id: pageId,
+      component_count: components.length,
+      components,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+// API: Write the canvas drawing back to a real HTML file in the client folder
+app.post("/api/canvas/export", async (_req, res) => {
+  const state = stateStore.getState();
+  const doc = stateStore.getCanvasDoc(state.currentPageId);
+  if (!doc) {
+    res.status(400).json({ error: "No canvas document for the current page" });
+    return;
+  }
+  try {
+    const html = canvasToHtml(doc, state.tokens);
+    const fs = await import("fs");
+    const targetClientDir = process.env.PRISM_CLIENT_DIR || clientDir;
+    const out = path.join(targetClientDir, "canvas-page.html");
+    fs.writeFileSync(out, html, "utf-8");
+    res.json({ success: true, file: out, size: html.length, component_count: shapesToComponents(doc).length });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
   }

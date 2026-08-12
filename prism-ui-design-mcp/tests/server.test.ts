@@ -634,3 +634,184 @@ test(
     }
   }
 );
+
+test(
+  "canvas endpoints: save, load, apply, and export a tldraw snapshot",
+  { timeout: 60000 },
+  async () => {
+    const port = await getFreePort();
+    const tempClientDir = path.join(os.tmpdir(), "prism-canvas-server-test");
+    rmSync(tempClientDir, { recursive: true, force: true });
+    cpSync(path.resolve(__dirname, "..", "..", "client"), tempClientDir, { recursive: true });
+    const child = spawn(process.execPath, [SERVER_ENTRY], {
+      cwd: path.resolve(__dirname, "..", ".."),
+      env: {
+        ...process.env,
+        DASHBOARD_PORT: String(port),
+        PRISM_PROJECT_DIR: path.join(os.tmpdir(), "prism-canvas-server-state"),
+        PRISM_CLIENT_DIR: tempClientDir,
+        PRISM_AUTOIMPORT: "off",
+        PRISM_AUTOLOAD: "off",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let logs = "";
+    child.stderr?.on("data", (d) => (logs += d.toString()));
+    const base = `http://127.0.0.1:${port}`;
+
+    try {
+      await waitForHealth(`${base}/health`, 20000);
+
+      const state0 = (await (await fetch(`${base}/api/state`)).json()) as {
+        currentPageId: string;
+        revision: number;
+      };
+      const pageId = state0.currentPageId;
+
+      // 1) No canvas doc yet
+      const empty = (await (await fetch(`${base}/api/canvas?pageId=${pageId}`)).json()) as {
+        success: boolean;
+        doc: unknown;
+      };
+      assert.equal(empty.success, true);
+      assert.equal(empty.doc, null);
+
+      // 2) Save a hand-crafted tldraw snapshot
+      const doc = {
+        document: {
+          schemaVersion: 1,
+          store: {
+            "shape:geo": {
+              id: "shape:geo",
+              typeName: "shape",
+              type: "geo",
+              x: 10,
+              y: 20,
+              props: {
+                w: 300,
+                h: 200,
+                richText: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Hello" }] }] },
+              },
+              meta: {},
+            },
+            "shape:txt": {
+              id: "shape:txt",
+              typeName: "shape",
+              type: "text",
+              x: 40,
+              y: 240,
+              props: {
+                w: 200,
+                h: 40,
+                richText: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Welcome" }] }] },
+              },
+              meta: {},
+            },
+            "shape:arrow": {
+              id: "shape:arrow",
+              typeName: "shape",
+              type: "arrow",
+              x: 0,
+              y: 0,
+              props: {},
+              meta: {},
+            },
+            "shape:btn": {
+              id: "shape:btn",
+              typeName: "shape",
+              type: "geo",
+              x: 0,
+              y: 500,
+              props: { w: 120, h: 40, richText: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Buy" }] }] } },
+              meta: {
+                prism: true,
+                componentId: "comp_orig_1",
+                componentType: "button",
+                componentVariant: "primary",
+                componentProps: { text: "Buy now" },
+              },
+            },
+          },
+        },
+      };
+
+      const saveRes = await fetch(`${base}/api/canvas`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pageId, doc }),
+      });
+      const saved = (await saveRes.json()) as { success: boolean; revision: number };
+      assert.equal(saved.success, true);
+      assert.ok(saved.revision > state0.revision, "canvas save should bump the revision");
+
+      const loaded = (await (await fetch(`${base}/api/canvas?pageId=${pageId}`)).json()) as {
+        success: boolean;
+        doc: { document: { store: Record<string, unknown> } };
+      };
+      assert.equal(loaded.success, true);
+      assert.ok(loaded.doc.document.store["shape:btn"], "saved doc should round-trip");
+
+      // 3) Apply the drawing to the component model
+      const applyRes = await fetch(`${base}/api/canvas/apply`, { method: "POST" });
+      const applied = (await applyRes.json()) as { success: boolean; component_count: number; components: Array<{ type: string; id: string; props: Record<string, unknown> }> };
+      assert.equal(applied.success, true);
+      assert.equal(applied.component_count, 3, "arrow should be skipped");
+      const button = applied.components.find((c) => c.type === "button");
+      assert.ok(button, "meta component should be restored as a button");
+      assert.equal(button?.id, "comp_orig_1");
+      assert.deepEqual(button?.props, { text: "Buy now" });
+
+      const afterState = (await (await fetch(`${base}/api/state`)).json()) as {
+        components: Array<{ type: string }>;
+        canvasDocs: Record<string, unknown>;
+      };
+      assert.equal(afterState.components.length, 3);
+      assert.ok(afterState.canvasDocs[pageId], "state should expose canvasDocs");
+
+      // 4) Write the drawing back to a real HTML file
+      const exportRes = await fetch(`${base}/api/canvas/export`, { method: "POST" });
+      const exported = (await exportRes.json()) as { success: boolean; file: string };
+      assert.equal(exported.success, true);
+      const html = readFileSync(path.join(tempClientDir, "canvas-page.html"), "utf-8");
+      assert.match(html, /Hello/);
+      assert.match(html, /Welcome/);
+      assert.match(html, /Buy now/);
+
+      // 5) Applying with no drawing returns 400
+      const pageRes = await fetch(`${base}/api/page`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Empty" }),
+      });
+      const newPage = (await pageRes.json()) as { page_id: string };
+      await fetch(`${base}/api/page/${newPage.page_id}/switch`, { method: "POST" });
+      const noDocRes = await fetch(`${base}/api/canvas/apply`, { method: "POST" });
+      assert.equal(noDocRes.status, 400);
+
+      const badSave = await fetch(`${base}/api/canvas`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pageId, doc: "not-an-object" }),
+      });
+      assert.equal(badSave.status, 400);
+    } catch (error) {
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}\n--- server logs ---\n${logs}`,
+        { cause: error }
+      );
+    } finally {
+      child.kill();
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(() => {
+          child.kill("SIGKILL");
+          resolve();
+        }, 3000);
+        child.once("exit", () => {
+          clearTimeout(timer);
+          resolve();
+        });
+      });
+      rmSync(tempClientDir, { recursive: true, force: true });
+    }
+  }
+);

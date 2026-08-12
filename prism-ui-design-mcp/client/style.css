@@ -5,7 +5,6 @@
    system sans + JetBrains Mono, Vercel-style focus rings.
    =================================================================== */
 
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 /* ===== Reset ===== */
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -3517,4 +3516,140 @@ textarea:focus-visible,
 .lib-item-save {
   border-style: dashed;
   border-color: var(--border-accent);
+}
+
+/* ===== Canvas Editor (方案A: tldraw drawing canvas) ===== */
+
+.canvas-mode-switch {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+.canvas-mode-btn {
+  padding: 4px 12px !important;
+  font-size: 12px !important;
+  border-radius: calc(var(--radius-sm) - 2px) !important;
+  border: 1px solid transparent !important;
+  color: var(--text-muted) !important;
+}
+.canvas-mode-btn.active {
+  background: var(--accent-bg) !important;
+  border-color: var(--border-accent) !important;
+  color: var(--accent-bright) !important;
+  font-weight: 600;
+}
+
+.canvas-editor-actions {
+  display: inline-flex;
+  gap: 6px;
+  margin-right: 8px;
+}
+.canvas-apply-btn {
+  background: linear-gradient(135deg, var(--spectrum-1), var(--spectrum-3)) !important;
+  border-color: transparent !important;
+  color: #fff !important;
+  font-weight: 600;
+}
+.canvas-apply-btn:hover:not(:disabled) {
+  filter: brightness(1.08);
+  border-color: transparent !important;
+}
+
+.canvas-editor-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  background: #f4f4f5;
+}
+.canvas-editor {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+.canvas-editor-hint {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  background: rgba(20, 20, 30, 0.82);
+  color: #fff;
+  font-size: 12px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+  white-space: nowrap;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+}
+body[data-theme="dark"] .canvas-editor-wrap {
+  background: #17171c;
+}
+
+/* Template picker cards */
+.template-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+.template-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  padding: 14px 12px;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.18s var(--ease);
+}
+.template-card:hover {
+  border-color: var(--border-accent);
+  background: var(--surface);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+.template-card .tc-icon {
+  font-size: 28px;
+  display: block;
+  margin-bottom: 8px;
+}
+.template-card .tc-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.template-card .tc-desc {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 3px;
+}
+.canvas-template-modal {
+  max-width: 560px;
+  width: 92%;
+}
+
+/* Toast */
+.prism-toast {
+  position: fixed;
+  bottom: 84px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  background: rgba(20, 20, 30, 0.92);
+  color: #fff;
+  font-size: 13px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(10px);
+  max-width: min(560px, 90vw);
+  text-align: center;
+}
+.prism-toast.toast-error {
+  background: rgba(190, 40, 60, 0.94);
 }

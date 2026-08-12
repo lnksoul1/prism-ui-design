@@ -75,6 +75,8 @@ export interface DesignState {
   platforms: Record<string, PlatformSnapshot>;
   comments: DesignComment[];
   revision: number;
+  /** tldraw canvas snapshots keyed by page id (方案A canvas-first editing). */
+  canvasDocs: Record<string, unknown>;
 }
 
 export interface PlatformSnapshot {
@@ -133,6 +135,7 @@ class DesignStateStore extends EventEmitter {
       platforms: {},
       comments: [],
       revision: 0,
+      canvasDocs: {},
     };
     // Initialize history with the initial state
     this.history = [JSON.parse(JSON.stringify(this.state))];
@@ -567,6 +570,7 @@ class DesignStateStore extends EventEmitter {
     if (idx === -1) return false;
 
     this.state.pages.splice(idx, 1);
+    delete this.state.canvasDocs[pageId];
 
     if (this.state.currentPageId === pageId) {
       const newPage = this.state.pages[0];
@@ -683,6 +687,7 @@ class DesignStateStore extends EventEmitter {
     this.state.currentPageId = defaultPage.id;
     this.state.components = defaultPage.components;
     this.state.themeMode = "light";
+    this.state.canvasDocs = {};
 
     this.logActivity("clear_all", "system", "Cleared all design state", source);
     this.commit({ type: "clearAll" });
@@ -739,6 +744,10 @@ class DesignStateStore extends EventEmitter {
       platforms: snapshot.platforms && typeof snapshot.platforms === "object" ? snapshot.platforms : {},
       comments: Array.isArray(snapshot.comments) ? snapshot.comments.slice(0, 200) : [],
       revision: typeof snapshot.revision === "number" ? snapshot.revision : 0,
+      canvasDocs:
+        snapshot.canvasDocs && typeof snapshot.canvasDocs === "object"
+          ? JSON.parse(JSON.stringify(snapshot.canvasDocs))
+          : {},
     };
     this.fixComponentsReference();
 
@@ -797,6 +806,7 @@ class DesignStateStore extends EventEmitter {
       platforms: {},
       comments: [],
       revision: 0,
+      canvasDocs: {},
     };
     this.history = [JSON.parse(JSON.stringify(this.state))];
     this.historyIndex = 0;
@@ -820,6 +830,48 @@ class DesignStateStore extends EventEmitter {
 
   clearPendingPrompt(): void {
     this.pendingPrompt = null;
+  }
+
+  // ===== Canvas Documents (方案A canvas-first editing) =====
+
+  /** Save a tldraw snapshot for a page. Stored opaquely as JSON. */
+  saveCanvasDoc(pageId: string, doc: unknown, source: "ai" | "user" = "user"): void {
+    this.state.canvasDocs[pageId] = JSON.parse(JSON.stringify(doc ?? null));
+    this.logActivity("save_canvas", "canvas", `Saved canvas for page ${pageId}`, source);
+    this.commit({ type: "canvasSave", pageId });
+  }
+
+  /** Return a deep copy of the canvas doc for a page (defaults to current). */
+  getCanvasDoc(pageId?: string | null): unknown | null {
+    const pid = pageId || this.state.currentPageId;
+    if (!pid) return null;
+    const doc = this.state.canvasDocs[pid];
+    return doc ? JSON.parse(JSON.stringify(doc)) : null;
+  }
+
+  /**
+   * Replace a page's component tree (used by "apply canvas to preview").
+   * Recorded in undo history like any other mutation.
+   */
+  replacePageComponents(
+    pageId: string,
+    components: ComponentNode[],
+    source: "ai" | "user" = "user"
+  ): boolean {
+    const page = this.state.pages.find((p) => p.id === pageId);
+    if (!page) return false;
+    page.components = components;
+    if (this.state.currentPageId === pageId) {
+      this.state.components = components;
+    }
+    this.logActivity(
+      "replace_components",
+      "canvas",
+      `Applied canvas: ${components.length} components on page ${pageId}`,
+      source
+    );
+    this.commit({ type: "replaceComponents", pageId, count: components.length });
+    return true;
   }
 
   // ===== Private Helpers =====

@@ -59,6 +59,9 @@ export const COMPONENT_TYPES = new Set([
   "feature_grid",
   "cookie_banner",
   "toggle",
+  "text",
+  "section",
+  "container",
 ]);
 
 export function isKnownComponentType(type: string): boolean {

@@ -189,3 +189,45 @@ test("quick actions: prompt chips, ? help, Ctrl+K palette, template thumbnails",
 
   expect(errors).toEqual([]);
 });
+
+test("inspect code tab and brand design systems work from the dashboard", async ({ page }: { page: Page }) => {
+  const errors: string[] = [];
+  page.on("console", (msg) => {
+    if (msg.type() === "error") errors.push(msg.text());
+  });
+  page.on("pageerror", (err) => errors.push(String(err)));
+
+  await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "domcontentloaded", timeout: 60000 });
+  await expect(page.locator(".topbar")).toBeVisible();
+
+  // Generate a SaaS page so there is a component to inspect
+  await page.fill("#prompt-input", "应用 SaaS 模板");
+  await page.click("#prompt-send");
+  await expect(page.locator("#prompt-status")).toContainText("已执行", { timeout: 5000 });
+  await expect(page.locator(".comp-wrapper").first()).toBeVisible({ timeout: 10000 });
+
+  // Inspect: select the first component and open the Code tab
+  await page.locator(".comp-wrapper").first().click();
+  await expect(page.locator(".inspector-tabs")).toBeVisible();
+  await page.locator(".inspector-tab").filter({ hasText: "代码" }).click();
+  await expect(page.locator(".inspector-code")).toContainText("<", { timeout: 5000 });
+  const copyEnabled = await page.locator(".inspector-copy-btn").isEnabled();
+  expect(copyEnabled).toBe(true);
+
+  // Brand design systems: list renders 6 cards, applying Linear changes tokens
+  await page.locator('.lib-tab[data-lib="designSystems"]').click();
+  await expect(page.locator(".ds-card")).toHaveCount(6, { timeout: 5000 });
+  await page.locator(".ds-apply").first().click();
+  await page.waitForFunction(
+    async () => {
+      const state = (await (await fetch("/api/state")).json()) as {
+        tokens: { colors: Record<string, { value?: string }> };
+      };
+      return state.tokens.colors["color-primary"]?.value === "#5E6AD2";
+    },
+    null,
+    { timeout: 10000 }
+  );
+
+  expect(errors).toEqual([]);
+});

@@ -35,7 +35,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { WebSocketServer, WebSocket } from "ws";
 import { SERVER_NAME, SERVER_VERSION } from "./constants.js";
-import { stateStore } from "./state.js";
+import { stateStore, type ComponentNode } from "./state.js";
 import { applyStyleTokenSet } from "./tokens.js";
 
 // Shared mutation layer (used by both REST and WebSocket channels)
@@ -53,7 +53,12 @@ import { registerBreakpointsTool } from "./tools/breakpoints.js";
 import { registerDesignTokensTool } from "./tools/design-tokens.js";
 
 // New real-time design manipulation tools
-import { registerAllDesignTools, exportDesign, applyPageTemplate } from "./tools/design-tools.js";
+import {
+  registerAllDesignTools,
+  exportDesign,
+  exportComponentCode,
+  applyPageTemplate,
+} from "./tools/design-tools.js";
 
 // Project import module
 import { importClientUi, scanProject, type ExtractedPage } from "./import-project.js";
@@ -79,6 +84,7 @@ import { registerTemplateTools } from "./tools/template-tools.js";
 import { registerVersionTools } from "./tools/version-tools.js";
 import { registerDesignMdTool } from "./tools/design-md.js";
 import { registerStyleGuideTools } from "./tools/style-guide-tools.js";
+import { applyStyleGuide, BRAND_DESIGN_SYSTEMS } from "./style-guides.js";
 import { registerSemanticStyleTool } from "./tools/semantic-tools.js";
 import { registerCapabilitiesTool } from "./tools/capabilities.js";
 import { registerWebpageImportTool } from "./tools/webpage-import.js";
@@ -212,6 +218,39 @@ app.post("/api/component/reorder", (req, res) => {
   }
   const success = designService.reorderComponent(from_id, to_id, position, "user");
   res.json({ success });
+});
+
+// API: Inspect — export a single component as code (HTML / React / CSS)
+function findComponentInState(id: string): ComponentNode | null {
+  const state = stateStore.getState();
+  const search = (list: ComponentNode[]): ComponentNode | null => {
+    for (const c of list) {
+      if (c.id === id) return c;
+      const found = search(c.children || []);
+      if (found) return found;
+    }
+    return null;
+  };
+  for (const page of state.pages) {
+    const found = search(page.components);
+    if (found) return found;
+  }
+  return null;
+}
+
+app.get("/api/component/:id/code", (req, res) => {
+  const format = typeof req.query.format === "string" ? req.query.format : "html";
+  if (!["html", "react", "css"].includes(format)) {
+    res.status(400).json({ error: "Invalid format. Must be 'html', 'react', or 'css'" });
+    return;
+  }
+  const comp = findComponentInState(req.params.id);
+  if (!comp) {
+    res.status(404).json({ error: `Component ${req.params.id} not found` });
+    return;
+  }
+  const code = exportComponentCode(comp, format, stateStore.getState().tokens);
+  res.json({ success: true, id: comp.id, type: comp.type, format, code });
 });
 
 // API: Update component (from client inline edit)
@@ -623,6 +662,43 @@ app.get("/api/templates", (_req, res) => {
     res.json({ success: true, count: templates.length, templates });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+// API: List brand design systems (one-click token overrides)
+app.get("/api/design-systems", (_req, res) => {
+  const systems = BRAND_DESIGN_SYSTEMS.map((s) => ({
+    id: s.id,
+    name: s.name,
+    description: s.description,
+    keywords: s.keywords,
+    swatch:
+      s.tokens.colors?.["color-primary"] ||
+      s.tokens.colors?.["color-accent"] ||
+      s.tokens.colors?.["color-bg"] ||
+      null,
+    preview: {
+      bg: s.tokens.colors?.["color-bg"] || null,
+      surface: s.tokens.colors?.["color-surface"] || null,
+      text: s.tokens.colors?.["color-text"] || null,
+      primary: s.tokens.colors?.["color-primary"] || null,
+    },
+  }));
+  res.json({ success: true, systems });
+});
+
+// API: Apply a brand design system (token overrides, undoable)
+app.post("/api/design-system/apply", (req, res) => {
+  const { name } = req.body || {};
+  if (!name || typeof name !== "string") {
+    res.status(400).json({ error: "Missing design system name" });
+    return;
+  }
+  try {
+    const result = applyStyleGuide(name);
+    res.json({ success: true, guide_id: result.guide_id, guide_name: result.guide_name, overrides: result.overrides.length });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
   }
 });
 

@@ -850,6 +850,160 @@ test(
 );
 
 test(
+  "Inspect endpoint exports single-component code (html/react/css) and 404s for unknown ids",
+  { timeout: 60000 },
+  async () => {
+    const port = await getFreePort();
+    const child = spawn(process.execPath, [SERVER_ENTRY], {
+      cwd: path.resolve(__dirname, "..", ".."),
+      env: {
+        ...process.env,
+        DASHBOARD_PORT: String(port),
+        PRISM_PROJECT_DIR: path.join(os.tmpdir(), "prism-server-inspect-test"),
+        PRISM_AUTOIMPORT: "off",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let logs = "";
+    child.stdout?.on("data", (d) => (logs += d.toString()));
+    child.stderr?.on("data", (d) => (logs += d.toString()));
+    const base = `http://127.0.0.1:${port}`;
+
+    try {
+      await waitForHealth(`${base}/health`, 20000);
+
+      const compRes = await fetch(`${base}/api/component`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "hero", variant: "center", props: { title: "Inspect Me" } }),
+      });
+      const comp = (await compRes.json()) as { success: boolean; id: string };
+      assert.equal(comp.success, true);
+
+      const htmlRes = await fetch(`${base}/api/component/${comp.id}/code?format=html`);
+      const html = (await htmlRes.json()) as { success: boolean; code: string; type: string };
+      assert.equal(html.success, true);
+      assert.equal(html.type, "hero");
+      assert.ok(html.code.includes("Inspect Me"));
+      assert.ok(html.code.includes("<section"));
+
+      const reactRes = await fetch(`${base}/api/component/${comp.id}/code?format=react`);
+      const react = (await reactRes.json()) as { success: boolean; code: string };
+      assert.equal(react.success, true);
+      assert.ok(react.code.includes("className="));
+      assert.ok(!react.code.includes('class="'));
+
+      const cssRes = await fetch(`${base}/api/component/${comp.id}/code?format=css`);
+      const css = (await cssRes.json()) as { success: boolean; code: string };
+      assert.equal(css.success, true);
+      assert.ok(css.code.includes(":root"));
+
+      const badFmt = await fetch(`${base}/api/component/${comp.id}/code?format=swift`);
+      assert.equal(badFmt.status, 400);
+
+      const missing = await fetch(`${base}/api/component/comp_nope_123/code?format=html`);
+      assert.equal(missing.status, 404);
+    } catch (error) {
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}\n--- server logs ---\n${logs}`,
+        { cause: error }
+      );
+    } finally {
+      child.kill();
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(() => {
+          child.kill("SIGKILL");
+          resolve();
+        }, 3000);
+        child.once("exit", () => {
+          clearTimeout(timer);
+          resolve();
+        });
+      });
+    }
+  }
+);
+
+test(
+  "design-system endpoints list 6 brand systems and apply token overrides",
+  { timeout: 60000 },
+  async () => {
+    const port = await getFreePort();
+    const child = spawn(process.execPath, [SERVER_ENTRY], {
+      cwd: path.resolve(__dirname, "..", ".."),
+      env: {
+        ...process.env,
+        DASHBOARD_PORT: String(port),
+        PRISM_PROJECT_DIR: path.join(os.tmpdir(), "prism-server-ds-test"),
+        PRISM_AUTOIMPORT: "off",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let logs = "";
+    child.stdout?.on("data", (d) => (logs += d.toString()));
+    child.stderr?.on("data", (d) => (logs += d.toString()));
+    const base = `http://127.0.0.1:${port}`;
+
+    try {
+      await waitForHealth(`${base}/health`, 20000);
+
+      const listRes = await fetch(`${base}/api/design-systems`);
+      const list = (await listRes.json()) as {
+        success: boolean;
+        systems: Array<{ id: string; swatch: string | null; preview: { primary: string | null } }>;
+      };
+      assert.equal(list.success, true);
+      assert.equal(list.systems.length, 6);
+      const linear = list.systems.find((s) => s.id === "linear");
+      assert.ok(linear);
+      assert.ok(linear.swatch);
+      assert.ok(linear.preview.primary);
+
+      const applyRes = await fetch(`${base}/api/design-system/apply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "linear" }),
+      });
+      const applied = (await applyRes.json()) as { success: boolean; guide_id: string; overrides: number };
+      assert.equal(applied.success, true);
+      assert.equal(applied.guide_id, "linear");
+      assert.ok(applied.overrides > 0);
+
+      const state = (await (await fetch(`${base}/api/state`)).json()) as {
+        tokens: { colors: Record<string, { value: string }> };
+        activityLog: Array<{ action: string }>;
+      };
+      assert.equal(state.tokens.colors["color-primary"].value, "#5E6AD2");
+      assert.ok(state.activityLog.some((a) => a.action === "set_token"));
+
+      const badRes = await fetch(`${base}/api/design-system/apply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "unknown-brand" }),
+      });
+      assert.equal(badRes.status, 400);
+    } catch (error) {
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}\n--- server logs ---\n${logs}`,
+        { cause: error }
+      );
+    } finally {
+      child.kill();
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(() => {
+          child.kill("SIGKILL");
+          resolve();
+        }, 3000);
+        child.once("exit", () => {
+          clearTimeout(timer);
+          resolve();
+        });
+      });
+    }
+  }
+);
+
+test(
   "built-in prompt executor reacts to instructions over REST and WS",
   { timeout: 60000 },
   async () => {

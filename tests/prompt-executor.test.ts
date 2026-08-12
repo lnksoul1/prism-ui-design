@@ -73,3 +73,62 @@ test("leaves unmatched instructions queued for the agent", () => {
   assert.equal(result.executed, false);
   assert.equal(result.summary, "");
 });
+
+test("component styling: color targets the button, not the global token", () => {
+  executeUserPrompt("添加一个按钮");
+  const result = executeUserPrompt("把按钮改成蓝色");
+  assert.equal(result.executed, true);
+  assert.equal(result.action, "style_component");
+  const comp = stateStore.getState().components[0];
+  assert.equal(comp.type, "button");
+  assert.equal(comp.props.color, "#3B82F6");
+  // The global primary token must be untouched
+  assert.notEqual(stateStore.getState().tokens.colors["color-primary"].value, "#3B82F6");
+});
+
+test("component styling: combined color + radius + font size", () => {
+  executeUserPrompt("添加一个按钮");
+  const result = executeUserPrompt("把按钮改成蓝色圆角 12 字号 18");
+  assert.equal(result.executed, true);
+  const props = stateStore.getState().components[0].props as Record<string, unknown>;
+  assert.equal(props.color, "#3B82F6");
+  assert.equal(props.radius, "12px");
+  assert.equal(props.fontSize, "18px");
+});
+
+test("component styling: '按钮颜色改成…' still hits the component", () => {
+  executeUserPrompt("添加一个按钮");
+  const result = executeUserPrompt("按钮颜色改成绿色");
+  assert.equal(result.executed, true);
+  assert.equal(result.action, "style_component");
+  assert.equal(stateStore.getState().components[0].props.color, "#22C55E");
+  assert.notEqual(stateStore.getState().tokens.colors["color-primary"].value, "#22C55E");
+});
+
+test("component styling: background targets the component when named", () => {
+  executeUserPrompt("添加一个卡片");
+  const result = executeUserPrompt("卡片背景改成深蓝色");
+  assert.equal(result.executed, true);
+  const props = stateStore.getState().components[0].props as Record<string, unknown>;
+  assert.equal(props.bg, "#1E3A8A");
+  assert.notEqual(stateStore.getState().tokens.colors["color-bg"].value, "#1E3A8A");
+});
+
+test("component styling: no matching component falls back to the agent", () => {
+  const result = executeUserPrompt("把按钮改成蓝色");
+  assert.equal(result.executed, false);
+  assert.match(result.summary, /没有「button」组件/);
+});
+
+test("component styling: '主色/primary' still forces the global token", () => {
+  const result = executeUserPrompt("把主色改成红色");
+  assert.equal(result.executed, true);
+  assert.equal(result.action, "set_primary_color");
+  assert.equal(stateStore.getState().tokens.colors["color-primary"].value, "#EF4444");
+});
+
+test("component styling: '添加一个按钮' still adds instead of styling", () => {
+  const result = executeUserPrompt("添加一个按钮");
+  assert.equal(result.executed, true);
+  assert.equal(stateStore.getState().components[0].type, "button");
+});

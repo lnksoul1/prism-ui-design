@@ -181,6 +181,198 @@ export const STYLE_GUIDES: StyleGuide[] = [
   },
 ];
 
+/**
+ * Brand design systems (Inspired by OpenStitch's DESIGN.md presets):
+ * one-click token overrides that restyle the whole project without touching
+ * component structure. Listed in the dashboard design-library "设计系统" tab.
+ */
+export const BRAND_DESIGN_SYSTEMS: StyleGuide[] = [
+  {
+    id: "linear",
+    name: "Linear",
+    description: "深色高效、靛蓝主色、紧凑圆角，适合开发者工具。",
+    keywords: ["linear", "linear.app", "开发者工具", "深色高效"],
+    tokens: {
+      colors: {
+        "color-bg": "#08090A",
+        "color-surface": "#101113",
+        "color-text": "#F7F8F8",
+        "color-text-muted": "#8A8F98",
+        "color-primary": "#5E6AD2",
+        "color-accent": "#26A9E0",
+        "color-border": "#26272B",
+      },
+      radii: {
+        "radius-sm": "4px",
+        "radius-md": "6px",
+        "radius-lg": "8px",
+        "radius-xl": "10px",
+      },
+      typography: {
+        "font-display": "'Inter', system-ui, sans-serif",
+        "font-body": "'Inter', system-ui, sans-serif",
+      },
+    },
+    variantHints: { button: "primary", card: "elevated" },
+  },
+  {
+    id: "stripe",
+    name: "Stripe",
+    description: "明亮清爽、靛紫主色、蓝紫渐变，适合支付与 SaaS。",
+    keywords: ["stripe", "支付", "saas 明亮", "clean"],
+    tokens: {
+      colors: {
+        "color-bg": "#F6F8FA",
+        "color-surface": "#FFFFFF",
+        "color-text": "#0A2540",
+        "color-text-muted": "#425466",
+        "color-primary": "#635BFF",
+        "color-accent": "#00D4FF",
+        "color-border": "#E6EBF1",
+      },
+      radii: {
+        "radius-sm": "4px",
+        "radius-md": "6px",
+        "radius-lg": "10px",
+        "radius-xl": "14px",
+      },
+      shadows: {
+        "shadow-sm": "0 1px 2px rgba(10, 37, 64, 0.08)",
+        "shadow-md": "0 4px 12px rgba(10, 37, 64, 0.12)",
+        "shadow-lg": "0 12px 32px rgba(10, 37, 64, 0.14)",
+        "shadow-xl": "0 20px 48px rgba(10, 37, 64, 0.18)",
+        "shadow-2xl": "0 32px 72px rgba(10, 37, 64, 0.22)",
+      },
+    },
+    variantHints: { button: "primary", card: "elevated" },
+  },
+  {
+    id: "vercel",
+    name: "Vercel",
+    description: "黑白极简、无彩色干扰，适合技术品牌与作品集。",
+    keywords: ["vercel", "极简", "monochrome", "黑", "白"],
+    tokens: {
+      colors: {
+        "color-bg": "#000000",
+        "color-surface": "#111111",
+        "color-text": "#FAFAFA",
+        "color-text-muted": "#888888",
+        "color-primary": "#FFFFFF",
+        "color-accent": "#0070F3",
+        "color-border": "#333333",
+      },
+      radii: {
+        "radius-sm": "4px",
+        "radius-md": "6px",
+        "radius-lg": "8px",
+        "radius-xl": "12px",
+      },
+      typography: {
+        "font-display": "'Geist', 'Inter', system-ui, sans-serif",
+        "font-body": "'Geist', 'Inter', system-ui, sans-serif",
+      },
+    },
+    variantHints: { button: "ghost", card: "flat" },
+  },
+  {
+    id: "notion",
+    name: "Notion",
+    description: "暖白纸感、中性文字、克制蓝，适合文档与知识库。",
+    keywords: ["notion", "文档", "笔记", "knowledge", "warm"],
+    tokens: {
+      colors: {
+        "color-bg": "#FFFFFF",
+        "color-surface": "#FFFFFF",
+        "color-text": "#37352F",
+        "color-text-muted": "#6B6B6B",
+        "color-primary": "#37352F",
+        "color-accent": "#2383E2",
+        "color-border": "#E9E9E7",
+      },
+      radii: {
+        "radius-sm": "3px",
+        "radius-md": "5px",
+        "radius-lg": "8px",
+        "radius-xl": "10px",
+      },
+      shadows: {
+        "shadow-sm": "0 1px 3px rgba(15, 15, 15, 0.06)",
+        "shadow-md": "0 2px 8px rgba(15, 15, 15, 0.1)",
+        "shadow-lg": "0 8px 24px rgba(15, 15, 15, 0.12)",
+        "shadow-xl": "0 16px 40px rgba(15, 15, 15, 0.16)",
+        "shadow-2xl": "0 24px 64px rgba(15, 15, 15, 0.2)",
+      },
+    },
+    variantHints: { button: "ghost", card: "flat" },
+  },
+  {
+    id: "arc",
+    name: "Arc",
+    description: "奶油底色、黄绿主色、圆润活泼，适合消费级产品。",
+    keywords: ["arc", "browser", "奶油", "黄绿", "playful"],
+    tokens: {
+      colors: {
+        "color-bg": "#F7F5F0",
+        "color-surface": "#FFFFFF",
+        "color-text": "#1D1D1F",
+        "color-text-muted": "#6E6E73",
+        "color-primary": "#CBE54E",
+        "color-accent": "#FC7B6B",
+        "color-border": "#E8E5DE",
+      },
+      radii: {
+        "radius-sm": "6px",
+        "radius-md": "10px",
+        "radius-lg": "16px",
+        "radius-xl": "22px",
+      },
+      shadows: {
+        "shadow-sm": "0 1px 2px rgba(29, 29, 31, 0.06)",
+        "shadow-md": "0 4px 14px rgba(29, 29, 31, 0.1)",
+        "shadow-lg": "0 12px 32px rgba(29, 29, 31, 0.12)",
+        "shadow-xl": "0 20px 48px rgba(29, 29, 31, 0.16)",
+        "shadow-2xl": "0 32px 72px rgba(29, 29, 31, 0.2)",
+      },
+    },
+    variantHints: { button: "primary", card: "rounded" },
+  },
+  {
+    id: "spotify",
+    name: "Spotify",
+    description: "碳黑底、荧光绿、粗壮排版，适合音乐与娱乐产品。",
+    keywords: ["spotify", "音乐", "娱乐", "dark", "green"],
+    tokens: {
+      colors: {
+        "color-bg": "#121212",
+        "color-surface": "#181818",
+        "color-text": "#FFFFFF",
+        "color-text-muted": "#B3B3B3",
+        "color-primary": "#1DB954",
+        "color-accent": "#1ED760",
+        "color-border": "#2A2A2A",
+      },
+      radii: {
+        "radius-sm": "4px",
+        "radius-md": "6px",
+        "radius-lg": "10px",
+        "radius-xl": "14px",
+      },
+      shadows: {
+        "shadow-sm": "0 1px 2px rgba(0, 0, 0, 0.3)",
+        "shadow-md": "0 4px 12px rgba(0, 0, 0, 0.35)",
+        "shadow-lg": "0 12px 32px rgba(0, 0, 0, 0.4)",
+        "shadow-xl": "0 20px 48px rgba(0, 0, 0, 0.45)",
+        "shadow-2xl": "0 32px 72px rgba(0, 0, 0, 0.5)",
+      },
+    },
+    variantHints: { button: "primary", card: "elevated" },
+  },
+];
+
+// Brand design systems are full token overrides like style guides, so route
+// them through the same matching + application machinery.
+STYLE_GUIDES.push(...BRAND_DESIGN_SYSTEMS);
+
 /** Fuzzy-match a style guide by id or keywords. */
 export function matchStyleGuide(tag: string): StyleGuide | undefined {
   const t = tag.trim().toLowerCase();

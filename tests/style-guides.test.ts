@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { stateStore } from "../src/state.js";
 import {
   STYLE_GUIDES,
+  BRAND_DESIGN_SYSTEMS,
   applyStyleGuide,
   matchStyleGuide,
   radiusSetFor,
@@ -50,4 +51,39 @@ test("style guide catalog covers the documented guides", () => {
   for (const id of ["glassmorphism", "brutalist", "retro", "neumorphism", "cyberpunk", "editorial"]) {
     assert.ok(ids.includes(id), `missing guide ${id}`);
   }
+});
+
+test("brand design systems are exposed and route through the same applier", () => {
+  const ids = BRAND_DESIGN_SYSTEMS.map((s) => s.id);
+  for (const id of ["linear", "stripe", "vercel", "notion", "arc", "spotify"]) {
+    assert.ok(ids.includes(id), `missing brand system ${id}`);
+  }
+  // Every brand system defines a primary + background so the preview card works
+  for (const sys of BRAND_DESIGN_SYSTEMS) {
+    assert.ok(sys.tokens.colors?.["color-primary"], `${sys.id} missing color-primary`);
+    assert.ok(sys.tokens.colors?.["color-bg"], `${sys.id} missing color-bg`);
+  }
+  // Brand systems are matchable/applicable like any style guide
+  assert.equal(matchStyleGuide("linear")?.id, "linear");
+  const result = applyStyleGuide("stripe", "minimal");
+  assert.equal(result.guide_id, "stripe");
+  const state = stateStore.getState();
+  assert.equal(state.tokens.colors["color-primary"].value, "#635BFF");
+});
+
+test("applying a brand design system is undoable", () => {
+  applyStyleGuide("minimal", "minimal");
+  const before = stateStore.getState().tokens.colors["color-primary"].value;
+  applyStyleGuide("spotify", "minimal");
+  assert.equal(stateStore.getState().tokens.colors["color-primary"].value, "#1DB954");
+  let guard = 0;
+  while (
+    stateStore.getState().tokens.colors["color-primary"].value !== before &&
+    stateStore.canUndo() &&
+    guard < 60
+  ) {
+    stateStore.undo();
+    guard++;
+  }
+  assert.equal(stateStore.getState().tokens.colors["color-primary"].value, before);
 });

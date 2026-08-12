@@ -55,7 +55,7 @@ function tokensToObject(tokens: DesignTokens): Record<string, Record<string, str
   return result;
 }
 
-function componentToHTML(node: ComponentNode): string {
+export function componentToHTML(node: ComponentNode): string {
   const p = node.props;
   const v = node.variant ? ` ${node.type}--${node.variant}` : "";
 
@@ -445,12 +445,63 @@ function componentToHTML(node: ComponentNode): string {
   return html;
 }
 
-function htmlToJSX(html: string): string {
+export function htmlToJSX(html: string): string {
   return html
     .replace(/\bclass=/g, "className=")
     .replace(/<img([^>]*?)(?<!\/)>/g, "<img$1 />")
     .replace(/<input([^>]*?)(?<!\/)>/g, "<input$1 />")
     .replace(/<br([^>]*?)(?<!\/)>/g, "<br$1 />");
+}
+
+/**
+ * Export a single component as code (Inspect mode).
+ * - html: raw semantic HTML fragment
+ * - react: JSX fragment (className/self-closing tags normalized)
+ * - css: design-token CSS variables the component styling depends on
+ */
+export function exportComponentCode(
+  node: ComponentNode,
+  format: string,
+  tokens?: DesignTokens
+): string {
+  const baseHtml = componentToHTML(node);
+  let html = baseHtml;
+  let reactHtml = baseHtml;
+  const p = node.props || {};
+  const inline: string[] = [];
+  const jsxStyles: string[] = [];
+  const pushStyle = (prop: string, cssKey: string, jsxKey: string, raw: unknown): void => {
+    if (raw === undefined || raw === null || raw === "") return;
+    const value = String(raw).replace(/px$/, "");
+    inline.push(`${cssKey}: ${value}px`);
+    jsxStyles.push(`${jsxKey}: '${value}px'`);
+  };
+  if (p.color) {
+    inline.push(`color: ${String(p.color)}`);
+    jsxStyles.push(`color: '${String(p.color)}'`);
+  }
+  if (p.bg) {
+    inline.push(`background: ${String(p.bg)}`);
+    jsxStyles.push(`background: '${String(p.bg)}'`);
+  }
+  pushStyle("radius", "border-radius", "borderRadius", p.radius);
+  pushStyle("fontSize", "font-size", "fontSize", p.fontSize);
+  pushStyle("spacing", "padding", "padding", p.spacing);
+  if (inline.length > 0) {
+    html = `<div style="${inline.join("; ")}">\n${html}\n</div>`;
+  }
+  if (jsxStyles.length > 0) {
+    reactHtml = `<div style={{${jsxStyles.join(", ")}}}>\n${reactHtml}\n</div>`;
+  }
+  switch (format) {
+    case "react":
+      return htmlToJSX(reactHtml);
+    case "css":
+      return tokens ? tokensToCSSVariables(tokens) : "/* no tokens available */";
+    case "html":
+    default:
+      return html;
+  }
 }
 
 function exportToHTML(state: DesignState, components: ComponentNode[] = state.components): string {

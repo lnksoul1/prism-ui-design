@@ -8,6 +8,7 @@ import {
   extractPlainText,
   shapesToComponents,
 } from "../src/canvas-shapes.js";
+import { isKnownComponentType } from "../src/service/design-service.js";
 
 function richText(text: string): unknown {
   return {
@@ -112,6 +113,72 @@ test("shapesToComponents restores original component identity from meta", () => 
   assert.equal(components[0].variant, "primary");
   assert.deepEqual(components[0].props, { text: "Buy now", action: "checkout" });
   assert.deepEqual(components[0].layout, { x: 0, y: 500, w: 120, h: 40 });
+});
+
+test("shapesToComponents preserves text styling (font size, family, color, align)", () => {
+  const doc = docWithShapes([
+    {
+      id: "shape:txt",
+      typeName: "shape",
+      type: "text",
+      x: 8,
+      y: 12,
+      props: {
+        w: 240,
+        h: 36,
+        size: "l",
+        font: "serif",
+        color: "light-blue",
+        align: "center",
+        richText: richText("Big title"),
+      },
+      meta: {},
+    },
+  ]);
+  const components = shapesToComponents(doc);
+  assert.equal(components.length, 1);
+  assert.equal(components[0].type, "text");
+  const p = components[0].props as Record<string, unknown>;
+  assert.equal(p.text, "Big title");
+  assert.equal(p.fontSize, "24px");
+  assert.equal(p.fontFamily, "serif");
+  assert.equal(p.color, "#93C5FD");
+  assert.equal(p.align, "center");
+});
+
+test("shapesToComponents maps compact geo blocks to buttons with radius + color", () => {
+  const doc = docWithShapes([
+    {
+      id: "shape:geo",
+      typeName: "shape",
+      type: "geo",
+      x: 0,
+      y: 0,
+      props: {
+        w: 120,
+        h: 40,
+        geo: "rectangle",
+        fill: "solid",
+        color: "green",
+        radius: 0.5,
+        richText: richText("Buy"),
+      },
+      meta: {},
+    },
+  ]);
+  const components = shapesToComponents(doc);
+  assert.equal(components.length, 1);
+  assert.equal(components[0].type, "button");
+  const p = components[0].props as Record<string, unknown>;
+  assert.equal(p.text, "Buy");
+  assert.equal(p.color, "#22C55E");
+  assert.equal(p.radius, "10px");
+});
+
+test("canvas-first component types are known to the service", () => {
+  for (const type of ["text", "section", "container"]) {
+    assert.equal(isKnownComponentType(type), true, `${type} should be a known component type`);
+  }
 });
 
 test("shapesToComponents maps image shapes to image components with asset src", () => {

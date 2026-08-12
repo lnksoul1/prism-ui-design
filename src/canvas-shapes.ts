@@ -61,6 +61,42 @@ function num(v: unknown, fallback = 0): number {
   return typeof v === "number" && Number.isFinite(v) ? v : fallback;
 }
 
+/** tldraw theme color names -> CSS hex (kept small; unknown names pass through). */
+const TL_COLOR_HEX: Record<string, string> = {
+  black: "#000000",
+  grey: "#9CA3AF",
+  blue: "#3B82F6",
+  "light-blue": "#93C5FD",
+  green: "#22C55E",
+  "light-green": "#86EFAC",
+  red: "#EF4444",
+  "light-red": "#FCA5A5",
+  yellow: "#EAB308",
+  "light-yellow": "#FDE047",
+  orange: "#F97316",
+  "light-orange": "#FDBA74",
+  violet: "#8B5CF6",
+  "light-violet": "#C4B5FD",
+};
+
+const TL_FONT_FAMILY: Record<string, string> = {
+  sans: "sans-serif",
+  serif: "serif",
+  mono: "monospace",
+};
+
+const TL_FONT_SIZE_PX: Record<string, number> = {
+  s: 12,
+  m: 16,
+  l: 24,
+  xl: 36,
+};
+
+function normalizeColor(value: unknown): string {
+  if (typeof value !== "string" || !value) return "";
+  return TL_COLOR_HEX[value] || value;
+}
+
 function shapeBounds(shape: CanvasShape): { x: number; y: number; w: number; h: number } {
   const props = shape.props || {};
   return {
@@ -112,14 +148,31 @@ function guessComponent(shape: CanvasShape, assets: Map<string, { src?: string; 
     case "note": {
       const text = extractPlainText(props.richText ?? props.text);
       if (!text.trim()) return null;
-      return makeComponent("text", { text, color: props.color || "default" }, bounds);
+      const fontSize = TL_FONT_SIZE_PX[String(props.size || "m")] || 16;
+      const fontFamily = TL_FONT_FAMILY[String(props.font || "sans")] || "sans-serif";
+      const color = normalizeColor(props.color);
+      const out: Record<string, unknown> = { text, fontSize: `${fontSize}px`, fontFamily };
+      if (color) out.color = color;
+      if (typeof props.align === "string" && props.align) out.align = props.align;
+      return makeComponent("text", out, bounds);
     }
     case "geo": {
       const text = extractPlainText(props.richText ?? props.label ?? "");
       const geo = typeof props.geo === "string" ? props.geo : "rectangle";
       const isCompact = bounds.h <= 72 && bounds.w <= 320;
       const kind = isCompact && text ? "button" : "container";
-      return makeComponent(kind, { text: text || kind, geo, fill: props.fill || "solid", color: props.color || "default" }, bounds);
+      const out: Record<string, unknown> = {
+        text: text || kind,
+        geo,
+        fill: props.fill || "solid",
+      };
+      const color = normalizeColor(props.color);
+      if (color) out.color = color;
+      if (typeof props.radius === "number" && props.radius > 0) {
+        const r = Math.round(props.radius * Math.min(bounds.w, bounds.h) / 2);
+        if (r > 0) out.radius = `${r}px`;
+      }
+      return makeComponent(kind, out, bounds);
     }
     case "frame":
       return makeComponent("section", { title: extractPlainText(props.title ?? "") }, bounds);

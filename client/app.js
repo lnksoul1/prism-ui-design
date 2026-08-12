@@ -216,6 +216,16 @@ const I18N = {
     chipSaaS: "🚀 SaaS 模板",
     chipEcommerce: "🛍️ 电商模板",
     chipClear: "🗑️ 清空",
+    inspectorPropsTab: "属性",
+    inspectorCodeTab: "代码",
+    copyCode: "复制代码",
+    codeCopied: "已复制",
+    codeLoading: "加载中…",
+    codeEmpty: "暂无可复制的代码",
+    libDesignSystems: "设计系统",
+    dsApply: "应用",
+    dsApplied: "已应用设计系统「{name}」",
+    dsError: "应用设计系统失败",
   },
   en: {
     connected: "Connected",
@@ -373,6 +383,16 @@ const I18N = {
     chipSaaS: "🚀 SaaS template",
     chipEcommerce: "🛍️ E-commerce template",
     chipClear: "🗑️ Clear",
+    inspectorPropsTab: "Props",
+    inspectorCodeTab: "Code",
+    copyCode: "Copy code",
+    codeCopied: "Copied",
+    codeLoading: "Loading…",
+    codeEmpty: "No code available",
+    libDesignSystems: "Design systems",
+    dsApply: "Apply",
+    dsApplied: "Applied design system \"{name}\"",
+    dsError: "Failed to apply design system",
   },
 };
 
@@ -954,9 +974,28 @@ function countComponents(components) {
   return count;
 }
 
+function applyStyleProps(wrapper, props) {
+  if (!props) return;
+  if (props.color) wrapper.style.color = String(props.color);
+  if (props.bg) wrapper.style.background = String(props.bg);
+  if (props.radius !== undefined && props.radius !== null && props.radius !== "") {
+    const r = String(props.radius).replace(/px$/, "");
+    wrapper.style.borderRadius = r + "px";
+  }
+  if (props.fontSize !== undefined && props.fontSize !== null && props.fontSize !== "") {
+    const f = String(props.fontSize).replace(/px$/, "");
+    wrapper.style.fontSize = f + "px";
+  }
+  if (props.spacing !== undefined && props.spacing !== null && props.spacing !== "") {
+    const s = String(props.spacing).replace(/px$/, "");
+    wrapper.style.padding = s + "px";
+  }
+}
+
 function renderComponent(comp) {
   const wrapper = el("div", "comp-wrapper");
   wrapper.dataset.id = comp.id;
+  applyStyleProps(wrapper, comp.props);
   if (comp.visible === false) {
     wrapper.style.display = "none";
   }
@@ -1248,6 +1287,31 @@ function renderInspector() {
   }
 
   panel.innerHTML = "";
+  const tabs = el("div", "inspector-tabs");
+  const propsBtn = el("button", "inspector-tab active", t("inspectorPropsTab"));
+  propsBtn.type = "button";
+  const codeBtn = el("button", "inspector-tab", t("inspectorCodeTab"));
+  codeBtn.type = "button";
+  tabs.appendChild(propsBtn);
+  tabs.appendChild(codeBtn);
+  panel.appendChild(tabs);
+  const content = el("div", "inspector-tab-content");
+  panel.appendChild(content);
+  renderInspectorProps(content, comp);
+
+  propsBtn.addEventListener("click", () => {
+    codeBtn.classList.remove("active");
+    propsBtn.classList.add("active");
+    renderInspectorProps(content, comp);
+  });
+  codeBtn.addEventListener("click", () => {
+    propsBtn.classList.remove("active");
+    codeBtn.classList.add("active");
+    renderInspectorCode(content, comp);
+  });
+}
+
+function renderInspectorProps(panel, comp) {
   const props = comp.props || {};
 
   // Header
@@ -1385,6 +1449,51 @@ function renderInspector() {
   });
   actions.appendChild(delBtn);
   panel.appendChild(actions);
+}
+
+let inspectorCodeFormat = "html";
+
+async function renderInspectorCode(panel, comp) {
+  panel.innerHTML = "";
+  const toolbar = el("div", "inspector-code-toolbar");
+  ["html", "react", "css"].forEach((fmt) => {
+    const btn = el("button", "inspector-code-fmt" + (fmt === inspectorCodeFormat ? " active" : ""), fmt);
+    btn.type = "button";
+    btn.addEventListener("click", () => {
+      inspectorCodeFormat = fmt;
+      renderInspectorCode(panel, comp);
+    });
+    toolbar.appendChild(btn);
+  });
+  const copyBtn = el("button", "inspector-copy-btn", t("copyCode"));
+  copyBtn.type = "button";
+  copyBtn.disabled = true;
+  toolbar.appendChild(copyBtn);
+  panel.appendChild(toolbar);
+
+  const pre = el("pre", "inspector-code");
+  pre.textContent = t("codeLoading");
+  panel.appendChild(pre);
+
+  try {
+    const res = await fetch(
+      `/api/component/${encodeURIComponent(comp.id)}/code?format=${encodeURIComponent(inspectorCodeFormat)}`
+    );
+    if (!res.ok) {
+      pre.textContent = t("codeEmpty");
+      return;
+    }
+    const data = await res.json();
+    pre.textContent = data.code || t("codeEmpty");
+    copyBtn.disabled = false;
+    copyBtn.addEventListener("click", () => {
+      copyToClipboard(data.code || "");
+      flashButton(copyBtn, t("codeCopied"), 1200);
+    });
+  } catch (err) {
+    console.error("Inspect code failed:", err);
+    pre.textContent = t("codeEmpty");
+  }
 }
 
 function sendSetAnimation(id, patch) {
@@ -1637,6 +1746,13 @@ function renderComponentContent(comp) {
       return renderForm(props);
     case "image":
       return renderImage(props);
+    // Canvas-first fidelity types (created by shapesToComponents)
+    case "text":
+      return renderText(props);
+    case "section":
+      return renderSection(props);
+    case "container":
+      return renderContainer(props);
     // New component types
     case "tabs":
       return renderTabs(props);
@@ -2502,6 +2618,27 @@ function renderGeneric(comp) {
   json.textContent = JSON.stringify(comp.props, null, 2);
   div.appendChild(json);
   return div;
+}
+
+function renderText(props) {
+  const p = el("div", "comp-text");
+  p.textContent = props.text || "";
+  if (props.fontSize) p.style.fontSize = String(props.fontSize).replace(/px$/, "") + "px";
+  if (props.fontFamily) p.style.fontFamily = String(props.fontFamily);
+  if (props.align) p.style.textAlign = String(props.align);
+  return p;
+}
+
+function renderSection(props) {
+  const p = el("div", "comp-section");
+  if (props.title) p.appendChild(el("div", "section-title", props.title));
+  return p;
+}
+
+function renderContainer(props) {
+  const p = el("div", "comp-container");
+  if (props.text) p.appendChild(el("div", "container-label", props.text));
+  return p;
 }
 
 // ===== Animation =====
@@ -4362,6 +4499,10 @@ function renderLibraryList() {
   else if (currentLibraryTab === "animations") items = LIBRARY_ANIMATIONS;
   else if (currentLibraryTab === "components") items = LIBRARY_COMPONENTS;
   else if (currentLibraryTab === "templates") items = LIBRARY_TEMPLATES;
+  else if (currentLibraryTab === "designSystems") {
+    renderDesignSystems();
+    return;
+  }
 
   if (items.length === 0) {
     list.innerHTML = `<div class="library-empty">${t("libraryLoading")}</div>`;
@@ -4435,6 +4576,72 @@ function renderLibraryList() {
   // Saved templates are appended asynchronously
   if (currentLibraryTab === "templates") {
     renderSavedTemplates();
+  }
+}
+
+async function renderDesignSystems() {
+  const list = $("library-list");
+  if (!list) return;
+  list.innerHTML = `<div class="library-empty">${t("libraryLoading")}</div>`;
+  let systems = [];
+  try {
+    const res = await fetch("/api/design-systems");
+    const data = await res.json();
+    systems = data.systems || [];
+  } catch (err) {
+    console.error("Load design systems failed:", err);
+    list.innerHTML = `<div class="library-empty">${t("dsError")}</div>`;
+    return;
+  }
+  list.innerHTML = "";
+  systems.forEach((sys) => {
+    const card = el("div", "ds-card");
+    const preview = el("div", "ds-preview");
+    const p = sys.preview || {};
+    preview.style.background = p.bg || "#0B0A0F";
+    const chipRow = el("div", "ds-preview-chips");
+    [
+      ["--surface", p.surface || "#18181B"],
+      ["--text", p.text || "#FAFAFA"],
+      ["--primary", p.primary || "#8B5CF6"],
+    ].forEach(([, color]) => {
+      const chip = el("span", "ds-chip");
+      chip.style.background = color;
+      chipRow.appendChild(chip);
+    });
+    preview.appendChild(chipRow);
+    card.appendChild(preview);
+
+    const text = el("div", "ds-text");
+    text.appendChild(el("div", "ds-name", sys.name));
+    text.appendChild(el("div", "ds-desc", sys.description || ""));
+    card.appendChild(text);
+
+    const applyBtn = el("button", "ds-apply", t("dsApply"));
+    applyBtn.type = "button";
+    applyBtn.addEventListener("click", async () => {
+      applyBtn.disabled = true;
+      try {
+        const res = await fetch("/api/design-system/apply", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: sys.id }),
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        showToastMsg(t("dsApplied", { name: sys.name }));
+        await fetchInitialState();
+      } catch (err) {
+        console.error("Apply design system failed:", err);
+        showToastMsg(t("dsError"), true);
+      } finally {
+        applyBtn.disabled = false;
+      }
+    });
+    card.appendChild(applyBtn);
+    list.appendChild(card);
+  });
+  if (systems.length === 0) {
+    list.innerHTML = `<div class="library-empty">${t("dsError")}</div>`;
   }
 }
 

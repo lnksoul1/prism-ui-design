@@ -52,7 +52,7 @@ import { registerBreakpointsTool } from "./tools/breakpoints.js";
 import { registerDesignTokensTool } from "./tools/design-tokens.js";
 
 // New real-time design manipulation tools
-import { registerAllDesignTools, exportDesign } from "./tools/design-tools.js";
+import { registerAllDesignTools, exportDesign, applyPageTemplate } from "./tools/design-tools.js";
 
 // Project import module
 import { scanProject, type ExtractedPage } from "./import-project.js";
@@ -426,6 +426,21 @@ app.post("/api/component", (req, res) => {
   try {
     const node = designService.addComponent(type, variant, props || {}, parent_id || null, "ai");
     res.json({ success: true, id: node.id, type: node.type });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+// API: Apply a page template (used by the canvas empty-state "start from template")
+app.post("/api/template", (req, res) => {
+  const { template } = req.body;
+  if (!template || typeof template !== "string") {
+    res.status(400).json({ error: "Missing template name" });
+    return;
+  }
+  try {
+    const componentIds = applyPageTemplate(template);
+    res.json({ success: true, template, component_ids: componentIds, count: componentIds.length });
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
   }

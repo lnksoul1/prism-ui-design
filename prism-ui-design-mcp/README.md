@@ -177,6 +177,12 @@ and an HTTP + WebSocket integration chain (**252 tests passing**).
 - **Conflict detection** (C5): every mutation carries the client's last-seen
   `revision`; if the design changed underneath it, the mutation is rejected
   with a `conflict` message and the client auto-resyncs.
+- **Premium UI** (spec §5.1–5.3): the dashboard follows a top-tier design
+  system — violet brand (`#7C3AED`), white base, 8/12/16 radius ladder,
+  restrained shadows, Vercel-style dual focus rings, six micro-states,
+  dot-grid canvas, and crafted empty states (canvas guide card with AI /
+  library / template entry points, activity clock state, WCAG contrast-pass
+  card with the live ratio).
 - **Freeform canvas**: toggle between flow layout and free positioning —
   drag components anywhere, resize with 8 handles, edit X/Y/W/H in the
   inspector, and auto-arrange into a clean vertical stack.

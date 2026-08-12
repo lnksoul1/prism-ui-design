@@ -105,6 +105,14 @@ const I18N = {
     load: "📂 加载",
     import: "📥 导入",
     export: "📤 导出",
+    startDesigning: "开始你的设计",
+    startWithAI: "用 AI 生成",
+    startWithAIDesc: "描述需求，AI 自动搭建页面",
+    startWithLibrary: "从设计库拖拽",
+    startWithLibraryDesc: "把组件、风格或动效拖到画布",
+    startWithTemplate: "从模板创建",
+    startWithTemplateDesc: "一键生成 SaaS / 电商 / 博客等页面",
+    contrastPass: "对比度检测通过",
   },
   en: {
     connected: "Connected",
@@ -156,6 +164,14 @@ const I18N = {
     load: "📂 Load",
     import: "📥 Import",
     export: "📤 Export",
+    startDesigning: "Start designing",
+    startWithAI: "Generate with AI",
+    startWithAIDesc: "Describe what you want, the AI builds the page",
+    startWithLibrary: "Drag from the library",
+    startWithLibraryDesc: "Drop components, styles, or motion onto the canvas",
+    startWithTemplate: "Start from a template",
+    startWithTemplateDesc: "One click: SaaS, e-commerce, blog, and more",
+    contrastPass: "Contrast check passed",
   },
 };
 
@@ -496,12 +512,64 @@ function renderCanvas() {
   if (!currentState || components.length === 0) {
     canvas.innerHTML = `
       <div class="canvas-placeholder">
-        <div class="placeholder-icon">◈</div>
-        <p>${t("canvasEmpty")}</p>
-        <p class="placeholder-hint">${t("canvasHint1")}</p>
-        <p class="placeholder-hint">${t("canvasHint2")}</p>
+        <div class="placeholder-guide">
+          <div class="placeholder-art">◈</div>
+          <h2>${t("startDesigning")}</h2>
+          <p class="placeholder-hint">${t("canvasHint1")}</p>
+          <div class="placeholder-actions">
+            <button class="placeholder-action" id="empty-ai">
+              <span class="pa-icon">✦</span>
+              <span><span class="pa-title">${t("startWithAI")}</span><br><span class="pa-desc">${t("startWithAIDesc")}</span></span>
+            </button>
+            <button class="placeholder-action" id="empty-library">
+              <span class="pa-icon">▦</span>
+              <span><span class="pa-title">${t("startWithLibrary")}</span><br><span class="pa-desc">${t("startWithLibraryDesc")}</span></span>
+            </button>
+            <button class="placeholder-action" id="empty-template">
+              <span class="pa-icon">▤</span>
+              <span><span class="pa-title">${t("startWithTemplate")}</span><br><span class="pa-desc">${t("startWithTemplateDesc")}</span></span>
+            </button>
+          </div>
+        </div>
       </div>
     `;
+    const aiBtn = $("empty-ai");
+    if (aiBtn) {
+      aiBtn.addEventListener("click", () => {
+        const input = $("prompt-input");
+        if (input) input.focus();
+      });
+    }
+    const libBtn = $("empty-library");
+    if (libBtn) {
+      libBtn.addEventListener("click", () => {
+        const tab = document.querySelector('.lib-tab[data-lib="components"]');
+        if (tab) tab.click();
+        const hint = $("canvas-drop-hint");
+        if (hint) {
+          hint.textContent = t("startWithLibraryDesc");
+          hint.style.display = "block";
+          setTimeout(() => { hint.style.display = "none"; }, 2500);
+        }
+      });
+    }
+    const tplBtn = $("empty-template");
+    if (tplBtn) {
+      tplBtn.addEventListener("click", async () => {
+        try {
+          const response = await fetch("/api/template", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ template: "saas_landing" }),
+          });
+          if (response.ok) {
+            await fetchInitialState();
+          }
+        } catch (err) {
+          console.error("Template create failed:", err);
+        }
+      });
+    }
     meta.textContent = "0 个组件";
     // Apply platform class even on placeholder
     applyPlatform(canvas);
@@ -2957,7 +3025,26 @@ async function checkConflicts() {
 
 function renderConflictWarnings(container, conflicts) {
   container.innerHTML = "";
-  if (conflicts.length === 0) return;
+  if (conflicts.length === 0) {
+    // Premium pass state (spec §5.3): green card with the real WCAG ratio
+    const hasTokens =
+      currentState && currentState.tokens && Object.keys(currentState.tokens.colors || {}).length > 0;
+    if (hasTokens) {
+      const textColor = currentState.tokens.colors["color-text"]?.value;
+      const bgColor = currentState.tokens.colors["color-bg"]?.value;
+      let ratio = null;
+      if (textColor && bgColor) {
+        ratio = wcagContrastRatio(textColor, bgColor);
+      }
+      const card = el("div", "conflict-pass");
+      card.appendChild(el("span", null, "✓ " + t("contrastPass")));
+      if (ratio !== null) {
+        card.appendChild(el("span", "cp-ratio", `WCAG AA ${ratio.toFixed(1)}:1`));
+      }
+      container.appendChild(card);
+    }
+    return;
+  }
 
   conflicts.forEach((conflict) => {
     const warning = el("div", "conflict-warning");
@@ -2979,6 +3066,39 @@ function renderConflictWarnings(container, conflicts) {
 
     container.appendChild(warning);
   });
+}
+
+// ===== WCAG contrast (client-side) =====
+
+function parseHex(hex) {
+  let value = String(hex).trim();
+  if (value.startsWith("#")) value = value.slice(1);
+  if (value.length === 3) {
+    value = value.split("").map((c) => c + c).join("");
+  }
+  const int = parseInt(value, 16);
+  if (Number.isNaN(int)) return null;
+  return { r: (int >> 16) & 255, g: (int >> 8) & 255, b: int & 255 };
+}
+
+function channelLuminance(c) {
+  const s = c / 255;
+  return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+}
+
+function relativeLuminance(hex) {
+  const rgb = parseHex(hex);
+  if (!rgb) return null;
+  return 0.2126 * channelLuminance(rgb.r) + 0.7152 * channelLuminance(rgb.g) + 0.0722 * channelLuminance(rgb.b);
+}
+
+function wcagContrastRatio(a, b) {
+  const la = relativeLuminance(a);
+  const lb = relativeLuminance(b);
+  if (la === null || lb === null) return null;
+  const lighter = Math.max(la, lb);
+  const darker = Math.min(la, lb);
+  return (lighter + 0.05) / (darker + 0.05);
 }
 
 // ===== Health Check Fallback =====

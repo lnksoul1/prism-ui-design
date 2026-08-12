@@ -1,70 +1,73 @@
 /* ===================================================================
    PRISM STUDIO — Real-Time Design Dashboard
-   Aesthetic: Refined dark editorial-tech with prism spectrum accents
-   Typography: Fraunces (display) · Plus Jakarta Sans (body) · JetBrains Mono (code)
+   Aesthetic: Premium light UI (spec §5.1) — violet brand, white base,
+   border-and-whitespace separation, 8/12/16 radius ladder,
+   system sans + JetBrains Mono, Vercel-style focus rings.
    =================================================================== */
 
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 /* ===== Reset ===== */
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 /* ===== Design Tokens ===== */
 :root {
-  /* Backgrounds — deep, layered */
-  --bg: #0B0A0F;
-  --bg-elevated: #100F16;
-  --surface: #14131C;
-  --surface-hover: #1C1B27;
-  --surface-glass: rgba(20, 19, 28, 0.72);
-  --border: rgba(255, 255, 255, 0.07);
-  --border-strong: rgba(255, 255, 255, 0.12);
-  --border-accent: rgba(139, 92, 246, 0.3);
+  /* Backgrounds — premium light (spec §5.1) */
+  --bg: #FFFFFF;
+  --bg-elevated: #FCFBFF;
+  --surface: #F5F3FF;
+  --surface-hover: #EDE9FE;
+  --surface-glass: rgba(255, 255, 255, 0.82);
+  --border: rgba(30, 27, 46, 0.08);
+  --border-strong: rgba(30, 27, 46, 0.14);
+  --border-accent: rgba(124, 58, 237, 0.28);
 
-  /* Text */
-  --text: #EDEAF4;
-  --text-muted: #9693A8;
-  --text-dim: #5D5B6E;
+  /* Text — WCAG AAA */
+  --text: #1E1B2E;
+  --text-muted: #3F3F5F;
+  --text-dim: #6B7280;
 
-  /* Prism spectrum accent */
-  --accent: #8B5CF6;
+  /* Prism brand accent — violet #7C3AED */
+  --accent: #7C3AED;
   --accent-light: #A78BFA;
   --accent-bright: #C4B5FD;
-  --accent-bg: rgba(139, 92, 246, 0.1);
-  --accent-glow: rgba(139, 92, 246, 0.25);
-  --spectrum-1: #8B5CF6;
+  --accent-bg: rgba(124, 58, 237, 0.08);
+  --accent-glow: rgba(124, 58, 237, 0.16);
+  --spectrum-1: #7C3AED;
   --spectrum-2: #6366F1;
   --spectrum-3: #3B82F6;
   --spectrum-4: #06B6D4;
 
   /* Status */
-  --success: #34D399;
-  --warning: #FBBF24;
-  --danger: #F87171;
+  --success: #10B981;
+  --success-bg: rgba(16, 185, 129, 0.1);
+  --warning: #F59E0B;
+  --danger: #EF4444;
 
   /* Sources */
-  --ai-color: #8B5CF6;
-  --user-color: #34D399;
+  --ai-color: #7C3AED;
+  --user-color: #10B981;
 
-  /* Geometry */
-  --radius: 10px;
-  --radius-sm: 6px;
+  /* Geometry — 8 / 12 / 16 ladder (spec §5.1) */
+  --radius: 12px;
+  --radius-sm: 8px;
   --radius-lg: 16px;
 
-  /* Typography */
-  --font: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  --font-display: 'Fraunces', Georgia, serif, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
+  /* Typography — single sans family + JetBrains Mono (spec §5.1) */
+  --font: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
+  --font-display: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   --mono: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
 
-  /* Shadows */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35);
-  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.45);
-  --shadow-glow: 0 0 24px var(--accent-glow);
+  /* Shadows — restrained, border-and-whitespace separation (spec §5.1) */
+  --shadow-sm: 0 1px 2px rgba(30, 27, 46, 0.04);
+  --shadow-md: 0 1px 2px rgba(30, 27, 46, 0.05), 0 8px 24px rgba(124, 58, 237, 0.06);
+  --shadow-lg: 0 4px 12px rgba(30, 27, 46, 0.06), 0 20px 48px rgba(124, 58, 237, 0.1);
+  --shadow-glow: 0 0 0 4px var(--accent-glow);
 
-  /* Transitions */
+  /* Transitions — 200ms ease-out, spring for drag (spec §5.1/§5.2) */
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
   --speed: 0.2s;
 }
 
@@ -90,8 +93,8 @@ body::before {
   position: fixed;
   inset: 0;
   background:
-    radial-gradient(ellipse 600px 400px at 15% 0%, rgba(139, 92, 246, 0.06), transparent 70%),
-    radial-gradient(ellipse 500px 300px at 85% 100%, rgba(6, 182, 212, 0.04), transparent 70%);
+    radial-gradient(ellipse 640px 420px at 12% -4%, rgba(124, 58, 237, 0.07), transparent 70%),
+    radial-gradient(ellipse 520px 320px at 88% 108%, rgba(6, 182, 212, 0.05), transparent 70%);
   pointer-events: none;
   z-index: 0;
 }
@@ -2210,26 +2213,31 @@ body::after {
    THEME MODE — Dark override
    ================================================================= */
 body.theme-dark {
-  --bg: #07060B;
-  --bg-elevated: #0C0B12;
-  --surface: #0F0E16;
-  --surface-hover: #181723;
-  --surface-glass: rgba(15, 14, 22, 0.78);
-  --border: rgba(255, 255, 255, 0.06);
-  --border-strong: rgba(255, 255, 255, 0.1);
-  --text: #F2F0F8;
-  --text-muted: #A09EA8;
-  --text-dim: #6A6878;
+  --bg: #0E0C16;
+  --bg-elevated: #14111F;
+  --surface: #171325;
+  --surface-hover: #201A33;
+  --surface-glass: rgba(20, 17, 33, 0.78);
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --text: #F4F1FB;
+  --text-muted: #B4ADC6;
+  --text-dim: #7A738C;
+  --accent: #A78BFA;
+  --accent-bg: rgba(167, 139, 250, 0.12);
+  --accent-glow: rgba(167, 139, 250, 0.22);
+  --success-bg: rgba(52, 211, 153, 0.12);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 1px 2px rgba(0, 0, 0, 0.35), 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.4), 0 20px 48px rgba(0, 0, 0, 0.5);
 }
 body.theme-dark .canvas {
-  background: #0A0911;
-  box-shadow: inset 0 0 0 1px var(--border);
-  border-radius: var(--radius);
+  background: #0E0C16;
 }
 body.theme-dark::before {
   background:
-    radial-gradient(ellipse 600px 400px at 15% 0%, rgba(139, 92, 246, 0.08), transparent 70%),
-    radial-gradient(ellipse 500px 300px at 85% 100%, rgba(6, 182, 212, 0.05), transparent 70%);
+    radial-gradient(ellipse 640px 420px at 12% -4%, rgba(124, 58, 237, 0.1), transparent 70%),
+    radial-gradient(ellipse 520px 320px at 88% 108%, rgba(6, 182, 212, 0.06), transparent 70%);
 }
 
 /* =================================================================
@@ -2863,4 +2871,386 @@ textarea:focus-visible,
   border-radius: 4px;
   white-space: nowrap;
   font-family: var(--mono);
+}
+
+/* =================================================================
+   Premium UI polish (spec §5.1–5.3, top-tier reference)
+   ================================================================= */
+
+/* Vercel-style focus ring: 2px white inner + 4px brand outer */
+:where(button, [role="button"], input, select, textarea, a, [tabindex]):focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px #fff, 0 0 0 5px var(--accent);
+  border-radius: var(--radius-sm);
+}
+
+/* Global micro-states: hover + active (spec §5.2) */
+.toolbar-btn,
+.theme-toggle,
+.tab-btn,
+.page-add-btn,
+.zoom-btn,
+.platform-btn,
+.lib-item,
+.layer-item,
+.page-tab,
+.token-item,
+.prompt-send,
+.modal-close,
+.btn-import-go,
+.export-tab {
+  transition: background var(--speed) var(--ease-out), border-color var(--speed) var(--ease-out),
+    color var(--speed) var(--ease-out), transform 0.1s var(--ease-in), box-shadow var(--speed) var(--ease-out);
+}
+
+:where(.toolbar-btn, .theme-toggle, .tab-btn, .page-add-btn, .zoom-btn, .platform-btn, .page-tab, .prompt-send, .modal-close, .btn-import-go, .export-tab):active {
+  transform: scale(0.97);
+}
+
+/* Topbar refinement */
+.topbar {
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-glass);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+}
+.logo {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: -0.02em;
+  background: linear-gradient(120deg, var(--spectrum-1), var(--spectrum-2) 45%, var(--spectrum-4));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.style-badge {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+/* Buttons */
+.toolbar-btn {
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+}
+.toolbar-btn:hover:not(:disabled) {
+  background: var(--surface-hover);
+  border-color: var(--border-accent);
+}
+.toolbar-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Tabs */
+.tab-btn {
+  border-radius: var(--radius-sm);
+}
+.tab-btn:hover {
+  background: var(--surface-hover);
+}
+.tab-btn.active {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 8px var(--accent-glow);
+}
+
+/* Panels */
+.panel {
+  background: var(--bg);
+}
+.panel-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.panel-title::before {
+  background: linear-gradient(120deg, var(--spectrum-1), var(--spectrum-3));
+}
+
+/* Canvas — subtle dot grid like premium design tools */
+.canvas {
+  background-color: var(--bg);
+  background-image: radial-gradient(circle, var(--border) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+.canvas-frame {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--bg);
+}
+
+/* Premium canvas empty state (spec §5.3) */
+.canvas-placeholder {
+  min-height: 520px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.placeholder-guide {
+  max-width: 420px;
+  width: 100%;
+  text-align: center;
+  padding: 40px 32px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, var(--surface), var(--bg));
+}
+.placeholder-art {
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 18px;
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.9), transparent 45%),
+    linear-gradient(135deg, var(--spectrum-1), var(--spectrum-2) 55%, var(--spectrum-4));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+  color: #fff;
+  box-shadow: 0 12px 32px var(--accent-glow);
+}
+.placeholder-guide h2 {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 19px;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.placeholder-guide .placeholder-hint {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-bottom: 22px;
+}
+.placeholder-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+.placeholder-action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color var(--speed) var(--ease-out), background var(--speed) var(--ease-out), transform 0.1s var(--ease-in);
+}
+.placeholder-action:hover {
+  border-color: var(--border-accent);
+  background: var(--surface);
+}
+.placeholder-action:active {
+  transform: scale(0.98);
+}
+.placeholder-action .pa-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--accent-bg);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+.placeholder-action .pa-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text);
+}
+.placeholder-action .pa-desc {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* Activity log empty state (spec §5.3) */
+.activity-empty {
+  border: 1px dashed var(--border-accent);
+  border-radius: var(--radius-sm);
+  background: var(--accent-bg);
+  color: var(--text-muted);
+  padding: 18px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+.activity-empty::before {
+  content: "⏱";
+  font-size: 16px;
+  color: var(--accent);
+}
+
+/* Conflict-pass card (spec §5.3) */
+.conflict-pass {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 9px 12px;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  border-radius: var(--radius-sm);
+  background: var(--success-bg);
+  color: var(--success);
+  font-size: 12px;
+}
+.conflict-pass .cp-ratio {
+  font-family: var(--mono);
+  font-weight: 600;
+  margin-left: auto;
+}
+
+/* Prompt bar — floating premium pill */
+.prompt-bar {
+  border-top: 1px solid var(--border);
+  background: var(--surface-glass);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+}
+.prompt-input {
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+.prompt-send {
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: #fff;
+}
+.prompt-send:hover {
+  background: var(--spectrum-2);
+}
+
+/* Library / layer / page items hover polish */
+.lib-item:hover {
+  border-color: var(--border-accent);
+  background: var(--surface-hover);
+}
+.lib-item.dragging {
+  opacity: 0.45;
+}
+.page-tab:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+.page-tab.active {
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+.page-add-btn:hover {
+  background: var(--surface-hover);
+  color: var(--accent);
+}
+
+/* Token items */
+.token-item {
+  border-radius: var(--radius-sm);
+}
+.token-value-input {
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+
+/* Activity entries */
+.activity-entry {
+  border-left: 2px solid transparent;
+  border-radius: var(--radius-sm);
+}
+.activity-entry:hover {
+  background: var(--surface);
+}
+
+/* Modals */
+.modal-overlay {
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  background: rgba(30, 27, 46, 0.32);
+}
+.modal {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-lg);
+}
+.export-tab.active,
+.lib-tab.active {
+  background: var(--accent);
+  color: #fff;
+}
+.lib-tab {
+  border-radius: var(--radius-sm);
+}
+
+/* Scrollbars */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+  background-clip: content-box;
+  border: 3px solid transparent;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Text selection */
+::selection {
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+/* Component wrapper hover/selected refinement */
+.comp-wrapper:hover .comp-overlay {
+  opacity: 1;
+}
+.comp-wrapper.selected {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--accent-glow);
+}
+
+/* Theme toggle */
+.theme-toggle {
+  border-radius: var(--radius-sm);
+}
+.theme-toggle:hover {
+  background: var(--surface-hover);
+}
+
+/* Inspector inputs */
+.prop-text-input,
+.prop-select,
+.prop-num-input {
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+
+/* Live presence pill */
+.status-text {
+  font-family: var(--mono);
+  font-size: 11px;
 }

@@ -158,6 +158,16 @@ test(
       });
       assert.equal(badTokenRes.status, 400, "invalid token category should be rejected");
 
+      const tplRes = await fetch(`${base}/api/template`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ template: "saas_landing" }),
+      });
+      const tpl = (await tplRes.json()) as { success: boolean; count: number; component_ids: string[] };
+      assert.equal(tpl.success, true);
+      assert.ok(tpl.count >= 5, "saas template should add multiple components");
+      assert.ok(Array.isArray(tpl.component_ids));
+
       const change = await Promise.race([
         changePromise,
         new Promise<never>((_, reject) =>

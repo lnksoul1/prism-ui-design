@@ -5,7 +5,7 @@
 > 依据：源码审计（28 个 MCP 工具、REST/WS 双通道、客户端渲染引擎）+ 2026-08 外部调研
 
 > **实施进度（2026-08-12 更新）**
-> - ✅ Phase A1 测试体系：256 项测试全绿 + Playwright e2e 冒烟 2/2
+> - ✅ Phase A1 测试体系：255 项测试全绿 + Playwright e2e 冒烟 2/2
 > - ✅ Phase A2 持久化：`design_save_project` / `design_load_project` / `design_list_projects` + REST 端点 + 自动保存/启动恢复 + Dashboard 保存/加载按钮
 > - ✅ Phase A3 双通道收敛：`src/service/design-service.ts` 共享服务层 + WS 消息 zod 严格校验（拒绝未知类型/非法字段）
 > - ✅ Phase A4 修复：`getState()` 返回 canUndo/canRedo；阴影令牌纳入风格预设与客户端阴影 Tab；组件选中机制（动效应用目标）；新增缩放/图层面板/属性检查器

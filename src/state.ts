@@ -874,6 +874,15 @@ class DesignStateStore extends EventEmitter {
     this.logActivity("prompt_accepted", "prompt", `Agent accepted prompt: ${prompt}`, "ai");
   }
 
+  /**
+   * Log that the built-in executor handled a prompt and emit an event so
+   * the server can broadcast the result back to the dashboard.
+   */
+  recordPromptExecuted(summary: string, action = "prompt_executed"): void {
+    this.logActivity("prompt_executed", "prompt", summary, "user");
+    this.emit("prompt_executed", { summary, action });
+  }
+
   // ===== Canvas Documents (方案A canvas-first editing) =====
 
   /** Save a tldraw snapshot for a page. Stored opaquely as JSON. */

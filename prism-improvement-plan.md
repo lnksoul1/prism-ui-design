@@ -80,6 +80,7 @@
 > - ✅ **缺陷修复（侧栏滚动 + Agent 指令回执）**：
 >   - 左右侧栏 `overflow:hidden` 改为整列 `overflow-y:auto`，取消内部嵌套滚动区（layer/library/version/comment/activity/token 列表恢复自然流），实测 scrollTop 可滚动、无 console 错误
 >   - 指令闭环可见化：发送后提示栏显示“指令已排队，等待 Agent 处理…”；Agent 通过 `design_check_prompts` 消费指令时，服务端广播 `prompt_accepted` + 记录 `prompt_accepted` 活动，Dashboard 显示“Agent 已接收指令 ✓”；WS 断开时指令自动回退 `POST /api/prompt`
+> - ✅ **内置指令执行引擎（无 Agent 也有反应）**：新增 `src/prompt-executor.ts`——常见指令（改主色/背景色（支持色名与 #hex）、深色/浅色模式、14 种风格预设、5 种页面模板、常用组件、撤销、清空）由服务端直接执行并广播 `prompt_executed` 回执（Dashboard 显示“已执行：…”+ 提示条）；未匹配的指令继续排队给外部 Agent。支持中英文关键词，无外部依赖
 > - 🔄 待办：C6 完整智能体、F9 更多框架、规格 Phase 2 截图转 UI（依赖视觉模型）、数据库/多项目工作区、画布多端实时协作编辑（当前为保存级同步）
 > - 🔄 待办：C6 完整智能体、F9 更多框架、规格 Phase 2 截图转 UI（依赖视觉模型）、数据库/多项目工作区
 

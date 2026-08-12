@@ -932,6 +932,15 @@ function broadcastPromptAccepted(prompt: string): void {
   });
 }
 
+function broadcastPromptExecuted(summary: string, action: string): void {
+  const message = JSON.stringify({ type: "prompt_executed", summary, action });
+  wss.clients.forEach((client: WebSocket) => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(message);
+    }
+  });
+}
+
 // ===== Broadcast state changes to all WebSocket clients =====
 
 stateStore.on("change", (change: unknown) => {
@@ -963,6 +972,11 @@ stateStore.on("activity", (entry: unknown) => {
 // "waiting for agent" status flips to "accepted".
 stateStore.on("prompt_accepted", (prompt: unknown) => {
   broadcastPromptAccepted(String(prompt));
+});
+
+stateStore.on("prompt_executed", (result: unknown) => {
+  const r = (result || {}) as { summary?: string; action?: string };
+  broadcastPromptExecuted(r.summary || "", r.action || "prompt_executed");
 });
 
 // ===== Start Everything =====

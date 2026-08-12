@@ -12,6 +12,7 @@ import { z } from "zod";
 import { stateStore, type AnimationDef, type ComponentLayout } from "../state.js";
 import { applyStyleTokenSet } from "../tokens.js";
 import { STYLE_PRESETS } from "../constants.js";
+import { executeUserPrompt } from "../prompt-executor.js";
 
 export type MutationSource = "ai" | "user";
 
@@ -247,6 +248,12 @@ export function redo() {
 export function setPendingPrompt(prompt: string): void {
   stateStore.setPendingPrompt(prompt);
   stateStore.recordPrompt(prompt);
+  const result = executeUserPrompt(prompt);
+  if (result.executed) {
+    // Handled by the built-in engine: don't leave it queued for the agent.
+    stateStore.clearPendingPrompt();
+    stateStore.recordPromptExecuted(result.summary, result.action || "prompt_executed");
+  }
 }
 
 // ===== WebSocket message schemas =====

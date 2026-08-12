@@ -848,3 +848,104 @@ test(
     }
   }
 );
+
+test(
+  "built-in prompt executor reacts to instructions over REST and WS",
+  { timeout: 60000 },
+  async () => {
+    const port = await getFreePort();
+    const child = spawn(process.execPath, [SERVER_ENTRY], {
+      cwd: path.resolve(__dirname, "..", ".."),
+      env: {
+        ...process.env,
+        DASHBOARD_PORT: String(port),
+        PRISM_PROJECT_DIR: path.join(os.tmpdir(), "prism-prompt-exec-server"),
+        PRISM_AUTOIMPORT: "off",
+        PRISM_AUTOLOAD: "off",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let logs = "";
+    child.stderr?.on("data", (d) => (logs += d.toString()));
+    const base = `http://127.0.0.1:${port}`;
+
+    try {
+      await waitForHealth(`${base}/health`, 20000);
+
+      const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+      const wsMessages: Array<Record<string, unknown>> = [];
+      ws.on("message", (data) => {
+        const msg = JSON.parse(data.toString()) as Record<string, unknown>;
+        wsMessages.push(msg);
+      });
+      await new Promise<void>((resolve, reject) => {
+        ws.once("open", resolve);
+        ws.once("error", reject);
+      });
+
+      // A matchable instruction executes locally and broadcasts a receipt
+      const promptRes = await fetch(`${base}/api/prompt`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: "把主色改成蓝色" }),
+      });
+      assert.equal(promptRes.status, 200);
+
+      await new Promise<void>((resolve) => {
+        const timer = setInterval(() => {
+          if (wsMessages.some((m) => m.type === "prompt_executed")) {
+            clearInterval(timer);
+            resolve();
+          }
+        }, 20);
+        setTimeout(() => {
+          clearInterval(timer);
+          resolve();
+        }, 6000);
+      });
+      const executedMsg = wsMessages.find((m) => m.type === "prompt_executed") as Record<string, unknown>;
+      assert.ok(executedMsg, "prompt_executed broadcast missing");
+      assert.match(String(executedMsg.summary), /主色/);
+
+      const state = (await (await fetch(`${base}/api/state`)).json()) as {
+        tokens: { colors: Record<string, { value: string }> };
+        activityLog: Array<{ action: string; detail: string }>;
+      };
+      assert.equal(state.tokens.colors["color-primary"].value, "#3B82F6");
+      assert.ok(
+        state.activityLog.some((a) => a.action === "prompt_executed"),
+        "prompt_executed should be logged"
+      );
+
+      // An unmatched instruction stays queued for the agent (no receipt)
+      const unmatchedRes = await fetch(`${base}/api/prompt`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: "hello agent please refine" }),
+      });
+      assert.equal(unmatchedRes.status, 200);
+      await new Promise<void>((resolve) => setTimeout(resolve, 300));
+      const executedCount = wsMessages.filter((m) => m.type === "prompt_executed").length;
+      assert.equal(executedCount, 1, "unmatched prompt must not be executed");
+
+      ws.close();
+    } catch (error) {
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}\n--- server logs ---\n${logs}`,
+        { cause: error }
+      );
+    } finally {
+      child.kill();
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(() => {
+          child.kill("SIGKILL");
+          resolve();
+        }, 3000);
+        child.once("exit", () => {
+          clearTimeout(timer);
+          resolve();
+        });
+      });
+    }
+  }
+);

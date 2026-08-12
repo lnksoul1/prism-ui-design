@@ -77,11 +77,17 @@ test("dashboard loads with the premium empty state", async ({ page }: { page: Pa
   await expect(page.locator("#prompt-input")).toBeVisible();
   await expect(page.locator("#project-btn")).toBeVisible();
 
-  // Sending a prompt shows a delivery status chip (queued for the agent)
-  await page.fill("#prompt-input", "hello agent");
+  // Sending a matchable instruction executes locally and shows a receipt
+  await page.fill("#prompt-input", "把主色改成蓝色");
   await page.click("#prompt-send");
-  await expect(page.locator("#prompt-status")).toHaveClass(/show/);
-  await expect(page.locator("#prompt-status")).not.toBeEmpty();
+  await expect(page.locator("#prompt-status")).toContainText("已执行", { timeout: 5000 });
+  const primary = await page.evaluate(async () => {
+    const state = (await (await fetch("/api/state")).json()) as {
+      tokens: { colors: Record<string, { value?: string }> };
+    };
+    return state.tokens.colors["color-primary"]?.value;
+  });
+  expect(primary).toBe("#3B82F6");
   expect(errors).toEqual([]);
 });
 

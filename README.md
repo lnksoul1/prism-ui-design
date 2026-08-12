@@ -33,6 +33,7 @@ The dashboard has a **Preview / Draw** toggle in the canvas toolbar. Draw mode e
 - Auto-arrange: select shapes and arrange them into a tidy column with one click
 - Library drag & drop: drag components from the left library straight onto the canvas — a token-colored block is created at the drop point and autosaved
 - Prompt delivery status: sending a prompt shows a "queued" chip, which flips to "accepted ✓" when the agent polls `design_check_prompts` (REST fallback when WebSocket is down)
+- Built-in prompt engine: change primary/background color (name or #hex), switch light/dark mode, apply one of 14 style presets, generate one of 5 page templates, add common components, undo, or clear — executed instantly **without an external agent**; unmatched prompts stay queued for the agent
 - Scrollable side panels: layers / library / versions / comments / tokens / activity scroll with the column
 - Template-first start: a blank canvas offers one-click templates (SaaS, e-commerce, blog, portfolio, dashboard, blank)
 - Autosave with debounce to `POST /api/canvas`; "Write back page file" exports the drawing as a real HTML page (`client/canvas-page.html`)

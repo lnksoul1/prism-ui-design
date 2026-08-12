@@ -183,6 +183,7 @@ const I18N = {
     canvasComponentDropped: "已将 {name} 添加到画布",
     promptQueued: "指令已排队，等待 Agent 处理…",
     promptAccepted: "Agent 已接收指令 ✓",
+    promptExecuted: "已执行：{summary}",
   },
   en: {
     connected: "Connected",
@@ -307,6 +308,7 @@ const I18N = {
     canvasComponentDropped: "Added {name} to the canvas",
     promptQueued: "Prompt queued, waiting for the agent…",
     promptAccepted: "Agent accepted the prompt ✓",
+    promptExecuted: "Executed: {summary}",
   },
 };
 
@@ -524,6 +526,10 @@ function handleMessage(msg) {
       break;
     case "prompt_accepted":
       setPromptStatus(t("promptAccepted"), "accepted");
+      break;
+    case "prompt_executed":
+      setPromptStatus(t("promptExecuted", { summary: msg.summary || "" }), "accepted");
+      showToastMsg(t("promptExecuted", { summary: msg.summary || "" }));
       break;
   }
 }

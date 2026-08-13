@@ -104,6 +104,16 @@ import {
 import { registerResources } from "./resources/index.js";
 import { registerPrompts } from "./prompts/index.js";
 
+// Upgrade plan U1-U3: Lenis/GSAP/Vanta/React Bits integration
+import { registerScrollTools } from "./tools/scroll-tools.js";
+import { registerAnimationEngineTools } from "./tools/animation-tools.js";
+import { registerVantaTools } from "./tools/vanta-tools.js";
+import { registerReactBitsTools } from "./tools/react-bits-tools.js";
+// Trigger animation preset registration (css + gsap). These modules import the
+// registry from ./animations/index.js, so the registry is initialized first.
+import "./animations/css-presets.js";
+import "./animations/gsap-presets.js";
+
 // ===== Server Initialization =====
 
 const server = new McpServer({
@@ -167,6 +177,12 @@ registerPlatformTools(server);
 registerCollabTools(server);
 registerGeneratePageTool(server);
 registerCanvasTools(server);
+
+// Upgrade plan U1-U3: Lenis (scroll), GSAP (animations), Vanta (3D bg), React Bits
+registerScrollTools(server);
+registerAnimationEngineTools(server);
+registerVantaTools(server);
+registerReactBitsTools(server);
 
 // MCP Resources + Prompts for agent context
 registerResources(server);

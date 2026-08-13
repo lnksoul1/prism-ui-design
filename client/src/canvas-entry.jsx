@@ -239,7 +239,7 @@ function kindForType(type) {
 function blockIcon(kind, type) {
   if (kind === "navbar") return "☰";
   if (kind === "hero") return "◇";
-  if (kind === "image") return "🖼";
+  if (kind === "image") return "▣";
   if (kind === "footer") return "▬";
   if (kind === "button" || kind === "text") return "";
   if (type === "pricing") return "¥";
@@ -724,7 +724,7 @@ window.PrismCanvas = {
               fontFamily: designPalette.fontBody,
               align: "center",
               bold: false,
-              icon: "🖼",
+              icon: "▣",
             },
             meta: { prismDraw: true, kind: "image", src: draw.src || "" },
           });

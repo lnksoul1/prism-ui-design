@@ -68,7 +68,7 @@ const TOOL_MANIFEST: Array<{ name: string; group: string; summary: string; examp
   { name: "design_apply_style_guide", group: "semantics", summary: "Apply a style guide", example: 'design_apply_style_guide(tag="brutalist")' },
   { name: "design_list_capabilities", group: "meta", summary: "Self-describing capability manifest", example: "design_list_capabilities()" },
   // Spec §8.2 alignment
-  { name: "design_list_style_presets", group: "design", summary: "List the 14 style presets", example: "design_list_style_presets()" },
+  { name: "design_list_style_presets", group: "design", summary: "List all 30 style presets (14 legacy + 16 new, aligned with awesome-design-skills)", example: "design_list_style_presets()" },
   { name: "design_list_components", group: "design", summary: "List components on the current page", example: "design_list_components()" },
   { name: "design_list_pages", group: "design", summary: "List all pages", example: "design_list_pages()" },
   { name: "design_set_project_name", group: "design", summary: "Rename the project", example: 'design_set_project_name(name="Landing")' },
@@ -92,6 +92,22 @@ const TOOL_MANIFEST: Array<{ name: string; group: string; summary: string; examp
   // C6 one-shot generation
   { name: "design_generate_page", group: "semantics", summary: "Generate a page from a brief (template + semantic style)", example: 'design_generate_page(brief="电商促销首页", adjectives=["温暖","简约"])' },
   { name: "design_review_and_improve", group: "review", summary: "One-call review loop: score, fix, re-score + a11y audit", example: "design_review_and_improve()" },
+  // Upgrade plan U1: Lenis smooth scroll + GSAP animation engine
+  { name: "design_set_scroll", group: "upgrade", summary: "Configure scroll mode (native/smooth/lenis-gsap)", example: 'design_set_scroll(mode="lenis-gsap")' },
+  { name: "design_get_scroll", group: "upgrade", summary: "Read current scroll config", example: "design_get_scroll()" },
+  { name: "design_scroll_to", group: "upgrade", summary: "Register scroll-to target/anchor", example: 'design_scroll_to(target_id="hero", offset=0)' },
+  { name: "design_list_animation_engines", group: "upgrade", summary: "List animation engines (css/gsap) + presets", example: "design_list_animation_engines()" },
+  { name: "design_preview_animation", group: "upgrade", summary: "Preview an animation preset as standalone HTML", example: 'design_preview_animation(name="fadeUp")' },
+  { name: "design_set_scroll_trigger", group: "upgrade", summary: "Bind GSAP ScrollTrigger to a component", example: 'design_set_scroll_trigger(component_id="comp_x", start="top center")' },
+  { name: "design_set_export_runtime", group: "upgrade", summary: "Set export runtime level (minimal/standard/full)", example: 'design_set_export_runtime(runtime="full")' },
+  // Upgrade plan U2: Vanta.js 3D backgrounds
+  { name: "design_list_vanta_effects", group: "upgrade", summary: "List the 14 Vanta 3D background effects", example: "design_list_vanta_effects()" },
+  { name: "design_set_vanta_background", group: "upgrade", summary: "Attach a Vanta 3D background to a component", example: 'design_set_vanta_background(component_id="comp_x", effect="waves")' },
+  { name: "design_preview_vanta", group: "upgrade", summary: "Preview a Vanta effect as standalone HTML", example: 'design_preview_vanta(effect="net")' },
+  // Upgrade plan U3: React Bits animated components
+  { name: "design_list_react_bits", group: "upgrade", summary: "List React Bits animated components", example: 'design_list_react_bits(category="text")' },
+  { name: "design_add_react_bits_component", group: "upgrade", summary: "Add a React Bits component to the canvas", example: 'design_add_react_bits_component(name="BlurText", variant="TS-TW")' },
+  { name: "design_get_react_bits_code", group: "upgrade", summary: "Export a React Bits component as code", example: 'design_get_react_bits_code(name="SpotlightCard")' },
 ];
 
 export function registerCapabilitiesTool(server: McpServer): void {

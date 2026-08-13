@@ -38,6 +38,19 @@ export interface AnimationDef {
   delay?: number;
   curve?: string;
   stagger?: number;
+  /** Upgrade plan U1: animation engine ("css" default | "gsap"). */
+  engine?: "css" | "gsap";
+  /** Engine-specific parameters (gsap preset params). */
+  params?: Record<string, number | string | boolean>;
+  /** ScrollTrigger config for GSAP scroll-driven presets. */
+  scrollTrigger?: {
+    start?: string;
+    end?: string;
+    scrub?: boolean | number;
+    pin?: boolean;
+    markers?: boolean;
+    toggleActions?: string;
+  };
 }
 
 export interface ComponentLayout {
@@ -79,6 +92,47 @@ export interface DesignState {
   canvasDocs: Record<string, unknown>;
   /** AI draw commands waiting to be applied to each page's canvas. */
   canvasDraws: Record<string, CanvasDraw[]>;
+  /** Upgrade plan U1: smooth scroll configuration (Lenis). */
+  scroll?: ScrollConfig;
+  /** Upgrade plan U2: Vanta 3D backgrounds keyed by component/section id. */
+  vantaBackgrounds?: Record<string, VantaBackgroundConfig>;
+  /** Upgrade plan U3: React Bits component registry (component_id → meta). */
+  reactBits?: Record<string, { name: string; variant: string; props?: Record<string, unknown> }>;
+  /** Upgrade plan U4: export runtime level (minimal | standard | full). */
+  exportRuntime?: "minimal" | "standard" | "full";
+}
+
+/** Lenis smooth scroll configuration (upgrade plan U1). */
+export interface ScrollConfig {
+  mode: "native" | "smooth" | "lenis-gsap";
+  options: {
+    lerp?: number;
+    duration?: number;
+    wheelMultiplier?: number;
+    syncTouch?: boolean;
+    anchors?: boolean;
+    allowNestedScroll?: boolean;
+    respectReducedMotion?: boolean;
+  };
+  /** ScrollTo targets recorded for export runtime injection. */
+  scrollToTargets?: ScrollToTarget[];
+}
+
+export interface ScrollToTarget {
+  id: string;
+  target: string; // component_id or CSS selector
+  offset?: number;
+  duration?: number;
+  label?: string;
+}
+
+/** Vanta 3D background configuration (upgrade plan U2). */
+export interface VantaBackgroundConfig {
+  effect: string; // one of VANTA_EFFECTS
+  params: Record<string, number | string | boolean>;
+  mouseControls?: boolean;
+  touchControls?: boolean;
+  gyroControls?: boolean;
 }
 
 export interface PlatformSnapshot {
@@ -485,9 +539,95 @@ class DesignStateStore extends EventEmitter {
     const node = this.findComponent(componentId);
     if (!node) return false;
     node.animation = { ...node.animation, ...animation };
-    this.logActivity("set_animation", node.type, `Set animation for ${node.type} (${componentId})`, source);
+    const engineLabel = animation.engine ? ` [${animation.engine}]` : "";
+    this.logActivity("set_animation", node.type, `Set animation for ${node.type} (${componentId})${engineLabel}`, source);
     this.commit({ type: "setAnimation", componentId, animation: node.animation });
     return true;
+  }
+
+  // ===== Scroll (upgrade plan U1: Lenis integration) =====
+
+  setScroll(mode: ScrollConfig["mode"], options: ScrollConfig["options"], source: "ai" | "user" = "ai"): void {
+    this.state.scroll = {
+      mode,
+      options: options || {},
+      scrollToTargets: this.state.scroll?.scrollToTargets || [],
+    };
+    this.logActivity("set_scroll", "scroll", `Scroll mode set to "${mode}"`, source);
+    this.commit({ type: "setScroll", mode, options });
+  }
+
+  getScroll(): ScrollConfig | null {
+    return this.state.scroll ? JSON.parse(JSON.stringify(this.state.scroll)) : null;
+  }
+
+  addScrollToTarget(target: Omit<ScrollToTarget, "id"> & { id?: string }, source: "ai" | "user" = "ai"): ScrollToTarget {
+    if (!this.state.scroll) {
+      this.state.scroll = { mode: "native", options: {}, scrollToTargets: [] };
+    }
+    if (!this.state.scroll.scrollToTargets) this.state.scroll.scrollToTargets = [];
+    const withId = { ...target, id: target.id || `scroll_${Date.now()}_${Math.random().toString(36).slice(2, 7)}` };
+    this.state.scroll.scrollToTargets.push(withId);
+    this.logActivity("add_scroll_target", "scroll", `Added scroll-to target ${target.target}`, source);
+    this.commit({ type: "addScrollTarget", target: withId });
+    return withId;
+  }
+
+  // ===== Vanta backgrounds (upgrade plan U2) =====
+
+  setVantaBackground(
+    targetId: string,
+    config: VantaBackgroundConfig,
+    source: "ai" | "user" = "ai"
+  ): VantaBackgroundConfig {
+    if (!this.state.vantaBackgrounds) this.state.vantaBackgrounds = {};
+    this.state.vantaBackgrounds[targetId] = config;
+    this.logActivity("set_vanta_bg", "vanta", `Set Vanta ${config.effect} background for ${targetId}`, source);
+    this.commit({ type: "setVantaBackground", targetId, config });
+    return config;
+  }
+
+  removeVantaBackground(targetId: string, source: "ai" | "user" = "ai"): boolean {
+    if (!this.state.vantaBackgrounds || !this.state.vantaBackgrounds[targetId]) return false;
+    delete this.state.vantaBackgrounds[targetId];
+    this.logActivity("remove_vanta_bg", "vanta", `Removed Vanta background for ${targetId}`, source);
+    this.commit({ type: "removeVantaBackground", targetId });
+    return true;
+  }
+
+  getVantaBackgrounds(): Record<string, VantaBackgroundConfig> {
+    return JSON.parse(JSON.stringify(this.state.vantaBackgrounds || {}));
+  }
+
+  // ===== React Bits (upgrade plan U3) =====
+
+  registerReactBitsComponent(
+    componentId: string,
+    name: string,
+    variant: string,
+    props?: Record<string, unknown>,
+    source: "ai" | "user" = "ai"
+  ): void {
+    if (!this.state.reactBits) this.state.reactBits = {};
+    this.state.reactBits[componentId] = { name, variant, props };
+    this.logActivity("register_react_bits", "react-bits", `Registered React Bits ${name} (${variant}) for ${componentId}`, source);
+    this.commit({ type: "registerReactBits", componentId, name, variant });
+  }
+
+  getReactBitsComponent(componentId: string): { name: string; variant: string; props?: Record<string, unknown> } | null {
+    return this.state.reactBits?.[componentId] ? JSON.parse(JSON.stringify(this.state.reactBits[componentId])) : null;
+  }
+
+  // ===== Export runtime (upgrade plan U4) =====
+
+  setExportRuntime(runtime: "minimal" | "standard" | "full", source: "ai" | "user" = "ai"): void {
+    this.state.exportRuntime = runtime;
+    this.logActivity("set_export_runtime", "export", `Export runtime set to "${runtime}"`, source);
+    this.commit({ type: "setExportRuntime", runtime });
+  }
+
+  getExportRuntime(): "minimal" | "standard" | "full" {
+    return this.state.exportRuntime || "standard";
   }
 
   reorderComponent(
@@ -707,6 +847,10 @@ class DesignStateStore extends EventEmitter {
     this.state.themeMode = "light";
     this.state.canvasDocs = {};
     this.state.canvasDraws = {};
+    this.state.scroll = undefined;
+    this.state.vantaBackgrounds = undefined;
+    this.state.reactBits = undefined;
+    this.state.exportRuntime = "standard";
 
     this.logActivity("clear_all", "system", "Cleared all design state", source);
     this.commit({ type: "clearAll" });
@@ -771,6 +915,19 @@ class DesignStateStore extends EventEmitter {
         snapshot.canvasDraws && typeof snapshot.canvasDraws === "object"
           ? JSON.parse(JSON.stringify(snapshot.canvasDraws))
           : {},
+      scroll: snapshot.scroll && typeof snapshot.scroll === "object"
+        ? JSON.parse(JSON.stringify(snapshot.scroll))
+        : undefined,
+      vantaBackgrounds: snapshot.vantaBackgrounds && typeof snapshot.vantaBackgrounds === "object"
+        ? JSON.parse(JSON.stringify(snapshot.vantaBackgrounds))
+        : undefined,
+      reactBits: snapshot.reactBits && typeof snapshot.reactBits === "object"
+        ? JSON.parse(JSON.stringify(snapshot.reactBits))
+        : undefined,
+      exportRuntime:
+        snapshot.exportRuntime === "minimal" || snapshot.exportRuntime === "full"
+          ? snapshot.exportRuntime
+          : "standard",
     };
     this.fixComponentsReference();
 
@@ -831,6 +988,10 @@ class DesignStateStore extends EventEmitter {
       revision: 0,
       canvasDocs: {},
       canvasDraws: {},
+      scroll: undefined,
+      vantaBackgrounds: undefined,
+      reactBits: undefined,
+      exportRuntime: "standard",
     };
     this.history = [JSON.parse(JSON.stringify(this.state))];
     this.historyIndex = 0;

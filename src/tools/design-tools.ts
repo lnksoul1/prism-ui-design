@@ -8,6 +8,14 @@ import {
   type DesignState,
 } from "../state.js";
 import { applyStyleTokenSet } from "../tokens.js";
+import { getMotionProfile } from "../constants.js";
+import {
+  CDN_URLS,
+  cdnScriptsForDeps,
+  collectDeps,
+  generateLenisGsapInit,
+} from "../animations/serializer.js";
+import { getVantaEffect } from "../vanta-effects.js";
 
 // All methods used below now live directly on DesignStateStore (state.ts),
 // so no type extension or cast is needed.
@@ -464,38 +472,10 @@ export function exportComponentCode(
   format: string,
   tokens?: DesignTokens
 ): string {
-  const baseHtml = componentToHTML(node);
-  let html = baseHtml;
-  let reactHtml = baseHtml;
-  const p = node.props || {};
-  const inline: string[] = [];
-  const jsxStyles: string[] = [];
-  const pushStyle = (prop: string, cssKey: string, jsxKey: string, raw: unknown): void => {
-    if (raw === undefined || raw === null || raw === "") return;
-    const value = String(raw).replace(/px$/, "");
-    inline.push(`${cssKey}: ${value}px`);
-    jsxStyles.push(`${jsxKey}: '${value}px'`);
-  };
-  if (p.color) {
-    inline.push(`color: ${String(p.color)}`);
-    jsxStyles.push(`color: '${String(p.color)}'`);
-  }
-  if (p.bg) {
-    inline.push(`background: ${String(p.bg)}`);
-    jsxStyles.push(`background: '${String(p.bg)}'`);
-  }
-  pushStyle("radius", "border-radius", "borderRadius", p.radius);
-  pushStyle("fontSize", "font-size", "fontSize", p.fontSize);
-  pushStyle("spacing", "padding", "padding", p.spacing);
-  if (inline.length > 0) {
-    html = `<div style="${inline.join("; ")}">\n${html}\n</div>`;
-  }
-  if (jsxStyles.length > 0) {
-    reactHtml = `<div style={{${jsxStyles.join(", ")}}}>\n${reactHtml}\n</div>`;
-  }
+  const html = componentToHTML(node);
   switch (format) {
     case "react":
-      return htmlToJSX(reactHtml);
+      return htmlToJSX(html);
     case "css":
       return tokens ? tokensToCSSVariables(tokens) : "/* no tokens available */";
     case "html":
@@ -504,8 +484,105 @@ export function exportComponentCode(
   }
 }
 
+/**
+ * Build the runtime asset blocks (head CDNs + body init scripts) for HTML export,
+ * gated by the `exportRuntime` level (upgrade plan U4):
+ *   - minimal  : no external JS; only inline CSS animations are emitted.
+ *   - standard : inject GSAP (+ ScrollTrigger) and Lenis when the style prefers
+ *                gsap or the scroll mode is lenis-gsap.
+ *   - full     : standard + Vanta/three.js CDNs and per-background init scripts.
+ *
+ * Per-component animation codegen is the serializer's job; this helper only
+ * bootstraps the runtime so the exported page is ready to run those animations.
+ */
+function buildRuntimeAssets(state: DesignState): { headScripts: string; bodyScripts: string } {
+  const runtime = state.exportRuntime || "standard";
+  if (runtime === "minimal") {
+    return { headScripts: "", bodyScripts: "" };
+  }
+
+  const motion = getMotionProfile(state.style || "minimal");
+  const scrollMode = state.scroll?.mode || "native";
+  const vantaEntries = Object.entries(state.vantaBackgrounds || {});
+
+  const needGsap = motion.engine === "gsap" || scrollMode === "lenis-gsap";
+  const needLenis = scrollMode === "lenis-gsap";
+  const needVanta = runtime === "full" && vantaEntries.length > 0;
+  const needScrollTrigger =
+    (needGsap && (motion.scrollReveal || scrollMode === "lenis-gsap")) || needVanta;
+
+  const head: string[] = [];
+  const body: string[] = [];
+
+  // ----- Head: CDN <script> tags -----
+  if (needLenis) {
+    head.push(`<link rel="stylesheet" href="${CDN_URLS.lenisCSS}">`);
+    head.push(`<script src="${CDN_URLS.lenisJS}"></script>`);
+  }
+  if (needGsap) {
+    const deps = new Set<string>(["gsap"]);
+    if (needScrollTrigger) deps.add("ScrollTrigger");
+    // Pull in any extra deps declared by components' gsap animations.
+    const componentAnims: Array<{ engine: "css" | "gsap"; preset: string }> = [];
+    const walk = (list: ComponentNode[]): void => {
+      for (const c of list) {
+        if (c.animation?.engine === "gsap" && c.animation.entry) {
+          componentAnims.push({ engine: "gsap", preset: c.animation.entry });
+        }
+        if (c.children?.length) walk(c.children);
+      }
+    };
+    walk(state.pages.find((p) => p.id === state.currentPageId)?.components || state.components);
+    collectDeps(componentAnims).forEach((d) => deps.add(d));
+    head.push(...cdnScriptsForDeps(Array.from(deps)));
+  }
+  if (needVanta) {
+    head.push(`<script src="${CDN_URLS.three}"></script>`);
+    head.push(`<script src="${CDN_URLS.vantaBase}"></script>`);
+    const seenEffect = new Set<string>();
+    for (const [, cfg] of vantaEntries) {
+      const fx = getVantaEffect(cfg.effect);
+      if (fx && !seenEffect.has(fx.scriptFile)) {
+        head.push(`<script src="https://cdn.jsdelivr.net/npm/vanta/dist/${fx.scriptFile}"></script>`);
+        seenEffect.add(fx.scriptFile);
+      }
+    }
+  }
+
+  // ----- Body: init scripts -----
+  if (needLenis) {
+    body.push(generateLenisGsapInit(state.scroll?.options || {}));
+  }
+  if (needVanta) {
+    const vantaInits = vantaEntries
+      .map(([id, cfg]) => {
+        const fx = getVantaEffect(cfg.effect);
+        if (!fx) return "";
+        const effectCtor = `VANTA.${fx.key}`;
+        const params = JSON.stringify({
+          el: `#${id}`,
+          mouseControls: cfg.mouseControls ?? true,
+          touchControls: cfg.touchControls ?? false,
+          gyroControls: cfg.gyroControls ?? false,
+          ...cfg.params,
+        });
+        return `  if (window.${effectCtor}) { ${effectCtor}(${params}); }`;
+      })
+      .filter(Boolean)
+      .join("\n");
+    if (vantaInits) {
+      body.push(`<script>\n(function(){\n${vantaInits}\n})();\n</script>`);
+    }
+  }
+
+  const headScripts = head.length ? head.join("\n") : "";
+  const bodyScripts = body.length ? `\n${body.join("\n")}` : "";
+  return { headScripts, bodyScripts };
+}
+
 function exportToHTML(state: DesignState, components: ComponentNode[] = state.components): string {
   const cssVars = tokensToCSSVariables(state.tokens);
+  const runtime = buildRuntimeAssets(state);
   const componentsHTML = components
     .map((c) => `  ${componentToHTML(c)}`)
     .join("\n");
@@ -588,9 +665,11 @@ ${cssVars}
     .avatar { display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px; border-radius: var(--radius-full, 9999px); background: var(--color-primary, #6366F1); color: #fff; overflow: hidden; }
     .avatar img { width: 100%; height: 100%; object-fit: cover; }
   </style>
+${runtime.headScripts}
 </head>
 <body>
 ${componentsHTML}
+${runtime.bodyScripts}
 </body>
 </html>`;
 }

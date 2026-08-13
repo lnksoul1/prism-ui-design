@@ -18,6 +18,150 @@ export interface StylePreset {
   bg_dark: string;
   text_light: string;
   text_dark: string;
+  // —— V2 扩展字段（可选，向后兼容；完整数据见 style-presets-v2.ts） ——
+  slug?: string;
+  category?: StyleCategory;
+  inspiration?: string;
+  colors?: StyleColorSystem;
+  font?: FontSystem;
+  spacingScale?: SpacingScale;
+  radiusScale?: RadiusScale;
+  elevation?: ElevationScale;
+  breakpoints?: BreakpointSet;
+  maxContentWidth?: number;
+  gridColumns?: number;
+  a11y?: A11ySpec;
+  doRules?: string[];
+  dontRules?: string[];
+  writingTone?: string[];
+  qualityGates?: string[];
+  recommendedReactBits?: string[];
+}
+
+// ===== V2 辅助类型（S1: 数据化设计系统字段） =====
+
+export type StyleCategory =
+  | "foundational"
+  | "expressive"
+  | "textured"
+  | "editorial"
+  | "technical"
+  | "retro"
+  | "playful"
+  | "immersive";
+
+export interface SemanticColor {
+  primary: string;
+  onPrimary: string;
+  primaryHover: string;
+  primaryFocus: string;
+  primaryPressed: string;
+  secondary: string;
+  accent: string;
+  success: string;
+  warning: string;
+  danger: string;
+  info: string;
+}
+
+export interface SurfaceScale {
+  canvas: string;
+  surface1: string;
+  surface2: string;
+  surface3: string;
+  surface4: string;
+}
+
+export interface TextScale {
+  ink: string;
+  inkMuted: string;
+  inkSubtle: string;
+  inkTertiary: string;
+}
+
+export interface BorderScale {
+  hairline: string;
+  hairlineStrong: string;
+  hairlineTertiary: string;
+}
+
+export interface StyleColorSystem {
+  light: SemanticColor;
+  dark: SemanticColor;
+  surfaceLight: SurfaceScale;
+  surfaceDark: SurfaceScale;
+  textLight: TextScale;
+  textDark: TextScale;
+  borderLight: BorderScale;
+  borderDark: BorderScale;
+  inverse?: Partial<SemanticColor & SurfaceScale & TextScale>;
+}
+
+export interface FontDef {
+  name: string;
+  family: string;
+  weights: number[];
+  substitutes?: string[];
+}
+
+export interface TypeToken {
+  name: string;
+  fontSize: number;
+  fontWeight: number;
+  lineHeight: number;
+  letterSpacing: number;
+}
+
+export interface FontSystem {
+  display: FontDef;
+  body: FontDef;
+  mono: FontDef;
+  typeScale: TypeToken[];
+}
+
+export interface RadiusScale {
+  xs: number;
+  sm: number;
+  md: number;
+  lg: number;
+  xl: number;
+  xxl: number;
+  pill: number;
+  full: number;
+}
+
+export interface ElevationScale {
+  e0: string;
+  e1: string;
+  e2: string;
+  e3: string;
+  e4: string;
+}
+
+export interface SpacingScale {
+  xxs: number;
+  xs: number;
+  sm: number;
+  md: number;
+  lg: number;
+  xl: number;
+  xxl: number;
+  section: number;
+}
+
+export interface BreakpointSet {
+  mobile: number;
+  mobileLg: number;
+  tablet: number;
+  desktop: number;
+  desktopXL: number;
+}
+
+export interface A11ySpec {
+  wcagLevel: "AA" | "AAA";
+  keyboardFirst: boolean;
+  minTouchTarget: number;
+  focusRingSpec: string;
 }
 
 // 14 style presets (spec 3.5): the original 6 + 8 trend-aligned styles.
@@ -218,6 +362,111 @@ export const STYLE_PRESETS: Record<string, StylePreset> = {
     text_light: "#1C1917",
     text_dark: "#F5EFE0",
   },
+};
+
+// ===== Motion Profiles (upgrade plan U4) =====
+// Per-style default motion behavior. Looked up by the same key as STYLE_PRESETS.
+// `engine: "css"` keeps exports dependency-free; `engine: "gsap"` opts into the
+// premium runtime (Lenis + GSAP) when exportRuntime is "standard" or "full".
+
+export interface MotionProfile {
+  /** Default entry animation preset name (registered in the animations layer). */
+  entry: string;
+  /** Default hover animation preset name. */
+  hover: string;
+  /** Recommended duration in seconds. */
+  duration: number;
+  /** Default easing curve (CSS keyword or GSAP ease string). */
+  easing: string;
+  /** Stagger between sibling elements in seconds (0 = no stagger). */
+  stagger: number;
+  /** Preferred animation engine for this style. */
+  engine: "css" | "gsap";
+  /** Whether scroll-driven reveals fit this style. */
+  scrollReveal: boolean;
+}
+
+export const STYLE_MOTION_PROFILES: Record<string, MotionProfile> = {
+  minimal:       { entry: "fadeUp",     hover: "lift",      duration: 0.4, easing: "easeOut",        stagger: 0.08, engine: "css",  scrollReveal: true  },
+  bold:          { entry: "scaleIn",   hover: "scaleUp",    duration: 0.5, easing: "back.out(1.7)", stagger: 0.06, engine: "gsap", scrollReveal: true  },
+  playful:       { entry: "spring",    hover: "scaleUp",    duration: 0.6, easing: "easeOut",        stagger: 0.10, engine: "css",  scrollReveal: true  },
+  dark:          { entry: "cinematic", hover: "glow",       duration: 0.8, easing: "power2.out",    stagger: 0.08, engine: "gsap", scrollReveal: true  },
+  editorial:     { entry: "fadeIn",     hover: "lift",      duration: 0.7, easing: "easeOut",        stagger: 0.05, engine: "css",  scrollReveal: true  },
+  tech:          { entry: "slideRight", hover: "glow",      duration: 0.4, easing: "power3.out",     stagger: 0.04, engine: "gsap", scrollReveal: true  },
+  glassmorphism: { entry: "scaleIn",   hover: "lift",      duration: 0.6, easing: "power2.out",     stagger: 0.07, engine: "gsap", scrollReveal: true  },
+  neumorphism:   { entry: "scaleIn",   hover: "scaleUp",    duration: 0.5, easing: "easeOut",        stagger: 0.06, engine: "css",  scrollReveal: false },
+  claymorphism:  { entry: "spring",     hover: "scaleUp",    duration: 0.6, easing: "easeOut",        stagger: 0.09, engine: "css",  scrollReveal: false },
+  aurora:        { entry: "fadeUp",     hover: "glow",      duration: 0.9, easing: "power2.out",     stagger: 0.08, engine: "gsap", scrollReveal: true  },
+  brutalism:     { entry: "fadeIn",     hover: "ripple",    duration: 0.2, easing: "steps(2)",       stagger: 0.02, engine: "css",  scrollReveal: false },
+  cyberpunk:     { entry: "glitch",     hover: "glow",      duration: 0.5, easing: "power4.out",     stagger: 0.03, engine: "gsap", scrollReveal: true  },
+  organic:       { entry: "fadeUp",     hover: "lift",      duration: 0.8, easing: "easeOut",        stagger: 0.10, engine: "css",  scrollReveal: true  },
+  luxury:        { entry: "cinematic", hover: "lift",      duration: 1.0, easing: "power2.out",     stagger: 0.12, engine: "css",  scrollReveal: true  },
+  // —— 新增 16 风格的 motion profile（S3）——
+  bento:        { entry: "scaleIn",   hover: "lift",      duration: 0.4, easing: "power2.out",     stagger: 0.06, engine: "css",  scrollReveal: true  },
+  material:     { entry: "fadeUp",    hover: "ripple",    duration: 0.3, easing: "easeOut",        stagger: 0.05, engine: "css",  scrollReveal: true  },
+  shadcn:       { entry: "fadeIn",     hover: "lift",      duration: 0.2, easing: "easeOut",        stagger: 0.04, engine: "css",  scrollReveal: false },
+  neobrutalism: { entry: "scaleIn",   hover: "scaleUp",   duration: 0.15,easing: "steps(2)",       stagger: 0.02, engine: "css",  scrollReveal: false },
+  mono:         { entry: "fadeIn",     hover: "lift",      duration: 0.3, easing: "easeOut",        stagger: 0.05, engine: "css",  scrollReveal: true  },
+  neon:         { entry: "glow",      hover: "glow",      duration: 0.6, easing: "power2.out",     stagger: 0.04, engine: "gsap", scrollReveal: true  },
+  gradient:     { entry: "fadeUp",     hover: "scaleUp",   duration: 0.6, easing: "power2.out",     stagger: 0.07, engine: "gsap", scrollReveal: true  },
+  vibrant:      { entry: "spring",    hover: "scaleUp",   duration: 0.5, easing: "back.out(1.7)",  stagger: 0.08, engine: "css",  scrollReveal: true  },
+  doodle:       { entry: "fadeIn",    hover: "scaleUp",   duration: 0.5, easing: "easeOut",        stagger: 0.06, engine: "css",  scrollReveal: true  },
+  paper:        { entry: "fadeUp",    hover: "lift",      duration: 0.4, easing: "easeOut",        stagger: 0.05, engine: "css",  scrollReveal: true  },
+  cosmic:       { entry: "cinematic", hover: "glow",      duration: 1.0, easing: "power2.out",     stagger: 0.10, engine: "gsap", scrollReveal: true  },
+  immersive:    { entry: "cinematic", hover: "glow",      duration: 1.2, easing: "power3.out",     stagger: 0.12, engine: "gsap", scrollReveal: true  },
+  retro:        { entry: "fadeIn",    hover: "ripple",    duration: 0.2, easing: "steps(3)",       stagger: 0.03, engine: "css",  scrollReveal: false },
+  vintage:      { entry: "fadeUp",    hover: "lift",      duration: 0.3, easing: "steps(2)",       stagger: 0.04, engine: "css",  scrollReveal: false },
+  spacious:     { entry: "fadeUp",    hover: "lift",      duration: 0.7, easing: "power2.out",     stagger: 0.10, engine: "css",  scrollReveal: true  },
+  storytelling: { entry: "cinematic", hover: "lift",     duration: 0.9, easing: "power2.out",     stagger: 0.09, engine: "gsap", scrollReveal: true  },
+};
+
+/** Resolve a motion profile for a style key (falls back to "minimal"). */
+export function getMotionProfile(style: string): MotionProfile {
+  return STYLE_MOTION_PROFILES[style] || STYLE_MOTION_PROFILES.minimal;
+}
+
+// ===== Motion Token Set (S4: 动效 token 化，差异化优势) =====
+// awesome-design-skills 与 awesome-design-md 均未定义动效 token 层；
+// Prism 将动效 token 化作为差异化护城河。
+
+export interface MotionTokenSet {
+  duration: {
+    instant: number;
+    fast: number;
+    normal: number;
+    slow: number;
+    cinematic: number;
+  };
+  easing: {
+    standard: string;
+    emphasized: string;
+    exit: string;
+    spring: string;
+    steps: string;
+  };
+  stagger: {
+    tight: number;
+    normal: number;
+    relaxed: number;
+  };
+  scrollTrigger?: {
+    start: string;
+    end: string;
+    scrub: boolean;
+  };
+}
+
+export const MOTION_TOKENS: MotionTokenSet = {
+  duration: { instant: 0.1, fast: 0.2, normal: 0.4, slow: 0.7, cinematic: 1.2 },
+  easing: {
+    standard: "cubic-bezier(0.4,0,0.2,1)",
+    emphasized: "cubic-bezier(0.2,0,0,1)",
+    exit: "cubic-bezier(0,0,0.2,1)",
+    spring: "back.out(1.7)",
+    steps: "steps(2)",
+  },
+  stagger: { tight: 0.03, normal: 0.06, relaxed: 0.1 },
+  scrollTrigger: { start: "top 80%", end: "bottom 20%", scrub: false },
 };
 
 // ===== Font Pairing Database =====

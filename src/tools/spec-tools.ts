@@ -9,6 +9,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { STYLE_PRESETS } from "../constants.js";
+import { STYLE_PRESETS_V2, listAllStyleSlugs, isV2Style } from "../style-presets-v2.js";
 import { stateStore } from "../state.js";
 import { tokensToDtcg } from "../tokens/dtcgi.js";
 import { deleteToken, setPlatform, setTokenBatch } from "../service/design-service.js";
@@ -28,7 +29,7 @@ export function registerSpecTools(server: McpServer): void {
     "design_list_style_presets",
     {
       title: "List Style Presets",
-      description: "List all 14 built-in style presets with their key parameters.",
+      description: "List all 30 built-in style presets (14 legacy + 16 new, aligned with awesome-design-skills). V2 presets include full token systems (colors/font/spacing/radius/elevation/a11y/governance).",
       inputSchema: {},
       annotations: {
         readOnlyHint: true,
@@ -38,25 +39,36 @@ export function registerSpecTools(server: McpServer): void {
       },
     },
     async () => {
-      const presets = Object.entries(STYLE_PRESETS).map(([id, p]) => ({
-        id,
-        name: p.name,
-        description: p.description,
-        base_hue: p.base_hue,
-        saturation: p.saturation,
-        lightness: p.lightness,
-        radius_style: p.radius_style,
-        shadow_style: p.shadow_style,
-        spacing_base: p.spacing_base,
-      }));
+      const slugs = listAllStyleSlugs();
+      const presets = slugs.map((id) => {
+        const v2 = STYLE_PRESETS_V2[id];
+        const p = v2 || STYLE_PRESETS[id];
+        return {
+          id,
+          name: p.name,
+          description: p.description,
+          category: v2?.category,
+          inspiration: v2?.inspiration,
+          isV2: isV2Style(id),
+          base_hue: p.base_hue,
+          saturation: p.saturation,
+          lightness: p.lightness,
+          radius_style: p.radius_style,
+          shadow_style: p.shadow_style,
+          spacing_base: p.spacing_base,
+          hasFullTokens: !!v2?.colors,
+          recommendedReactBits: v2?.recommendedReactBits?.length || 0,
+        };
+      });
+      const v2Count = presets.filter((p) => p.isV2).length;
       return {
         content: [
           {
             type: "text" as const,
-            text: `# Style Presets (${presets.length})\n\n${presets.map((p) => `- ${p.id} — ${p.name} (hue ${p.base_hue}°, ${p.saturation}% / ${p.lightness}%, radius ${p.radius_style})`).join("\n")}`,
+            text: `# Style Presets (${presets.length} total, ${v2Count} V2 with full tokens)\n\n${presets.map((p) => `- ${p.id} — ${p.name}${p.isV2 ? " ★" : ""} (${p.category || "legacy"}, hue ${p.base_hue}°, ${p.inspiration || ""})`).join("\n")}`,
           },
         ],
-        structuredContent: { success: true, count: presets.length, presets },
+        structuredContent: { success: true, count: presets.length, v2Count, presets },
       };
     }
   );

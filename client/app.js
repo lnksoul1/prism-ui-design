@@ -106,10 +106,10 @@ const I18N = {
     deleteComponent: "删除组件",
     width: "宽度",
     height: "高度",
-    save: "💾 保存",
-    load: "📂 加载",
-    import: "📥 导入",
-    export: "📤 导出",
+    save: "保存",
+    load: "加载",
+    import: "导入",
+    export: "导出",
     startDesigning: "开始你的设计",
     startWithAI: "用 AI 生成",
     startWithAIDesc: "描述需求，AI 自动搭建页面",
@@ -146,7 +146,7 @@ const I18N = {
     freeformHint: "拖动组件调整位置，拖边角调整大小",
     captureActualUi: "截取实际界面",
     captureActualUiDesc: "截取真实运行的 Dashboard 作为参考图",
-    writeback: "✍ 写回",
+    writeback: "写回",
     writebackConfirm: "将设计令牌写回 client/style.css（自动备份）并生成 design-writeback.html 预览？",
     writebackDone: "已写回 {count} 个令牌到 {files}，备份：{backup}",
     writebackError: "写回失败",
@@ -182,7 +182,7 @@ const I18N = {
     canvasAutoLayoutDone: "已自动排列 {n} 个形状",
     canvasComponentDropped: "已将 {name} 添加到画布",
     promptQueued: "指令已排队，等待 Agent 处理…",
-    promptAccepted: "Agent 已接收指令 ✓",
+    promptAccepted: "Agent 已接收指令",
     promptExecuted: "已执行：{summary}",
     helpTitle: "快捷键",
     helpGeneral: "常用",
@@ -211,11 +211,11 @@ const I18N = {
     cmdHelp: "快捷键帮助",
     cmdUndo: "撤销",
     cmdRedo: "重做",
-    chipDark: "🌙 深色模式",
-    chipLight: "☀️ 浅色模式",
-    chipSaaS: "🚀 SaaS 模板",
-    chipEcommerce: "🛍️ 电商模板",
-    chipClear: "🗑️ 清空",
+    chipDark: "深色模式",
+    chipLight: "浅色模式",
+    chipSaaS: "SaaS 模板",
+    chipEcommerce: "电商模板",
+    chipClear: "清空",
     inspectorPropsTab: "属性",
     inspectorCodeTab: "代码",
     copyCode: "复制代码",
@@ -273,10 +273,10 @@ const I18N = {
     deleteComponent: "Delete",
     width: "Width",
     height: "Height",
-    save: "💾 Save",
-    load: "📂 Load",
-    import: "📥 Import",
-    export: "📤 Export",
+    save: "Save",
+    load: "Load",
+    import: "Import",
+    export: "Export",
     startDesigning: "Start designing",
     startWithAI: "Generate with AI",
     startWithAIDesc: "Describe what you want, the AI builds the page",
@@ -313,7 +313,7 @@ const I18N = {
     freeformHint: "Drag components to move, drag corners to resize",
     captureActualUi: "Capture actual UI",
     captureActualUiDesc: "Screenshot the live dashboard as a reference",
-    writeback: "✍ Write back",
+    writeback: "Write back",
     writebackConfirm: "Write design tokens back to client/style.css (auto-backup) and generate design-writeback.html?",
     writebackDone: "Wrote {count} tokens to {files}. Backup: {backup}",
     writebackError: "Write-back failed",
@@ -349,7 +349,7 @@ const I18N = {
     canvasAutoLayoutDone: "Arranged {n} shapes",
     canvasComponentDropped: "Added {name} to the canvas",
     promptQueued: "Prompt queued, waiting for the agent…",
-    promptAccepted: "Agent accepted the prompt ✓",
+    promptAccepted: "Agent accepted the prompt",
     promptExecuted: "Executed: {summary}",
     helpTitle: "Keyboard shortcuts",
     helpGeneral: "General",
@@ -378,11 +378,11 @@ const I18N = {
     cmdHelp: "Keyboard shortcut help",
     cmdUndo: "Undo",
     cmdRedo: "Redo",
-    chipDark: "🌙 Dark mode",
-    chipLight: "☀️ Light mode",
-    chipSaaS: "🚀 SaaS template",
-    chipEcommerce: "🛍️ E-commerce template",
-    chipClear: "🗑️ Clear",
+    chipDark: "Dark mode",
+    chipLight: "Light mode",
+    chipSaaS: "SaaS template",
+    chipEcommerce: "E-commerce template",
+    chipClear: "Clear",
     inspectorPropsTab: "Props",
     inspectorCodeTab: "Code",
     copyCode: "Copy code",
@@ -539,7 +539,7 @@ function showConflictWarning(msg) {
   const container = $("conflict-warnings");
   if (!container) return;
   const warning = el("div", "conflict-warning");
-  warning.appendChild(el("span", "warn-icon", "⚠️"));
+  warning.appendChild(el("span", "warn-icon", "!"));
   const text = el("span", "warn-text", msg.message || t("conflictTitle"));
   warning.appendChild(text);
   const reload = el("button", "conflict-reload", t("reload"));
@@ -815,11 +815,11 @@ function renderCanvas() {
               <span><span class="pa-title">${t("openClientUi")}</span><br><span class="pa-desc">${t("openClientUiDesc")}</span></span>
             </button>
             <button class="placeholder-action" id="empty-capture">
-              <span class="pa-icon">📷</span>
+              <span class="pa-icon">▣</span>
               <span><span class="pa-title">${t("captureActualUi")}</span><br><span class="pa-desc">${t("captureActualUiDesc")}</span></span>
             </button>
             <button class="placeholder-action" id="empty-canvas">
-              <span class="pa-icon">✏️</span>
+              <span class="pa-icon">✎</span>
               <span><span class="pa-title">${t("startWithCanvas")}</span><br><span class="pa-desc">${t("startWithCanvasDesc")}</span></span>
             </button>
           </div>
@@ -950,7 +950,7 @@ function buildChromeTop(pf) {
     return `<span class="chrome-status-time">9:41</span><span class="chrome-status-icons">● ●● ●</span>`;
   }
   if (pf.frame === "android") {
-    return `<span class="chrome-status-time">9:41</span><span class="chrome-status-icons">📶 100%</span>`;
+    return `<span class="chrome-status-time">9:41</span><span class="chrome-status-icons">100%</span>`;
   }
   return "";
 }
@@ -2308,9 +2308,9 @@ function renderSidebar(props) {
     container.appendChild(el("div", "sidebar-title", props.title));
   }
   const links = props.links || props.items || [
-    { label: "Dashboard", icon: "📊" },
-    { label: "Projects", icon: "📁" },
-    { label: "Settings", icon: "⚙️" },
+    { label: "Dashboard", icon: "▣" },
+    { label: "Projects", icon: "▤" },
+    { label: "Settings", icon: "○" },
   ];
   links.forEach((link, i) => {
     const label = typeof link === "string" ? link : (link.label || link.text || "");
@@ -2487,8 +2487,8 @@ function renderTable(props) {
 function renderAlert(props, variant) {
   const type = variant || props.type || "info";
   const alert = el("div", `comp-alert alert-${type}`);
-  const icons = { info: "ℹ️", success: "✅", warning: "⚠️", error: "⛔" };
-  alert.appendChild(el("span", "alert-icon", icons[type] || "ℹ️"));
+  const icons = { info: "i", success: "OK", warning: "!", error: "×" };
+  alert.appendChild(el("span", `alert-icon alert-icon-${type}`, icons[type] || "i"));
   const body = el("div", "alert-body");
   if (props.title) body.appendChild(el("div", "alert-title", props.title));
   if (props.text) body.appendChild(el("div", "alert-text", props.text));
@@ -2591,7 +2591,7 @@ function renderFeatureGrid(props, variant) {
 
 function renderCookieBanner(props) {
   const banner = el("div", "comp-cookie");
-  banner.appendChild(el("span", "cookie-icon", "🍪"));
+  banner.appendChild(el("span", "cookie-icon", "◉"));
   banner.appendChild(el("span", "cookie-text", props.text || "我们使用 Cookie 提升体验"));
   const actions = el("div", "cookie-actions");
   if (props.decline_text) actions.appendChild(el("span", "btn btn-ghost", props.decline_text));
@@ -3142,10 +3142,10 @@ function applyTheme() {
   const toggle = $("theme-toggle");
   if (mode === "dark") {
     document.body.classList.add("theme-dark");
-    if (toggle) toggle.textContent = "☀️";
+    if (toggle) toggle.textContent = "主题";
   } else {
     document.body.classList.remove("theme-dark");
-    if (toggle) toggle.textContent = "🌙";
+    if (toggle) toggle.textContent = "主题";
   }
 }
 
@@ -3611,22 +3611,22 @@ function buildCommands() {
     {
       id: "add_page",
       label: t("cmdAddPage"),
-      icon: "📄",
+      icon: "▤",
       run: () => send({ type: "add_page", name: "页面 " + pageCount }),
     },
-    { id: "theme_dark", label: t("cmdThemeDark"), icon: "🌙", run: () => send({ type: "set_theme", mode: "dark" }) },
-    { id: "theme_light", label: t("cmdThemeLight"), icon: "☀️", run: () => send({ type: "set_theme", mode: "light" }) },
-    { id: "tpl_saas", label: t("cmdTplSaaS"), icon: "🚀", run: () => sendPrompt("应用 SaaS 模板") },
-    { id: "tpl_ecommerce", label: t("cmdTplEcommerce"), icon: "🛍️", run: () => sendPrompt("应用电商模板") },
-    { id: "clear", label: t("cmdClear"), icon: "🗑️", run: () => sendPrompt("清空") },
-    { id: "project", label: t("cmdProject"), icon: "🗂️", run: () => { const b = $("project-btn"); if (b) b.click(); } },
-    { id: "save", label: t("cmdSaveProject"), icon: "💾", run: saveCurrentProject },
-    { id: "export", label: t("cmdExport"), icon: "📤", run: () => { const b = $("export-btn"); if (b) b.click(); } },
-    { id: "canvas", label: t("cmdCanvas"), icon: "✏️", run: () => setCanvasEditorMode(true) },
-    { id: "screenshot", label: t("cmdScreenshot"), icon: "📸", run: takeScreenshot },
-    { id: "help", label: t("cmdHelp"), icon: "❓", run: () => toggleHelp(true) },
-    { id: "undo", label: t("cmdUndo"), icon: "↩️", run: () => send({ type: "undo" }) },
-    { id: "redo", label: t("cmdRedo"), icon: "↪️", run: () => send({ type: "redo" }) },
+    { id: "theme_dark", label: t("cmdThemeDark"), icon: "◑", run: () => send({ type: "set_theme", mode: "dark" }) },
+    { id: "theme_light", label: t("cmdThemeLight"), icon: "○", run: () => send({ type: "set_theme", mode: "light" }) },
+    { id: "tpl_saas", label: t("cmdTplSaaS"), icon: "▲", run: () => sendPrompt("应用 SaaS 模板") },
+    { id: "tpl_ecommerce", label: t("cmdTplEcommerce"), icon: "▣", run: () => sendPrompt("应用电商模板") },
+    { id: "clear", label: t("cmdClear"), icon: "✕", run: () => sendPrompt("清空") },
+    { id: "project", label: t("cmdProject"), icon: "▤", run: () => { const b = $("project-btn"); if (b) b.click(); } },
+    { id: "save", label: t("cmdSaveProject"), icon: "▣", run: saveCurrentProject },
+    { id: "export", label: t("cmdExport"), icon: "↑", run: () => { const b = $("export-btn"); if (b) b.click(); } },
+    { id: "canvas", label: t("cmdCanvas"), icon: "✎", run: () => setCanvasEditorMode(true) },
+    { id: "screenshot", label: t("cmdScreenshot"), icon: "▣", run: takeScreenshot },
+    { id: "help", label: t("cmdHelp"), icon: "?", run: () => toggleHelp(true) },
+    { id: "undo", label: t("cmdUndo"), icon: "↩", run: () => send({ type: "undo" }) },
+    { id: "redo", label: t("cmdRedo"), icon: "↪", run: () => send({ type: "redo" }) },
   ];
 }
 
@@ -3688,7 +3688,7 @@ function renderCommandList(filter) {
   if (q) {
     const raw = filter.trim();
     items = [
-      { id: "run_prompt", label: raw, icon: "⚡", run: () => sendPrompt(raw) },
+      { id: "run_prompt", label: raw, icon: "↑", run: () => sendPrompt(raw) },
       ...items,
     ];
   }
@@ -3866,7 +3866,7 @@ function renderConflictWarnings(container, conflicts) {
 
   conflicts.forEach((conflict) => {
     const warning = el("div", "conflict-warning");
-    const icon = el("span", "warn-icon", "⚠️");
+    const icon = el("span", "warn-icon", "!");
     const text = el("span", "warn-text", conflict.message || conflict.description || `令牌冲突: ${conflict.key || conflict.token || ""}`);
     warning.appendChild(icon);
     warning.appendChild(text);
@@ -4377,17 +4377,17 @@ function setupActivityFilter() {
 const LIBRARY_STYLES = [
   { id: "minimal", name: "Minimal", desc: "中性灰、留白、4px 小圆角", color: "#4A6FA5", icon: "○" },
   { id: "bold", name: "Bold", desc: "210° 蓝、无圆角、强对比", color: "#2563EB", icon: "◆" },
-  { id: "playful", name: "Playful", desc: "330° 粉、大圆角、活泼", color: "#EC4899", icon: "♥" },
+  { id: "playful", name: "Playful", desc: "330° 粉、大圆角、活泼", color: "#EC4899", icon: "◆" },
   { id: "dark", name: "Dark", desc: "260° 紫、深色优先", color: "#8B5CF6", icon: "◐" },
   { id: "editorial", name: "Editorial", desc: "30° 棕、衬线标题、无圆角", color: "#B45309", icon: "✦" },
   { id: "tech", name: "Tech", desc: "190° 青、等宽点缀、6px 圆角", color: "#06B6D4", icon: "◇" },
-  { id: "glassmorphism", name: "Glassmorphism", desc: "毛玻璃、半透明、柔和高光", color: "#818CF8", icon: "❄" },
+  { id: "glassmorphism", name: "Glassmorphism", desc: "毛玻璃、半透明、柔和高光", color: "#818CF8", icon: "◇" },
   { id: "neumorphism", name: "Neumorphism", desc: "软 UI、同色双阴影", color: "#94A3B8", icon: "◍" },
-  { id: "claymorphism", name: "Claymorphism", desc: "3D 粘土、药丸圆角", color: "#F472B6", icon: "⚱" },
+  { id: "claymorphism", name: "Claymorphism", desc: "3D 粘土、药丸圆角", color: "#F472B6", icon: "◉" },
   { id: "aurora", name: "Aurora", desc: "极光渐变、紫色调", color: "#A78BFA", icon: "✧" },
   { id: "brutalism", name: "Brutalism", desc: "硬阴影、粗边框、直角", color: "#FACC15", icon: "▣" },
   { id: "cyberpunk", name: "Cyberpunk", desc: "霓虹 HUD、青色发光", color: "#22D3EE", icon: "◬" },
-  { id: "organic", name: "Organic", desc: "仿生形态、自然绿", color: "#4ADE80", icon: "☘" },
+  { id: "organic", name: "Organic", desc: "仿生形态、自然绿", color: "#4ADE80", icon: "✿" },
   { id: "luxury", name: "Luxury", desc: "黑金 OLED、衬线奢华", color: "#D4AF37", icon: "♛" },
 ];
 
@@ -4402,16 +4402,16 @@ const LIBRARY_ANIMATIONS = [
   { id: "spring", name: "弹性弹出", desc: "带回弹的缩放", icon: "◆", entry: "spring", duration: 0.6 },
   { id: "bounceIn", name: "Q 弹跳入", desc: "弹性跳跳进入", icon: "◉", entry: "bounceIn", duration: 0.6 },
   { id: "flipIn", name: "3D 翻转进入", desc: "绕 X 轴翻转进入", icon: "⇅", entry: "flipIn", duration: 0.5 },
-  { id: "cinematic", name: "电影级入场", desc: "缩放上浮 + 模糊", icon: "🎬", entry: "cinematic", duration: 0.7 },
-  { id: "shimmer", name: "微光闪烁", desc: "骨架屏微光扫过", icon: "✨", entry: "shimmer", duration: 1.2 },
-  { id: "glitch", name: "故障色差", desc: "故障抖动色差", icon: "⚡", entry: "glitch", duration: 0.5 },
+  { id: "cinematic", name: "电影级入场", desc: "缩放上浮 + 模糊", icon: "▷", entry: "cinematic", duration: 0.7 },
+  { id: "shimmer", name: "微光闪烁", desc: "骨架屏微光扫过", icon: "✦", entry: "shimmer", duration: 1.2 },
+  { id: "glitch", name: "故障色差", desc: "故障抖动色差", icon: "⇡", entry: "glitch", duration: 0.5 },
   { id: "morphBlob", name: "流体变形", desc: "圆角形态变形进入", icon: "◒", entry: "morphBlob", duration: 0.8 },
   { id: "liftHover", name: "悬停浮起", desc: "鼠标悬停上浮", icon: "⇡", hover: "lift" },
   { id: "scaleHover", name: "悬停放大", desc: "鼠标悬停放大", icon: "⊕", hover: "scaleUp" },
   { id: "glowHover", name: "悬停发光", desc: "鼠标悬停发光", icon: "✧", hover: "glow" },
   { id: "rippleHover", name: "涟漪波纹", desc: "点击/悬停波纹扩散", icon: "≋", hover: "ripple" },
   { id: "spotlightHover", name: "聚光效果", desc: "径向聚光照亮", icon: "◎", hover: "spotlight" },
-  { id: "magneticHover", name: "磁吸偏移", desc: "元素跟随光标偏移", icon: "🧲", hover: "magnetic" },
+  { id: "magneticHover", name: "磁吸偏移", desc: "元素跟随光标偏移", icon: "◉", hover: "magnetic" },
   { id: "tiltHover", name: "3D 倾斜", desc: "跟随光标 3D 倾斜", icon: "◩", hover: "tilt" },
 ];
 
@@ -4433,24 +4433,24 @@ const LIBRARY_COMPONENTS = [
   { id: "stats", name: "数据统计", desc: "数字展示", icon: "#", variant: "", defaultProps: { items: [{ value: "100+", label: "用户" }, { value: "99%", label: "满意度" }] } },
   { id: "pricing", name: "定价方案", desc: "价格卡片", icon: "$", variant: "", defaultProps: { plans: [{ name: "基础版", price: "¥0", features: ["功能A", "功能B"], button_text: "免费开始" }] } },
   { id: "testimonial", name: "用户评价", desc: "客户见证", icon: '"', variant: "", defaultProps: { quote: "这个产品真的太棒了！", author: "张三", role: "产品经理" } },
-  { id: "timeline", name: "时间线", desc: "时间轴", icon: "⏱", variant: "", defaultProps: { items: [{ date: "2024-01", title: "里程碑1", description: "描述" }] } },
+  { id: "timeline", name: "时间线", desc: "时间轴", icon: "◷", variant: "", defaultProps: { items: [{ date: "2024-01", title: "里程碑1", description: "描述" }] } },
   { id: "faq", name: "FAQ", desc: "常见问题", icon: "?", variant: "", defaultProps: { items: [{ question: "问题1？", answer: "回答内容" }] } },
   { id: "form", name: "表单", desc: "输入表单", icon: "✎", variant: "", defaultProps: { fields: [{ label: "姓名", type: "text", placeholder: "请输入" }], button_text: "提交" } },
-  { id: "image", name: "图片", desc: "图片组件", icon: "🖼", variant: "", defaultProps: { src: "", alt: "图片" } },
+  { id: "image", name: "图片", desc: "图片组件", icon: "▣", variant: "", defaultProps: { src: "", alt: "图片" } },
   { id: "banner", name: "横幅", desc: "通知条", icon: "▬", variant: "", defaultProps: { text: "限时优惠！", button_text: "查看" } },
   { id: "tabs", name: "标签页", desc: "选项卡", icon: "⊟", variant: "", defaultProps: { items: [{ label: "标签1", content: "内容1" }, { label: "标签2", content: "内容2" }] } },
   { id: "accordion", name: "手风琴", desc: "折叠面板", icon: "≡", variant: "", defaultProps: { items: [{ title: "面板1", content: "内容1" }] } },
   { id: "carousel", name: "轮播图", desc: "图片轮播", icon: "◀", variant: "", defaultProps: { slides: [{ title: "幻灯片1", text: "内容" }] } },
-  { id: "sidebar", name: "侧边栏", desc: "导航侧栏", icon: "☰", variant: "", defaultProps: { title: "菜单", links: [{ label: "首页", icon: "📊" }] } },
+  { id: "sidebar", name: "侧边栏", desc: "导航侧栏", icon: "☰", variant: "", defaultProps: { title: "菜单", links: [{ label: "首页", icon: "▣" }] } },
   { id: "breadcrumb", name: "面包屑", desc: "路径导航", icon: "›", variant: "", defaultProps: { items: ["首页", "分类", "当前"] } },
   { id: "pagination", name: "分页", desc: "页码导航", icon: "···", variant: "", defaultProps: { total: 5, current: 1 } },
   { id: "progress", name: "进度条", desc: "进度展示", icon: "━", variant: "", defaultProps: { label: "进度", value: 60 } },
   { id: "badge", name: "徽章", desc: "标签徽章", icon: "●", variant: "default", defaultProps: { text: "新功能" } },
-  { id: "avatar", name: "头像组", desc: "用户头像", icon: "☺", variant: "", defaultProps: { avatars: [{ name: "AB" }, { name: "CD" }] } },
+  { id: "avatar", name: "头像组", desc: "用户头像", icon: "◐", variant: "", defaultProps: { avatars: [{ name: "AB" }, { name: "CD" }] } },
   { id: "input", name: "输入框", desc: "单行输入", icon: "⌨", variant: "", defaultProps: { label: "邮箱", placeholder: "请输入邮箱", type: "email" } },
   { id: "grid", name: "网格布局", desc: "通用网格容器", icon: "▦", variant: "3col", defaultProps: { items: [{ title: "单元格 1" }, { title: "单元格 2" }, { title: "单元格 3" }] } },
   { id: "table", name: "数据表格", desc: "表格数据展示", icon: "⊞", variant: "", defaultProps: { columns: ["名称", "状态", "更新时间"], rows: [["项目 A", "进行中", "2 小时前"], ["项目 B", "已完成", "昨天"]] } },
-  { id: "alert", name: "提示框", desc: "信息/警告提示", icon: "⚠", variant: "info", defaultProps: { title: "提示", text: "这是一条提示信息", type: "info" } },
+  { id: "alert", name: "提示框", desc: "信息/警告提示", icon: "!", variant: "info", defaultProps: { title: "提示", text: "这是一条提示信息", type: "info" } },
   { id: "tooltip", name: "工具提示", desc: "悬停气泡提示", icon: "◌", variant: "", defaultProps: { trigger: "悬停查看", text: "这里是提示内容" } },
   { id: "bento_grid", name: "便当盒网格", desc: "非对称卡片网格", icon: "▤", variant: "", defaultProps: { items: [{ title: "主卡片", size: "large" }, { title: "小卡片", size: "small" }, { title: "中卡片", size: "medium" }] } },
   { id: "skeleton", name: "骨架屏", desc: "加载占位", icon: "▭", variant: "", defaultProps: { rows: 3 } },
@@ -4459,15 +4459,15 @@ const LIBRARY_COMPONENTS = [
   { id: "fab", name: "浮动按钮", desc: "悬浮操作按钮", icon: "⊕", variant: "", defaultProps: { label: "+", hint: "新建" } },
   { id: "marquee", name: "跑马灯", desc: "滚动文字条", icon: "≫", variant: "", defaultProps: { items: ["特性一", "特性二", "特性三", "特性四"] } },
   { id: "feature_grid", name: "功能图标网格", desc: "图标 + 文字网格", icon: "✦", variant: "3col", defaultProps: { items: [{ icon: "✦", title: "功能 1", description: "描述" }, { icon: "◈", title: "功能 2", description: "描述" }, { icon: "◆", title: "功能 3", description: "描述" }] } },
-  { id: "cookie_banner", name: "Cookie 横幅", desc: "隐私同意横幅", icon: "🍪", variant: "", defaultProps: { text: "我们使用 Cookie 提升体验", accept_text: "接受", decline_text: "拒绝" } },
+  { id: "cookie_banner", name: "Cookie 横幅", desc: "隐私同意横幅", icon: "◉", variant: "", defaultProps: { text: "我们使用 Cookie 提升体验", accept_text: "接受", decline_text: "拒绝" } },
   { id: "toggle", name: "开关", desc: "切换开关", icon: "◉", variant: "", defaultProps: { label: "通知", checked: true } },
 ];
 
 // Built-in page templates (mirror server-side applyPageTemplate)
 const LIBRARY_TEMPLATES = [
   { id: "saas_landing", name: "SaaS 落地页", desc: "导航 + Hero + 功能 + 定价 + CTA", icon: "◈", builtin: true },
-  { id: "ecommerce_home", name: "电商首页", desc: "导航 + 促销 Hero + 商品网格", icon: "🛍", builtin: true },
-  { id: "blog_post", name: "博客文章", desc: "标题 + 正文 + 配图", icon: "✍", builtin: true },
+  { id: "ecommerce_home", name: "电商首页", desc: "导航 + 促销 Hero + 商品网格", icon: "▣", builtin: true },
+  { id: "blog_post", name: "博客文章", desc: "标题 + 正文 + 配图", icon: "✎", builtin: true },
   { id: "portfolio", name: "作品集", desc: "Hero + 4 列卡片 + 关于", icon: "◫", builtin: true },
   { id: "dashboard", name: "数据看板", desc: "导航 + 指标 + 卡片网格", icon: "▦", builtin: true },
 ];
@@ -4511,7 +4511,7 @@ function renderLibraryList() {
 
   if (currentLibraryTab === "templates") {
     const saveItem = el("div", "lib-item lib-item-save");
-    const saveIcon = el("span", "lib-item-icon", "💾");
+    const saveIcon = el("span", "lib-item-icon", "▣");
     saveIcon.style.color = "var(--accent)";
     saveItem.appendChild(saveIcon);
     const saveText = el("div", "lib-item-text");
@@ -4970,11 +4970,11 @@ let canvasBundlePromise = null;
 const appliedDrawIds = new Set();
 
 const BUILTIN_TEMPLATES = [
-  { id: "saas_landing", icon: "🚀", nameKey: "tplSaaS", descKey: "tplDescSaaS" },
-  { id: "ecommerce_home", icon: "🛍️", nameKey: "tplEcommerce", descKey: "tplDescEcommerce" },
-  { id: "blog_post", icon: "📝", nameKey: "tplBlog", descKey: "tplDescBlog" },
-  { id: "portfolio", icon: "🎨", nameKey: "tplPortfolio", descKey: "tplDescPortfolio" },
-  { id: "dashboard", icon: "📊", nameKey: "tplDashboard", descKey: "tplDescDashboard" },
+  { id: "saas_landing", icon: "▲", nameKey: "tplSaaS", descKey: "tplDescSaaS" },
+  { id: "ecommerce_home", icon: "▣", nameKey: "tplEcommerce", descKey: "tplDescEcommerce" },
+  { id: "blog_post", icon: "▤", nameKey: "tplBlog", descKey: "tplDescBlog" },
+  { id: "portfolio", icon: "✦", nameKey: "tplPortfolio", descKey: "tplDescPortfolio" },
+  { id: "dashboard", icon: "▣", nameKey: "tplDashboard", descKey: "tplDescDashboard" },
 ];
 
 function showToastMsg(text, isError) {

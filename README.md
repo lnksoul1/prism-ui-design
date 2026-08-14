@@ -7,10 +7,11 @@
 [![MCP Protocol](https://img.shields.io/badge/MCP-Protocol-purple.svg)](https://modelcontextprotocol.io/)
 
 Prism is a visual adjustment surface for non-designers: import a website or app
-you made (or an AI made), adjust any component, button, or interaction precisely
-and freely on the canvas, then apply the changes back to your product with one
-click. Quick-change presets (styles, component blocks, interaction templates)
-get you there fast; fine-tuning gets you there precisely. See
+you made (or an AI made), adjust any component, button, or interaction — down
+to the inner parts of a component — precisely and freely on the canvas, then
+apply the changes back to your product with one click. Quick-change presets
+(design systems, component blocks, interaction templates) get you there fast;
+fine-tuning gets you there precisely. See
 [`prism-product-definition-v2.md`](./prism-product-definition-v2.md) for the
 full product definition.
 
@@ -23,10 +24,11 @@ full product definition.
 - **Desktop app** (Electron shell): `npm run app` — double-click experience;
   the main process starts the bundled server on a free port and opens the
   dashboard window (`electron/main.cjs`).
-- **Color theory engine** with HSL-based harmony generation (monochromatic, analogous, complementary, split-complementary, triadic, tetradic)
-- **WCAG 2.1 contrast checker** with AA/AAA compliance scoring
-- **Curated font pairings** with Google Fonts integration
-- **14 style presets** (incl. 8 trend-aligned: Glassmorphism, Neumorphism, Claymorphism, Aurora, Brutalism, Cyberpunk, Organic, Luxury)
+- **Freeform canvas by default**: drag/resize any component, snap to
+  guides/edges, edit the inner parts of a component in place, reorder layers.
+- **30 style presets** (V2 full design systems) + **17 brand design systems**
+  (Linear, Stripe, Vercel, Notion, Arc, Spotify, Apple, GitHub, IBM Carbon,
+  Shopify Polaris, Duolingo, Discord, Raycast, Airbnb, Figma, Anthropic …)
 - **41 component types** (Atomic Design: input, table, alert, tooltip, bento grid, skeleton, command palette, glass card, FAB, marquee, toggle, cookie banner …)
 - **20 animations** (13 entry + 7 hover, with duration/delay/easing/stagger)
 - **Complete design token system** generation in a single call

@@ -1,7 +1,7 @@
 {
   "name": "ui-design-mcp-server",
   "version": "1.1.0",
-  "description": "MCP server providing UI design assistance tools — color palettes, typography, spacing, shadows, design tokens, contrast checks, and more",
+  "description": "Prism — a visual UI/UX adjustment surface for non-designers: import your website/app, precisely adjust any component or its inner parts on a freeform canvas, then apply the changes back with one click (MCP + dashboard + Electron desktop app)",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {

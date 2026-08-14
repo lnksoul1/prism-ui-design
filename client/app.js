@@ -2012,6 +2012,30 @@ function getSelectedComp() {
   return findCompDeep(getCurrentComponents(), selectedComponentId);
 }
 
+/** 子组件的父级路径（"parent → child"），用于检查器标识内部组成部分。 */
+function componentParentPath(id) {
+  if (!currentState) return null;
+  const parts = [];
+  const walk = (nodes) => {
+    for (const node of nodes) {
+      if (node.id === id) {
+        parts.push(node.type);
+        return true;
+      }
+      if (node.children && node.children.length > 0) {
+        parts.push(node.type);
+        if (walk(node.children)) return true;
+        parts.pop();
+      }
+    }
+    return false;
+  };
+  if (walk(getCurrentComponents()) && parts.length > 1) {
+    return "↳ " + parts.join(" / ");
+  }
+  return null;
+}
+
 function getSelectedComps() {
   if (!currentState || selectedIds.length === 0) return [];
   const all = getCurrentComponents();
@@ -2207,6 +2231,13 @@ function renderInspectorProps(panel, comp) {
   header.appendChild(title);
   const idLine = el("div", "inspector-id", `ID: ${comp.id}`);
   header.appendChild(idLine);
+  // 子组件显示父级路径，让用户知道正在调整内部组成部分
+  const parentPath = componentParentPath(comp.id);
+  if (parentPath) {
+    const pathLine = el("div", "inspector-id inspector-parent-path", parentPath);
+    pathLine.style.opacity = "0.7";
+    header.appendChild(pathLine);
+  }
   panel.appendChild(header);
 
   // Appearance (Pixso-style fill / text / radius) — always available.
@@ -2249,8 +2280,9 @@ function renderInspectorProps(panel, comp) {
   appearance.appendChild(radiusRow);
   panel.appendChild(appearance);
 
-  // Layout section (freeform mode)
-  if (canvasMode === "freeform") {
+  // Layout section (freeform mode, top-level components only — children flow
+  // inside their parent container and use no canvas coordinates).
+  if (canvasMode === "freeform" && !componentParentPath(comp.id)) {
     const layoutSection = el("div", "inspector-section");
   layoutSection.appendChild(el("div", "inspector-section-title", t("layout")));
     const L = comp.layout || { x: 0, y: 0, w: 0, h: 0 };

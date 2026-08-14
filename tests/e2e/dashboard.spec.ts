@@ -667,3 +667,60 @@ test("edit inner parts of a component (nested item text is editable)", async ({ 
 
   expect(errors).toEqual([]);
 });
+
+test("child component is selectable and adjustable via the inspector", async ({ page }: { page: Page }) => {
+  const errors: string[] = [];
+  page.on("console", (msg) => {
+    if (msg.type() === "error") errors.push(msg.text());
+  });
+  page.on("pageerror", (err) => errors.push(String(err)));
+
+  await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "domcontentloaded", timeout: 60000 });
+  await expect(page.locator(".topbar")).toBeVisible();
+
+  // Build a parent card with a nested button child via the REST API.
+  const ids = await page.evaluate(async () => {
+    const mk = async (type: string, props: unknown, parentId?: string) => {
+      const res = await fetch("/api/component", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, props, ...(parentId ? { parent_id: parentId } : {}) }),
+      });
+      return ((await res.json()) as { id: string }).id;
+    };
+    const parent = await mk("card", { title: "父卡片" });
+    const child = await mk("button", { text: "子按钮" }, parent);
+    return { parent, child };
+  });
+  await page.waitForTimeout(800);
+
+  // Child appears indented in the layers panel.
+  const childLayer = page.locator(`#layer-tree .layer-item[data-id="${ids.child}"]`);
+  await expect(childLayer).toBeVisible();
+
+  // Click the child layer → inspector shows the child, with a parent path.
+  await childLayer.click();
+  await expect(page.locator(".inspector-section-title").first()).toContainText("button");
+  await expect(page.locator(".inspector-parent-path")).toBeVisible();
+
+  // Edit the child's text through the inspector content section.
+  const contentInputs = page.locator('.inspector-body .prop-text-input');
+  const count = await contentInputs.count();
+  const textField = contentInputs.nth(count - 1);
+  await textField.fill("子按钮改名");
+  await textField.blur();
+  await page.waitForTimeout(600);
+  const renamed = await page.evaluate(async (childId) => {
+    const s = (await (await fetch("/api/state")).json()) as {
+      components: Array<{ id: string; children?: Array<{ id: string; props: { text?: string } }> }>;
+    };
+    for (const c of s.components) {
+      const found = c.children?.find((ch) => ch.id === childId);
+      if (found) return found.props.text;
+    }
+    return null;
+  }, ids.child);
+  expect(renamed).toBe("子按钮改名");
+
+  expect(errors).toEqual([]);
+});

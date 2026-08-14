@@ -194,6 +194,10 @@ export function updateComponent(
   return stateStore.updateComponent(id, props, source, layout, flags);
 }
 
+export function renameComponent(id: string, name: string, source: MutationSource = "user"): boolean {
+  return stateStore.renameComponent(id, name, source);
+}
+
 export function removeComponent(id: string, source: MutationSource = "user"): boolean {
   return stateStore.removeComponent(id, source);
 }
@@ -406,6 +410,11 @@ export const wsMessageSchema = z.discriminatedUnion("type", [
     locked: z.boolean().optional(),
   }),
   z.strictObject({
+    type: z.literal("rename_component"),
+    id: z.string().min(1),
+    name: z.string(),
+  }),
+  z.strictObject({
     type: z.literal("remove_component"),
     id: z.string().min(1),
   }),
@@ -526,6 +535,10 @@ export function applyClientMessage(msg: WsClientMessage): { ok: boolean; detail:
         locked: msg.locked,
       });
       return { ok, detail: ok ? `component ${msg.id}` : `component ${msg.id} not found` };
+    }
+    case "rename_component": {
+      const ok = renameComponent(msg.id, msg.name, "user");
+      return { ok, detail: ok ? `renamed ${msg.id}` : `component ${msg.id} not found` };
     }
     case "remove_component": {
       const ok = removeComponent(msg.id, "user");

@@ -12,7 +12,7 @@ An MCP (Model Context Protocol) server that provides comprehensive UI design ass
 
 ## Features
 
-- **77 MCP tools** covering the full spectrum of UI design needs- **Built-in LLM channel** (product definition v2): fill in your own API key
+- **75 MCP tools** covering the full spectrum of UI design needs- **Built-in LLM channel** (product definition v2): fill in your own API key
   (OpenAI-compatible / Anthropic / Gemini) in the AI settings dialog and the
   dashboard itself can generate pages from natural language — no external
   agent required. Unmatched prompts automatically fall through to it.
@@ -138,6 +138,22 @@ product (never a fresh page):
   `design_apply_component_template` / `design_apply_behavior_template`, and
   `GET /api/template-catalog` lists both catalogs.
 
+## Exact editing (精确编辑, freeform mode)
+
+Freeform mode (`流式/自由` toggle) is a precise adjustment surface, not just
+drag-and-drop:
+
+- **标尺 + 参考线**: rulers along the canvas edges (freeform only); drag out
+  of a ruler to create a guide, drag a guide to move it, drag it back onto the
+  ruler (or double-click) to remove it. Guides are session-local editing aids
+  and never leak into exports.
+- **吸附 (Snapping)**: while dragging or resizing a component, edges/centers
+  snap to guides, the canvas center/edges, and other components' edges/centers
+  (5 px threshold) with a violet snap indicator.
+- **图层重命名**: double-click a layer name in the layers panel to rename it
+  (persisted on `ComponentNode.name`, undoable); agents use
+  `design_rename_component`.
+
 ## Built-in AI (BYO API key)
 
 The dashboard can generate pages itself — no external agent needed:
@@ -177,6 +193,7 @@ connected client.
 | `design_init` | Initialize a design project, set style, and generate the complete token set |
 | `design_add_component` | Add a UI component (hero, navbar, card, etc.) to the canvas |
 | `design_update_component` | Update properties of an existing component |
+| `design_rename_component` | Rename a component's layer (shown in the layers panel, empty reverts to the default) |
 | `design_remove_component` | Remove a component from the canvas |
 | `design_set_animation` | Set entry/hover animations for a component |
 | `design_set_token` | Set or update a single design token |

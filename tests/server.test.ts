@@ -1380,6 +1380,35 @@ test(
       };
       assert.equal(state.components[0].type, "stats");
 
+      // Layer rename endpoint (精确编辑 P0 图层重命名)
+      const renameRes = await fetch(`${base}/api/component/${added.component_id}/name`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ name: "数据统计区" }),
+      });
+      assert.equal(renameRes.status, 200);
+      const renamedState = (await (await fetch(`${base}/api/state`)).json()) as {
+        components: Array<{ id: string; type: string; name?: string }>;
+      };
+      assert.equal(renamedState.components[0].name, "数据统计区");
+      // Empty name reverts to the type default; unknown component → 404
+      const clearRes = await fetch(`${base}/api/component/${added.component_id}/name`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ name: "" }),
+      });
+      assert.equal(clearRes.status, 200);
+      const clearedState = (await (await fetch(`${base}/api/state`)).json()) as {
+        components: Array<{ id: string; type: string; name?: string }>;
+      };
+      assert.equal(clearedState.components[0].name, undefined);
+      const renameMissing = await fetch(`${base}/api/component/comp_nope/name`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ name: "x" }),
+      });
+      assert.equal(renameMissing.status, 404);
+
       // Behavior template binds a preset interaction
       const behRes = await fetch(`${base}/api/templates/behavior`, {
         method: "POST",

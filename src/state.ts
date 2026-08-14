@@ -22,6 +22,8 @@ export interface ComponentNode {
   id: string;
   type: string;
   variant?: string;
+  /** 精确编辑 P0: user-visible layer name (defaults to type/variant). */
+  name?: string;
   props: Record<string, unknown>;
   layout?: ComponentLayout;
   visible?: boolean;
@@ -666,6 +668,25 @@ class DesignStateStore extends EventEmitter {
     }
     this.logActivity("update_component", node.type, `Updated ${node.type} (${id})`, source);
     this.commit({ type: "updateComponent", id, props });
+    return true;
+  }
+
+  /**
+   * Rename a component's layer (精确编辑 P0: 图层重命名). Sets the
+   * user-visible `name`; pass an empty string to revert to the type-based
+   * default. Undoable like any mutation.
+   */
+  renameComponent(id: string, name: string, source: "ai" | "user" = "user"): boolean {
+    const node = this.findComponent(id);
+    if (!node) return false;
+    const trimmed = name.trim();
+    if (trimmed) {
+      node.name = trimmed;
+    } else {
+      delete node.name;
+    }
+    this.logActivity("rename_component", node.type, `Renamed ${id} → "${trimmed || node.type}"`, source);
+    this.commit({ type: "renameComponent", id, name: node.name || null });
     return true;
   }
 

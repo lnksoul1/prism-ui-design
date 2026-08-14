@@ -272,6 +272,23 @@ test("replaceComponent returns false for unknown ids", () => {
   );
 });
 
+test("renameComponent sets a custom layer name, clears with empty, undoable", () => {
+  const comp = stateStore.addComponent("button", undefined, { text: "Go" }, null, "ai");
+  assert.equal(stateStore.renameComponent(comp.id, "主要按钮", "user"), true);
+  assert.equal(stateStore.getState().components[0].name, "主要按钮");
+
+  // Empty string reverts to the type-based default
+  assert.equal(stateStore.renameComponent(comp.id, "   ", "user"), true);
+  assert.equal(stateStore.getState().components[0].name, undefined);
+
+  // Undo restores the custom name
+  stateStore.renameComponent(comp.id, "CTA 按钮", "user");
+  assert.equal(stateStore.undo(), true);
+  assert.equal(stateStore.getState().components[0].name, undefined);
+
+  assert.equal(stateStore.renameComponent("comp_nope", "x", "user"), false);
+});
+
 test("setBehavior binds and clears an interaction, unknown ids fail", () => {
   const comp = stateStore.addComponent("button", undefined, { text: "Go" }, null, "ai");
   const ok = stateStore.setBehavior(comp.id, { type: "navigate", page_id: "page_2" }, "user");

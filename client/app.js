@@ -79,6 +79,7 @@ const I18N = {
     connecting: "连接中",
     online: "{n} 人在线",
     layers: "图层",
+    layerRenameHint: "双击重命名图层",
     libStyles: "风格",
     libAnimations: "动效",
     libComponents: "组件",
@@ -351,6 +352,7 @@ const I18N = {
     connecting: "Connecting",
     online: "{n} online",
     layers: "Layers",
+    layerRenameHint: "Double-click to rename the layer",
     libStyles: "Styles",
     libAnimations: "Motion",
     libComponents: "Components",
@@ -1202,6 +1204,9 @@ function renderCanvas() {
   components.forEach((comp) => {
     canvas.appendChild(renderComponent(comp));
   });
+  // 标尺/参考线跟随画布尺寸刷新
+  renderRulers();
+  renderGuides();
 }
 
 // Apply platform width class + device chrome to canvas
@@ -1401,18 +1406,27 @@ function attachFreeformDrag(wrapper, compId) {
     const comp = getCompById(compId);
     const origX = (comp && comp.layout ? comp.layout.x : 0);
     const origY = (comp && comp.layout ? comp.layout.y : 0);
+    const origW = (comp && comp.layout ? comp.layout.w : 0);
+    const origH = (comp && comp.layout ? comp.layout.h : 0);
     wrapper.style.transition = "none";
 
     const onMove = (ev) => {
       const dx = ev.clientX - startX;
       const dy = ev.clientY - startY;
-      wrapper.style.left = Math.max(0, origX + dx) + "px";
-      wrapper.style.top = Math.max(0, origY + dy) + "px";
+      // 吸附 (snapping): align to guides / canvas edges / other components.
+      const snapped = snapLayout(
+        { x: Math.max(0, origX + dx), y: Math.max(0, origY + dy), w: origW, h: origH },
+        compId,
+        { all: true }
+      );
+      wrapper.style.left = snapped.x + "px";
+      wrapper.style.top = snapped.y + "px";
     };
     const onUp = () => {
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onUp);
       wrapper.style.transition = "";
+      clearSnapLines();
       const x = parseFloat(wrapper.style.left) || 0;
       const y = parseFloat(wrapper.style.top) || 0;
       const compNow = getCompById(compId);
@@ -1454,6 +1468,15 @@ function attachResizeHandles(wrapper, compId) {
           h = Math.max(40, (L.h || 140) - dy);
           y = (L.y || 0) + ((L.h || 140) - h);
         }
+        // 吸附 (snapping): only the edges being moved snap.
+        const edges = {
+          left: dir.includes("w"),
+          right: dir.includes("e"),
+          top: dir.includes("n"),
+          bottom: dir.includes("s"),
+        };
+        const snapped = snapLayout({ x, y, w, h }, compId, edges);
+        ({ x, y, w, h } = snapped);
         wrapper.style.left = x + "px";
         wrapper.style.top = y + "px";
         wrapper.style.width = w + "px";
@@ -1462,6 +1485,7 @@ function attachResizeHandles(wrapper, compId) {
       const onUp = () => {
         document.removeEventListener("mousemove", onMove);
         document.removeEventListener("mouseup", onUp);
+        clearSnapLines();
         const rect = wrapper.getBoundingClientRect();
         const canvasRect = $("canvas").getBoundingClientRect();
         const layout = {
@@ -1479,6 +1503,320 @@ function attachResizeHandles(wrapper, compId) {
     });
     wrapper.appendChild(handle);
   });
+}
+
+// ===== 精确编辑 P0: 标尺 / 参考线 / 吸附 =====
+
+/** Session-scoped guides (canvas units, same space as comp.layout). */
+let canvasGuides = { h: [], v: [] };
+const SNAP_THRESHOLD = 5; // canvas px
+
+function rulerZoom() {
+  return (canvasZoom || 100) / 100;
+}
+
+/** Frame's on-screen position in wrap-logical coords (zoom/scroll independent). */
+function frameRectInWrap() {
+  const wrap = $("canvas-scroll-wrap");
+  const frame = $("canvas-frame");
+  if (!wrap || !frame) return null;
+  const wrapRect = wrap.getBoundingClientRect();
+  const frameRect = frame.getBoundingClientRect();
+  const z = rulerZoom();
+  return {
+    left: (frameRect.left - wrapRect.left) / z,
+    top: (frameRect.top - wrapRect.top) / z,
+    width: frameRect.width / z,
+    height: frameRect.height / z,
+  };
+}
+
+function renderRulers() {
+  const h = $("ruler-h");
+  const v = $("ruler-v");
+  const frame = frameRectInWrap();
+  if (!h || !v || !frame) return;
+  // Rulers are pinned at the viewport top-left (sticky stage); the frame
+  // scrolls beneath. Ticks offset by the frame's current position so labels
+  // stay aligned with canvas coordinates (all in wrap-logical px; CSS zoom
+  // scales ruler + frame together).
+  h.style.left = Math.max(0, frame.left) + "px";
+  h.style.width = frame.width + "px";
+  v.style.top = Math.max(0, frame.top) + "px";
+  v.style.height = frame.height + "px";
+
+  const STEP = 50;
+  let hHtml = "";
+  for (let x = 0; x <= frame.width; x += STEP) {
+    const major = x % 100 === 0;
+    const pos = x + Math.max(0, frame.left);
+    hHtml += `<div class="ruler-line" style="left:${pos}px;${major ? "height:100%" : "height:6px"}"></div>`;
+    if (major && x > 0) hHtml += `<div class="ruler-tick" style="left:${pos}px">${x}</div>`;
+  }
+  h.innerHTML = hHtml;
+  let vHtml = "";
+  for (let y = 0; y <= frame.height; y += STEP) {
+    const major = y % 100 === 0;
+    const pos = y + Math.max(0, frame.top);
+    vHtml += `<div class="ruler-line" style="top:${pos}px;${major ? "width:100%" : "width:6px"}"></div>`;
+    if (major && y > 0) vHtml += `<div class="ruler-tick" style="top:${pos}px">${y}</div>`;
+  }
+  v.innerHTML = vHtml;
+}
+
+function renderGuides() {
+  const layer = $("canvas-guides");
+  if (!layer) return;
+  // Preserve snap lines while re-rendering guides.
+  layer.querySelectorAll(".canvas-guide").forEach((g) => g.remove());
+  canvasGuides.h.forEach((y) => {
+    const el = el("div", "canvas-guide guide-h");
+    el.style.top = y + "px";
+    el.dataset.axis = "h";
+    el.dataset.pos = String(y);
+    attachGuideDrag(el, "h", y);
+    layer.appendChild(el);
+  });
+  canvasGuides.v.forEach((x) => {
+    const el = el("div", "canvas-guide guide-v");
+    el.style.left = x + "px";
+    el.dataset.axis = "v";
+    el.dataset.pos = String(x);
+    attachGuideDrag(el, "v", x);
+    layer.appendChild(el);
+  });
+}
+
+function clearSnapLines() {
+  const layer = $("canvas-guides");
+  if (layer) layer.querySelectorAll(".canvas-snap-line").forEach((s) => s.remove());
+}
+
+function showSnapLine(axis, pos) {
+  const layer = $("canvas-guides");
+  if (!layer) return;
+  clearSnapLines();
+  const line = el("div", "canvas-snap-line " + (axis === "h" ? "snap-h" : "snap-v"));
+  if (axis === "h") line.style.top = pos + "px";
+  else line.style.left = pos + "px";
+  layer.appendChild(line);
+}
+
+/** Create a guide by dragging out of a ruler. */
+function startGuideFromRuler(axis) {
+  const frame = frameRectInWrap();
+  if (!frame) return;
+  const layer = $("canvas-guides");
+  if (!layer) return;
+  const guide = el("div", "canvas-guide guide-" + axis);
+  guide.classList.add("dragging");
+  const move = (ev) => {
+    const z = rulerZoom();
+    if (axis === "h") {
+      const y = Math.round((ev.clientY - layer.getBoundingClientRect().top) / z);
+      guide.style.top = Math.max(0, y) + "px";
+    } else {
+      const x = Math.round((ev.clientX - layer.getBoundingClientRect().left) / z);
+      guide.style.left = Math.max(0, x) + "px";
+    }
+  };
+  const up = () => {
+    document.removeEventListener("mousemove", move);
+    document.removeEventListener("mouseup", up);
+    guide.classList.remove("dragging");
+    guide.remove();
+    const pos = axis === "h" ? parseFloat(guide.style.top) : parseFloat(guide.style.left);
+    if (Number.isFinite(pos)) {
+      canvasGuides[axis].push(pos);
+      canvasGuides[axis].sort((a, b) => a - b);
+      renderGuides();
+    }
+  };
+  document.addEventListener("mousemove", move);
+  document.addEventListener("mouseup", up);
+  layer.appendChild(guide);
+}
+
+/** Drag an existing guide to move it; dragging onto the ruler strip deletes it. */
+function attachGuideDrag(guideEl, axis, initial) {
+  let startClient = 0;
+  let startPos = initial;
+  guideEl.addEventListener("mousedown", (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    startClient = axis === "h" ? e.clientY : e.clientX;
+    startPos = initial;
+    guideEl.classList.add("dragging");
+    const z = rulerZoom();
+    const move = (ev) => {
+      const d = ((axis === "h" ? ev.clientY : ev.clientX) - startClient) / z;
+      const next = startPos + d;
+      if (axis === "h") guideEl.style.top = next + "px";
+      else guideEl.style.left = next + "px";
+      // Dragging onto the ruler strip (negative coordinate) deletes on release.
+      guideEl.dataset.draggingOut = String(next < 0);
+    };
+    const up = () => {
+      document.removeEventListener("mousemove", move);
+      document.removeEventListener("mouseup", up);
+      guideEl.classList.remove("dragging");
+      if (guideEl.dataset.draggingOut === "true") {
+        canvasGuides[axis] = canvasGuides[axis].filter((p) => Math.abs(p - startPos) > 0.01);
+        renderGuides();
+        return;
+      }
+      const pos = axis === "h" ? parseFloat(guideEl.style.top) : parseFloat(guideEl.style.left);
+      if (Number.isFinite(pos)) {
+        const idx = canvasGuides[axis].findIndex((p) => Math.abs(p - startPos) < 0.01);
+        const value = Math.max(0, Math.round(pos));
+        if (idx >= 0) canvasGuides[axis][idx] = value;
+        guideEl.style[axis === "h" ? "top" : "left"] = value + "px";
+        guideEl.dataset.pos = String(value);
+      }
+    };
+    document.addEventListener("mousemove", move);
+    document.addEventListener("mouseup", up);
+  });
+  // Double-click removes the guide.
+  guideEl.addEventListener("dblclick", (e) => {
+    e.stopPropagation();
+    canvasGuides[axis] = canvasGuides[axis].filter((p) => Math.abs(p - startPos) > 0.01);
+    renderGuides();
+  });
+}
+
+function setupRulersAndGuides() {
+  const wrap = $("canvas-scroll-wrap");
+  if (!wrap) return;
+  // Re-render rulers on scroll (throttled) so ticks follow the frame.
+  let ticking = false;
+  wrap.addEventListener("scroll", () => {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(() => {
+      ticking = false;
+      renderRulers();
+    });
+  });
+  window.addEventListener("resize", renderRulers);
+  // Drag guides out of the rulers.
+  const hRuler = $("ruler-h");
+  const vRuler = $("ruler-v");
+  if (hRuler) {
+    hRuler.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      startGuideFromRuler("h");
+    });
+  }
+  if (vRuler) {
+    vRuler.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      startGuideFromRuler("v");
+    });
+  }
+}
+
+// ===== 吸附 (snapping) =====
+
+/** Collect snap candidates for an axis in canvas units. */
+function snapCandidates(axis, skipId) {
+  const cands = new Set(canvasGuides[axis === "x" ? "v" : "h"]);
+  const frame = frameRectInWrap();
+  const frameW = frame ? frame.width : 800;
+  const frameH = frame ? frame.height : 600;
+  if (axis === "x") {
+    cands.add(0);
+    cands.add(frameW / 2);
+    cands.add(frameW);
+  } else {
+    cands.add(0);
+    cands.add(frameH / 2);
+    cands.add(frameH);
+  }
+  findAllComponents(getCurrentComponents())
+    .filter((c) => c.id !== skipId && c.layout)
+    .forEach((c) => {
+      const L = c.layout;
+      if (axis === "x") {
+        cands.add(L.x);
+        cands.add(L.x + (L.w || 0) / 2);
+        cands.add(L.x + (L.w || 0));
+      } else {
+        cands.add(L.y);
+        cands.add(L.y + (L.h || 0) / 2);
+        cands.add(L.y + (L.h || 0));
+      }
+    });
+  return [...cands].filter((v) => Number.isFinite(v));
+}
+
+/**
+ * Snap a value to the nearest candidate within the threshold.
+ * Returns { value, snapped } where snapped is the candidate (or null).
+ */
+function snapValue(value, candidates) {
+  let best = null;
+  let bestDist = SNAP_THRESHOLD;
+  for (const cand of candidates) {
+    const d = Math.abs(value - cand);
+    if (d <= bestDist) {
+      bestDist = d;
+      best = cand;
+    }
+  }
+  return best === null ? { value, snapped: null } : { value: best, snapped: best };
+}
+
+/**
+ * Snap a freeform drag: given the proposed layout and which edges matter
+ * (all for move; subset for resize), align to guides/edges and return the
+ * adjusted layout plus snap lines to display.
+ */
+function snapLayout(layout, compId, edges) {
+  const z = rulerZoom();
+  const xCands = snapCandidates("x", compId);
+  const yCands = snapCandidates("y", compId);
+  let { x, y, w, h } = layout;
+  let lineH = null;
+  let lineV = null;
+  const wantX = edges.x || edges.all;
+  const wantY = edges.y || edges.all;
+  if (wantX) {
+    const edgesX = [];
+    if (edges.left || edges.all) edgesX.push({ edge: x, key: "left" });
+    if (edges.centerX || edges.all) edgesX.push({ edge: x + (w || 0) / 2, key: "cx" });
+    if (edges.right || edges.all) edgesX.push({ edge: x + (w || 0), key: "right" });
+    let bestDx = null;
+    for (const { edge, key } of edgesX) {
+      const res = snapValue(edge, xCands);
+      if (res.snapped !== null) {
+        const dx = res.snapped - edge;
+        if (bestDx === null || Math.abs(dx) < Math.abs(bestDx)) bestDx = dx;
+        lineV = res.snapped;
+      }
+    }
+    if (bestDx !== null) x = x + bestDx;
+  }
+  if (wantY) {
+    const edgesY = [];
+    if (edges.top || edges.all) edgesY.push({ edge: y, key: "top" });
+    if (edges.centerY || edges.all) edgesY.push({ edge: y + (h || 0) / 2, key: "cy" });
+    if (edges.bottom || edges.all) edgesY.push({ edge: y + (h || 0), key: "bottom" });
+    let bestDy = null;
+    for (const { edge } of edgesY) {
+      const res = snapValue(edge, yCands);
+      if (res.snapped !== null) {
+        const dy = res.snapped - edge;
+        if (bestDy === null || Math.abs(dy) < Math.abs(bestDy)) bestDy = dy;
+        lineH = res.snapped;
+      }
+    }
+    if (bestDy !== null) y = y + bestDy;
+  }
+  if (lineH !== null) showSnapLine("h", lineH);
+  if (lineV !== null) showSnapLine("v", lineV);
+  return { x, y, w, h };
 }
 
 function getCompById(id) {
@@ -1563,8 +1901,14 @@ function sendUpdateComponent(id, props, layout) {
 function applyCanvasMode(canvas) {
   if (!canvas) return;
   canvas.classList.toggle("canvas-freeform", canvasMode === "freeform");
+  const wrap = $("canvas-scroll-wrap");
+  if (wrap) wrap.classList.toggle("freeform-active", canvasMode === "freeform");
   const btn = $("layout-mode-btn");
   if (btn) btn.textContent = canvasMode === "freeform" ? t("freeform") : t("flow");
+  if (canvasMode === "freeform") {
+    renderRulers();
+    renderGuides();
+  }
 }
 
 function initializeFreeformLayouts() {
@@ -2218,10 +2562,11 @@ function renderLayerPanel() {
     const item = el("div", "layer-item" + (selectedIds.includes(comp.id) ? " selected" : ""));
     item.dataset.id = comp.id;
     item.appendChild(el("span", "layer-icon", "◈"));
-    item.appendChild(el("span", "layer-name", `${comp.type}${comp.variant ? "/" + comp.variant : ""}`));
-    item.addEventListener("click", (e) => {
-      selectComponent(comp.id, e.shiftKey || e.ctrlKey || e.metaKey);
-    });
+    const nameSpan = el("span", "layer-name", comp.name || `${comp.type}${comp.variant ? "/" + comp.variant : ""}`);
+    nameSpan.title = t("layerRenameHint");
+    item.appendChild(nameSpan);
+    // 图层重命名 (精确编辑 P0): double-click the name to rename inline.
+    attachLayerRenameDoubleClick(nameSpan, comp.id);
     // Drag to reorder layers (top-level stacking, 精确编辑 P0)
     item.draggable = true;
     item.addEventListener("dragstart", (e) => {
@@ -2258,6 +2603,60 @@ function renderLayerPanel() {
   });
 }
 
+// 图层重命名 (精确编辑 P0): double-click the name (delegated — the first click
+// re-renders the layer panel, so a raw dblclick target would be destroyed).
+let layerLastClickId = null;
+let layerLastClickAt = 0;
+
+function attachLayerRenameDoubleClick(nameSpan, compId) {
+  nameSpan.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const now = Date.now();
+    if (layerLastClickId === compId && now - layerLastClickAt < 350) {
+      layerLastClickId = null;
+      startLayerRename(nameSpan, compId);
+    } else {
+      layerLastClickId = compId;
+      layerLastClickAt = now;
+      selectComponent(compId, e.shiftKey || e.ctrlKey || e.metaKey);
+    }
+  });
+}
+
+// 图层重命名 (精确编辑 P0): swap the name span for an input, commit on Enter/blur.
+function startLayerRename(nameSpan, compId) {
+  const input = el("input", "layer-rename-input");
+  input.type = "text";
+  input.value = nameSpan.textContent;
+  input.maxLength = 60;
+  input.spellcheck = false;
+  nameSpan.replaceWith(input);
+  input.focus();
+  input.select();
+  const commit = () => {
+    const name = input.value.trim();
+    send({ type: "rename_component", id: compId, name });
+    // Optimistic local update; full state refresh follows via WS broadcast.
+    const comp = getCompById(compId);
+    if (comp) {
+      if (name) comp.name = name;
+      else delete comp.name;
+    }
+    renderLayerPanel();
+  };
+  input.addEventListener("blur", commit);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      input.blur();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      input.removeEventListener("blur", commit);
+      renderLayerPanel();
+    }
+  });
+}
+
 function setupZoom() {
   const zoomOut = $("zoom-out");
   const zoomIn = $("zoom-in");
@@ -2269,6 +2668,8 @@ function setupZoom() {
     if (valueEl) valueEl.textContent = canvasZoom + "%";
     const wrap = $("canvas-scroll-wrap");
     if (wrap) wrap.style.zoom = canvasZoom / 100;
+    // 标尺刻度跟随缩放
+    renderRulers();
   };
   const fitCanvas = () => {
     const wrap = $("canvas-scroll-wrap");
@@ -6978,6 +7379,7 @@ function init() {
   setupZoom();
   setupCanvasShortcuts();
   setupCanvasMode();
+  setupRulersAndGuides();
   setupLiveCursors();
   setupThemeToggle();
   setupPageSwitcher();

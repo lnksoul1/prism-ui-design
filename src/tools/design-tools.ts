@@ -1410,6 +1410,59 @@ Example:
   );
 }
 
+// ===== Tool: design_rename_component =====
+
+export function registerDesignRenameTool(server: McpServer): void {
+  server.registerTool(
+    "design_rename_component",
+    {
+      title: "Rename Component Layer",
+      description: `Rename a component's layer (精确编辑 P0 图层重命名). The name shows in the
+layers panel and the inspector. Pass an empty string to revert to the
+type-based default.
+
+Example:
+  - design_rename_component(component_id="comp_5", name="Hero 主标题")
+  - design_rename_component(component_id="comp_5", name="")`,
+      inputSchema: {
+        component_id: z.string().describe("Component ID"),
+        name: z.string().describe("New layer name (empty reverts to the default)"),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (params) => {
+      try {
+        const success = stateStore.renameComponent(params.component_id, params.name, "ai");
+        if (!success) {
+          return {
+            content: [{ type: "text", text: `Error: Component "${params.component_id}" not found.` }],
+            structuredContent: { success: false, component_id: params.component_id },
+          };
+        }
+        const label = params.name.trim() || "default";
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Component ${params.component_id} renamed to "${label}". Client dashboard refreshed.`,
+            },
+          ],
+          structuredContent: { success: true, component_id: params.component_id, name: label },
+        };
+      } catch (error) {
+        return {
+          content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        };
+      }
+    }
+  );
+}
+
 // ===== Tool: design_set_animation =====
 
 export function registerDesignAnimationTool(server: McpServer): void {
@@ -2527,6 +2580,7 @@ export function registerAllDesignTools(server: McpServer): void {
   registerDesignInitTool(server);
   registerDesignAddComponentTool(server);
   registerDesignUpdateComponentTool(server);
+  registerDesignRenameTool(server);
   registerDesignAnimationTool(server);
   registerDesignBehaviorTool(server);
   registerDesignAlignTool(server);

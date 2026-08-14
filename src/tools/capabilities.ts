@@ -28,6 +28,7 @@ const TOOL_MANIFEST: Array<{ name: string; group: string; summary: string; examp
   { name: "design_init", group: "design", summary: "Initialize project + style preset + tokens", example: 'design_init(project_name="Summer Sale", style="bold")' },
   { name: "design_add_component", group: "design", summary: "Add a component to the canvas", example: 'design_add_component(type="hero", variant="centered", props={title:"Hi"})' },
   { name: "design_update_component", group: "design", summary: "Update component props", example: 'design_update_component(id="comp_x", props={title:"New"})' },
+  { name: "design_rename_component", group: "design", summary: "Rename a component's layer (shown in the layers panel)", example: 'design_rename_component(component_id="comp_x", name="Hero 主标题")' },
   { name: "design_remove_component", group: "design", summary: "Remove a component", example: 'design_remove_component(id="comp_x")' },
   { name: "design_set_animation", group: "design", summary: "Set entry/hover animation", example: 'design_set_animation(component_id="comp_x", entry="fadeUp")' },
   { name: "design_set_token", group: "design", summary: "Set a single design token", example: 'design_set_token(category="colors", key="color-primary", value="#FF5733")' },

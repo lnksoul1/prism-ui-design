@@ -347,6 +347,124 @@ body::after {
   flex-direction: column;
   position: relative;
 }
+
+/* ===== 精确编辑 P0: 标尺 / 参考线 / 吸附 ===== */
+.ruler-stage {
+  position: sticky;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  z-index: 30;
+  pointer-events: none;
+}
+.canvas-ruler {
+  position: absolute;
+  background: var(--surface-glass, rgba(20, 22, 34, 0.92));
+  border: 1px solid var(--border);
+  user-select: none;
+  cursor: crosshair;
+  pointer-events: auto;
+  overflow: hidden;
+}
+.canvas-ruler-h {
+  top: 0;
+  left: 0;
+  height: 18px;
+}
+.canvas-ruler-v {
+  top: 0;
+  left: 0;
+  width: 18px;
+}
+.canvas-ruler-corner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 18px;
+  height: 18px;
+  background: var(--surface, #171a29);
+  border: 1px solid var(--border);
+  z-index: 1;
+  pointer-events: auto;
+}
+.ruler-tick {
+  position: absolute;
+  font-size: 9px;
+  line-height: 1;
+  color: var(--text-dim);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.canvas-ruler-h .ruler-tick { top: 10px; transform: translateX(-50%); }
+.canvas-ruler-v .ruler-tick { left: 10px; transform: translateY(-50%); }
+.ruler-line {
+  position: absolute;
+  background: var(--border-strong, rgba(255, 255, 255, 0.14));
+  pointer-events: none;
+}
+.canvas-ruler-h .ruler-line { top: 0; bottom: 0; width: 1px; }
+.canvas-ruler-v .ruler-line { left: 0; right: 0; height: 1px; }
+
+.canvas-guides {
+  position: absolute;
+  inset: 0;
+  z-index: 25;
+  pointer-events: none;
+  overflow: hidden;
+}
+.canvas-guide {
+  position: absolute;
+  pointer-events: auto;
+  cursor: ew-resize;
+  background: var(--accent, #8b5cf6);
+  z-index: 25;
+}
+.canvas-guide.guide-h {
+  left: 0;
+  right: 0;
+  height: 1px;
+  cursor: ns-resize;
+}
+.canvas-guide.guide-v {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+.canvas-guide::after {
+  content: "";
+  position: absolute;
+  background: var(--accent, #8b5cf6);
+}
+.canvas-guide.guide-h::after {
+  left: 50%;
+  top: -4px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  transform: translateX(-50%);
+}
+.canvas-guide.guide-v::after {
+  top: 50%;
+  left: -4px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  transform: translateY(-50%);
+}
+.canvas-guide.guide-h.dragging, .canvas-guide.guide-v.dragging { opacity: 0.9; }
+.canvas-snap-line {
+  position: absolute;
+  pointer-events: none;
+  background: var(--accent-bright, #a78bfa);
+  z-index: 26;
+  box-shadow: 0 0 4px var(--accent, #8b5cf6);
+}
+.canvas-snap-line.snap-h { left: 0; right: 0; height: 1px; }
+.canvas-snap-line.snap-v { top: 0; bottom: 0; width: 1px; }
+.canvas-guide:hover { background: var(--accent-bright, #a78bfa); }
+.canvas-scroll-wrap.freeform-active .ruler-stage { display: block; }
+.ruler-stage { display: none; }
 .canvas-frame {
   display: flex;
   flex-direction: column;
@@ -2789,6 +2907,17 @@ body.theme-dark .canvas-scroll-wrap {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.layer-rename-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  color: var(--text);
+  border-radius: 4px;
+  font-size: 12px;
+  padding: 1px 5px;
+  outline: none;
 }
 .layer-del {
   background: transparent;

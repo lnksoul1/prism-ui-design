@@ -58,6 +58,7 @@ test("ws schema accepts valid client messages", () => {
     { type: "set_token", category: "colors", key: "color-primary", value: "#ff0000" },
     { type: "update_component", id: "comp_1", props: { title: "x" } },
     { type: "update_component", id: "comp_1", props: {}, layout: { x: 10, y: 20, w: 300, h: 160 } },
+    { type: "rename_component", id: "comp_1", name: "Hero" },
     { type: "remove_component", id: "comp_1" },
     { type: "duplicate_component", id: "comp_1" },
     { type: "undo" },
@@ -91,6 +92,7 @@ test("ws schema rejects malformed client messages", () => {
     { type: "nope" },
     { type: "set_token", category: "colors", key: "" },
     { type: "set_token", category: "colors", key: "x" }, // missing value
+    { type: "rename_component", id: "comp_1" }, // missing name
     { type: "reorder_component", fromId: "a", toId: "b", position: "sideways" },
     { type: "set_theme", mode: "neon" },
     { type: "set_platform", platform: "" },
@@ -187,6 +189,12 @@ test("applyClientMessage mutates state and reports failures", () => {
     behavior: { type: "prompt", prompt: "x" },
   });
   assert.equal(behMissing.ok, false);
+
+  const renamed = applyClientMessage({ type: "rename_component", id: node.id, name: "主按钮" });
+  assert.equal(renamed.ok, true);
+  assert.equal(stateStore.getState().components.find((c) => c.id === node.id)?.name, "主按钮");
+  const renameMissing = applyClientMessage({ type: "rename_component", id: "comp_nope", name: "x" });
+  assert.equal(renameMissing.ok, false);
 
   const align = applyClientMessage({
     type: "align_components",

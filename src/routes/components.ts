@@ -83,6 +83,20 @@ export function registerComponentsRoutes(): express.Router {
     res.json({ success });
   }));
 
+  // API: Rename a component's layer (精确编辑 P0 图层重命名)
+  router.put("/api/component/:id/name", asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const name = (req.body || {}).name;
+    if (typeof name !== "string") {
+      throw new HttpError(400, "name (string) is required; empty string reverts to the type default");
+    }
+    const ok = designService.renameComponent(id, name, "user");
+    if (!ok) {
+      throw new HttpError(404, `Component ${id} not found`);
+    }
+    res.json({ success: true, id, name: name.trim() });
+  }));
+
   // API: Replace a component's definition in place (模板快速变更 P0 组件模板,
   // raw palette path): swaps type/variant/props, keeps id + layout position.
   router.put("/api/component/:id/replace", asyncHandler(async (req, res) => {

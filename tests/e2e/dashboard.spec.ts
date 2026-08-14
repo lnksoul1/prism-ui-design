@@ -504,3 +504,45 @@ test("library: component template replaces the selected component in place", asy
 
   expect(errors).toEqual([]);
 });
+
+test("exact editing: layer rename + rulers/guides appear in freeform", async ({ page }: { page: Page }) => {
+  const errors: string[] = [];
+  page.on("console", (msg) => {
+    if (msg.type() === "error") errors.push(msg.text());
+  });
+  page.on("pageerror", (err) => errors.push(String(err)));
+
+  await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "domcontentloaded", timeout: 60000 });
+  await expect(page.locator(".topbar")).toBeVisible();
+
+  // Start from a template so there is a component to rename
+  await page.fill("#prompt-input", "应用 SaaS 模板");
+  await page.click("#prompt-send");
+  await expect(page.locator("#prompt-status")).toContainText("已执行", { timeout: 5000 });
+  await expect(page.locator(".comp-wrapper").first()).toBeVisible({ timeout: 10000 });
+
+  // Switch to freeform: rulers + guides stage appear (精确编辑 P0)
+  await page.locator("#layout-mode-btn").click();
+  await page.waitForTimeout(500);
+  await expect(page.locator("#ruler-h")).toBeVisible();
+  await expect(page.locator("#ruler-v")).toBeVisible();
+  await expect(page.locator(".ruler-tick").first()).toBeVisible();
+
+  // Rename a layer via the layer panel (double-click the name)
+  await page.locator("#layer-tree .layer-item").first().dblclick();
+  const nameInput = page.locator(".layer-rename-input");
+  await expect(nameInput).toBeVisible();
+  await nameInput.fill("我的 Hero");
+  await nameInput.press("Enter");
+  await page.waitForTimeout(600);
+  await expect(page.locator("#layer-tree .layer-name").first()).toHaveText("我的 Hero");
+  const state = await page.evaluate(async () => {
+    const s = (await (await fetch("/api/state")).json()) as {
+      components: Array<{ name?: string }>;
+    };
+    return s.components.some((c) => c.name === "我的 Hero");
+  });
+  expect(state).toBe(true);
+
+  expect(errors).toEqual([]);
+});

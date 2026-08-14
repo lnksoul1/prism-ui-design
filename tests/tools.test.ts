@@ -120,6 +120,7 @@ const VALID_PARAMS: Record<string, Record<string, unknown>> = {
   design_init: { project_name: "Smoke Test", style: "minimal", base_color: "#2563EB" },
   design_add_component: { type: "hero", variant: "center", props: { title: "Hello" } },
   design_update_component: { id: "missing", props: { title: "x" }, layout: { x: 0, y: 0, w: 320, h: 160 } },
+  design_rename_component: { component_id: "missing", name: "Hero 主标题" },
   design_set_animation: { component_id: "missing", entry: "fadeUp", duration: 0.5 },
   design_get_state: {},
   design_set_token: { category: "colors", key: "color-primary", value: "#FF5733" },
@@ -207,6 +208,7 @@ const EXPECT_STRUCTURED = new Set([
   "ui_generate_design_tokens",
   "design_init",
   "design_add_component",
+  "design_rename_component",
   "design_get_state",
   "design_set_token",
   "design_undo",
@@ -267,6 +269,7 @@ const INVALID_PARAMS: Record<string, Record<string, unknown>> = {
   ui_generate_gradient: { base_color: "#6366F1", stops: 9 },
   design_init: { project_name: "x" },
   design_add_component: {},
+  design_rename_component: {},
   design_set_token: { category: "bogus", key: "k", value: "v" },
   design_apply_template: { template: "nope" },
   design_set_theme: { mode: "blue" },
@@ -300,9 +303,9 @@ const INVALID_PARAMS: Record<string, Record<string, unknown>> = {
   design_z_order_component: { component_id: "comp_1", mode: "diagonal" },
 };
 
-test("registers all 74 tools with unique names", () => {
-  assert.equal(captured.length, 74);
-  assert.equal(new Set(captured.map((t) => t.name)).size, 74);
+test("registers all 75 tools with unique names", () => {
+  assert.equal(captured.length, 75);
+  assert.equal(new Set(captured.map((t) => t.name)).size, 75);
   for (const tool of captured) {
     assert.equal(typeof tool.handler, "function");
   }

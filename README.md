@@ -148,13 +148,20 @@ product (never a fresh page):
 
 ## Exact editing (精确编辑, freeform mode)
 
-Freeform mode (`流式/自由` toggle) is a precise adjustment surface, not just
-drag-and-drop:
+Freeform mode is the **default** canvas (`流式/自由` toggle switches back to
+auto-stacking) — a precise adjustment surface, not just drag-and-drop:
 
-- **标尺 + 参考线**: rulers along the canvas edges (freeform only); drag out
-  of a ruler to create a guide, drag a guide to move it, drag it back onto the
-  ruler (or double-click) to remove it. Guides are session-local editing aids
-  and never leak into exports.
+- **任意移动 + 缩放**: drag any top-level component anywhere; drag its
+  8 corner/edge handles to resize. Missing layouts are assigned automatically
+  on load, so every component is movable out of the box.
+- **组件内部组成部分**: nested item text (feature lists, pricing plans, stats,
+  navbar links, card grids) is editable in place via double-click — including
+  array paths like `items[0].title`. Child components appear indented in the
+  layers panel and are selectable/renamable/deletable.
+- **标尺 + 参考线**: rulers along the canvas edges; drag out of a ruler to
+  create a guide, drag a guide to move it, drag it back onto the ruler (or
+  double-click) to remove it. Guides are session-local editing aids and never
+  leak into exports.
 - **吸附 (Snapping)**: while dragging or resizing a component, edges/centers
   snap to guides, the canvas center/edges, and other components' edges/centers
   (5 px threshold) with a violet snap indicator.

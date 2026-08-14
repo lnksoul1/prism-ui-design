@@ -34,7 +34,9 @@ let conflictCheckInterval = null;
 let selectedComponentId = null;
 let selectedIds = [];
 let canvasZoom = 100;
-let canvasMode = "flow";
+// 默认自由模式：组件可任意移动/缩放（定位核心"精确自由调整"）。
+// "流式"切换按钮保留，作为自动纵向排列的选项。
+let canvasMode = "freeform";
 let playMode = false;
 let pendingDrawTool = null;
 let myClientId = null;
@@ -1207,12 +1209,34 @@ function renderCanvas() {
   const count = countComponents(components);
   meta.textContent = `${count} 个组件`;
 
+  // 自由模式：无布局坐标的组件自动获得坐标（含子组件），保证可移动/缩放。
+  if (canvasMode === "freeform") {
+    ensureFreeformLayouts();
+  }
+
   components.forEach((comp) => {
     canvas.appendChild(renderComponent(comp));
   });
   // 标尺/参考线跟随画布尺寸刷新
   renderRulers();
   renderGuides();
+}
+
+/**
+ * 自由模式下，为所有缺 layout 的顶层组件分配坐标。
+ * 子组件相对其父容器排列（流式），无需画布级坐标，因此不在此处递归。
+ */
+function ensureFreeformLayouts() {
+  const canvas = $("canvas");
+  const width = canvas ? Math.max(320, Math.round(canvas.getBoundingClientRect().width) - 32) : 640;
+  let cursor = 16;
+  for (const comp of getCurrentComponents()) {
+    if (!comp.layout) {
+      comp.layout = { x: 16, y: cursor, w: width, h: 140 };
+      sendUpdateComponent(comp.id, {}, comp.layout);
+    }
+    cursor = Math.max(cursor, (comp.layout.y || 0) + (comp.layout.h || 140) + 16);
+  }
 }
 
 // Apply platform width class + device chrome to canvas
@@ -1300,6 +1324,8 @@ function renderComponent(comp) {
     // Ignore clicks on overlay controls and active inline editing
     if (e.target.closest(".comp-delete") || e.target.closest(".comp-drag-handle")) return;
     if (e.target.closest("[contenteditable='true']")) return;
+    // 子组件点击不再冒泡到父组件：否则选中的是父组件，内部组成部分无法调整。
+    e.stopPropagation();
     // Play mode: dispatch the bound behavior (行为模型 P1), with a legacy
     // fallback to page links saved by older versions.
     if (playMode) {
@@ -1405,6 +1431,8 @@ function attachFreeformDrag(wrapper, compId) {
     if (e.target.closest(".comp-delete") || e.target.closest(".comp-drag-handle")) return;
     if (e.target.closest(".resize-handle")) return;
     if (e.target.closest("[contenteditable='true']")) return;
+    // 内联编辑文字：mousedown 不启动拖动，否则双击编辑会被打断。
+    if (e.target.closest("[data-editable='true']")) return;
     e.preventDefault();
     selectComponent(compId);
     const startX = e.clientX;
@@ -1827,7 +1855,7 @@ function snapLayout(layout, compId, edges) {
 
 function getCompById(id) {
   if (!currentState) return null;
-  return getCurrentComponents().find((c) => c.id === id) || null;
+  return findCompDeep(getCurrentComponents(), id);
 }
 
 function findCompDeep(nodes, id) {
@@ -1921,8 +1949,8 @@ function initializeFreeformLayouts() {
   const canvas = $("canvas");
   const width = canvas ? Math.max(320, Math.round(canvas.getBoundingClientRect().width) - 32) : 640;
   let cursor = 16;
-  const components = getCurrentComponents();
-  components.forEach((comp) => {
+  // 顶层组件按列排列获得布局坐标（子组件相对父容器流式排列）。
+  getCurrentComponents().forEach((comp) => {
     if (!comp.layout) {
       const layout = { x: 16, y: cursor, w: width, h: 140 };
       comp.layout = layout;
@@ -1936,8 +1964,7 @@ function autoLayout() {
   const canvas = $("canvas");
   const width = canvas ? Math.max(320, Math.round(canvas.getBoundingClientRect().width) - 32) : 640;
   let cursor = 16;
-  const components = getCurrentComponents();
-  components.forEach((comp) => {
+  getCurrentComponents().forEach((comp) => {
     const layout = { x: 16, y: cursor, w: width, h: comp.layout && comp.layout.h ? comp.layout.h : 140 };
     comp.layout = layout;
     sendUpdateComponent(comp.id, {}, layout);
@@ -1982,7 +2009,7 @@ function setupCanvasMode() {
 
 function getSelectedComp() {
   if (!selectedComponentId || !currentState) return null;
-  return getCurrentComponents().find((c) => c.id === selectedComponentId) || null;
+  return findCompDeep(getCurrentComponents(), selectedComponentId);
 }
 
 function getSelectedComps() {
@@ -2564,10 +2591,12 @@ function renderLayerPanel() {
     return;
   }
   list.innerHTML = "";
-  [...components].reverse().forEach((comp) => {
+  // 递归渲染：子组件以缩进层级显示，也可选中/重命名/删除（自由编辑补缺）。
+  const renderItem = (comp, depth) => {
     const item = el("div", "layer-item" + (selectedIds.includes(comp.id) ? " selected" : ""));
     item.dataset.id = comp.id;
-    item.appendChild(el("span", "layer-icon", "◈"));
+    if (depth > 0) item.style.paddingLeft = `${8 + depth * 14}px`;
+    item.appendChild(el("span", "layer-icon", depth > 0 ? "↳" : "◈"));
     const nameSpan = el("span", "layer-name", comp.name || `${comp.type}${comp.variant ? "/" + comp.variant : ""}`);
     nameSpan.title = t("layerRenameHint");
     item.appendChild(nameSpan);
@@ -2606,7 +2635,11 @@ function renderLayerPanel() {
     });
     item.appendChild(del);
     list.appendChild(item);
-  });
+    if (comp.children && comp.children.length > 0) {
+      [...comp.children].reverse().forEach((child) => renderItem(child, depth + 1));
+    }
+  };
+  [...components].reverse().forEach((comp) => renderItem(comp, 0));
 }
 
 // 图层重命名 (精确编辑 P0): double-click the name (delegated — the first click
@@ -2754,13 +2787,34 @@ function setupInlineEditing(wrapper, compId) {
       elm.contentEditable = "false";
       const newValue = elm.textContent.trim();
       const prop = elm.getAttribute("data-prop");
-      if (prop) {
+      if (!prop) return;
+      // 支持点路径（如 "items.0.title"）：更新嵌套数组内的字段。
+      if (prop.includes(".")) {
+        const comp = getCompById(compId);
+        if (!comp) return;
+        const parts = prop.split(".");
+        let cursor = comp.props;
+        for (let i = 0; i < parts.length - 1; i++) {
+          const key = parts[i];
+          const idx = /^\d+$/.test(key) ? parseInt(key, 10) : key;
+          if (cursor == null) return;
+          cursor = cursor[idx];
+        }
+        if (cursor == null) return;
+        const leafKey = parts[parts.length - 1];
+        cursor[leafKey] = newValue;
         send({
           type: "update_component",
           id: compId,
-          props: { [prop]: newValue },
+          props: JSON.parse(JSON.stringify(comp.props)),
         });
+        return;
       }
+      send({
+        type: "update_component",
+        id: compId,
+        props: { [prop]: newValue },
+      });
     };
 
     elm.addEventListener("blur", commitEdit);
@@ -3018,15 +3072,15 @@ function renderNavbar(props, variant) {
   const links = el("div", "nav-links");
   const items = props.links || ["Home", "About", "Services", "Contact"];
   if (Array.isArray(items)) {
-    items.forEach((item) => {
+    items.forEach((item, i) => {
       const link = typeof item === "string" ? item : (item.label || item.text || "");
-      links.appendChild(el("span", null, link));
+      links.appendChild(editableText("span", null, link, `links.${i}`));
     });
   }
   nav.appendChild(links);
 
   if (variant === "with_cta" && props.cta_text) {
-    const cta = el("span", "btn", props.cta_text);
+    const cta = editableText("span", "btn", props.cta_text, "cta_text");
     cta.style.cssText = "padding:6px 16px;font-size:13px;border-radius:6px;";
     nav.appendChild(cta);
   }
@@ -3045,6 +3099,13 @@ function renderCardGrid(props, variant) {
   for (let i = 0; i < Math.max(items.length, count); i++) {
     const item = items[i] || {};
     const card = renderCard(item, "product");
+    // 卡片网格内每个 item 的文字可独立编辑（路径指向 items[i]）。
+    const t = card.querySelector(".card-title");
+    if (t) { t.setAttribute("data-editable", "true"); t.setAttribute("data-prop", `items.${i}.title`); }
+    const d = card.querySelector(".card-desc");
+    if (d) { d.setAttribute("data-editable", "true"); d.setAttribute("data-prop", `items.${i}.description`); }
+    const p = card.querySelector(".card-price");
+    if (p) { p.setAttribute("data-editable", "true"); p.setAttribute("data-prop", `items.${i}.price`); }
     grid.appendChild(card);
   }
 
@@ -3122,14 +3183,14 @@ function renderTextSection(props) {
 function renderFeatureList(props) {
   const list = el("div", "comp-feature-list");
   const items = props.items || [];
-  items.forEach((item) => {
+  items.forEach((item, i) => {
     const feature = el("div", "comp-feature-item");
     const icon = el("div", "feature-icon", item.icon || "✦");
     feature.appendChild(icon);
     const text = el("div");
     text.style.flex = "1";
-    if (item.title) text.appendChild(el("div", "card-title", item.title));
-    if (item.description) text.appendChild(el("div", "card-desc", item.description));
+    if (item.title) text.appendChild(editableText("div", "card-title", item.title, `items.${i}.title`));
+    if (item.description) text.appendChild(editableText("div", "card-desc", item.description, `items.${i}.description`));
     feature.appendChild(text);
     list.appendChild(feature);
   });
@@ -3155,15 +3216,21 @@ function renderStats(props) {
   const container = el("div");
   container.style.cssText = "display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:16px;padding:24px;border-radius:10px;";
   const items = props.items || [];
-  items.forEach((item) => {
+  items.forEach((item, i) => {
     const stat = el("div");
     stat.style.cssText = "text-align:center;padding:16px;border-radius:8px;";
     stat.appendChild(el("div", null, ""));
     const num = stat.firstChild;
     num.style.cssText = "font-size:28px;font-weight:700;margin-bottom:4px;";
     num.textContent = item.value || "0";
+    num.setAttribute("data-editable", "true");
+    num.setAttribute("data-prop", `items.${i}.value`);
+    num.draggable = false;
     const label = el("div", null, item.label || "");
     label.style.cssText = "font-size:11px;opacity:0.7;";
+    label.setAttribute("data-editable", "true");
+    label.setAttribute("data-prop", `items.${i}.label`);
+    label.draggable = false;
     stat.appendChild(label);
     container.appendChild(stat);
   });
@@ -3174,28 +3241,27 @@ function renderPricing(props, variant) {
   const grid = el("div");
   grid.style.cssText = "display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;";
   const plans = props.plans || [];
-  plans.forEach((plan) => {
+  plans.forEach((plan, i) => {
     const card = el("div", "comp-card");
     if (plan.featured) {
       card.style.cssText = "border:2px solid var(--accent);position:relative;";
     }
-    if (plan.name) card.appendChild(el("div", "card-title", plan.name));
+    if (plan.name) card.appendChild(editableText("div", "card-title", plan.name, `plans.${i}.name`));
     if (plan.price) {
-      const price = el("div", "card-price", plan.price);
+      const price = editableText("div", "card-price", plan.price, `plans.${i}.price`);
       price.style.fontSize = "24px";
       card.appendChild(price);
     }
     if (plan.features && Array.isArray(plan.features)) {
       const features = el("div");
       features.style.cssText = "margin-top:8px;";
-      plan.features.forEach((f) => {
-        const item = el("div", "card-desc", `✓ ${f}`);
-        features.appendChild(item);
+      plan.features.forEach((f, fi) => {
+        features.appendChild(editableText("div", "card-desc", `✓ ${f}`, `plans.${i}.features.${fi}`));
       });
       card.appendChild(features);
     }
     if (plan.button_text) {
-      const btn = el("div", "btn", plan.button_text);
+      const btn = editableText("div", "btn", plan.button_text, `plans.${i}.button_text`);
       btn.style.cssText = "padding:8px 20px;font-size:13px;border-radius:6px;margin-top:12px;text-align:center;";
       card.appendChild(btn);
     }

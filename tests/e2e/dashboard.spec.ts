@@ -326,8 +326,8 @@ test("multi-select and alignment adjust freeform layouts", async ({ page }: { pa
   await expect(page.locator("#prompt-status")).toContainText("已执行", { timeout: 5000 });
   await expect(page.locator(".comp-wrapper").first()).toBeVisible({ timeout: 10000 });
 
-  // Switch to freeform so components get editable layouts
-  await page.locator("#layout-mode-btn").click();
+  // Freeform is the default mode; components already get editable layouts.
+  // (Clicking the toggle would switch to flow, so we skip it here.)
   await page.waitForTimeout(500);
 
   // Give the first two components distinct positions via REST
@@ -521,8 +521,7 @@ test("exact editing: layer rename + rulers/guides appear in freeform", async ({ 
   await expect(page.locator("#prompt-status")).toContainText("已执行", { timeout: 5000 });
   await expect(page.locator(".comp-wrapper").first()).toBeVisible({ timeout: 10000 });
 
-  // Switch to freeform: rulers + guides stage appear (精确编辑 P0)
-  await page.locator("#layout-mode-btn").click();
+  // Freeform is the default mode: rulers + guides stage appear immediately.
   await page.waitForTimeout(500);
   await expect(page.locator("#ruler-h")).toBeVisible();
   await expect(page.locator("#ruler-v")).toBeVisible();
@@ -629,6 +628,42 @@ test("drawing canvas: bind an interaction to a shape, play mode triggers it", as
   await page.mouse.click(center!.x, center!.y);
   await expect(page.locator("#prism-toast")).toContainText("操作成功", { timeout: 5000 });
   await page.keyboard.press("Escape");
+
+  expect(errors).toEqual([]);
+});
+
+test("edit inner parts of a component (nested item text is editable)", async ({ page }: { page: Page }) => {
+  const errors: string[] = [];
+  page.on("console", (msg) => {
+    if (msg.type() === "error") errors.push(msg.text());
+  });
+  page.on("pageerror", (err) => errors.push(String(err)));
+
+  await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "domcontentloaded", timeout: 60000 });
+  await expect(page.locator(".topbar")).toBeVisible();
+
+  // SaaS template includes a feature_list with nested items and a pricing grid.
+  await page.fill("#prompt-input", "应用 SaaS 模板");
+  await page.click("#prompt-send");
+  await expect(page.locator("#prompt-status")).toContainText("已执行", { timeout: 5000 });
+  await expect(page.locator(".comp-wrapper").first()).toBeVisible({ timeout: 10000 });
+
+  // Feature-list item titles are editable in place (nested path items.0.title).
+  const featTitle = page.locator('.comp-feature-item .card-title[data-editable="true"]').first();
+  await expect(featTitle).toBeVisible();
+  await featTitle.dblclick();
+  await page.keyboard.press("Control+A");
+  await page.keyboard.type("重新命名的功能");
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(600);
+  const state = await page.evaluate(async () => {
+    const s = (await (await fetch("/api/state")).json()) as {
+      components: Array<{ props?: { items?: Array<{ title?: string }> } }>;
+    };
+    const feat = s.components.find((c) => c.props?.items && c.props.items.some((it) => it.title));
+    return feat?.props?.items?.some((it) => it.title === "重新命名的功能");
+  });
+  expect(state).toBe(true);
 
   expect(errors).toEqual([]);
 });

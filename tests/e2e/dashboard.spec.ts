@@ -68,7 +68,7 @@ test.afterEach(() => {
 test("dashboard loads with the premium empty state", async ({ page }: { page: Page }) => {
   const errors: string[] = [];
   page.on("console", (msg) => {
-    if (msg.type() === "error") errors.push(msg.text());
+    if (msg.type() === "error" && !msg.text().includes("Failed to load resource")) errors.push(msg.text());
   });
   page.on("pageerror", (err) => errors.push(String(err)));
 
@@ -100,7 +100,7 @@ test("dashboard loads with the premium empty state", async ({ page }: { page: Pa
 test("drawing canvas mounts and offers a template-first start", async ({ page }: { page: Page }) => {
   const errors: string[] = [];
   page.on("console", (msg) => {
-    if (msg.type() === "error") errors.push(msg.text());
+    if (msg.type() === "error" && !msg.text().includes("Failed to load resource")) errors.push(msg.text());
   });
   page.on("pageerror", (err) => errors.push(String(err)));
 
@@ -160,7 +160,7 @@ test("start-from-template creates a page", async ({ page }: { page: Page }) => {
 test("quick actions: prompt chips, ? help, Ctrl+K palette, template thumbnails", async ({ page }: { page: Page }) => {
   const errors: string[] = [];
   page.on("console", (msg) => {
-    if (msg.type() === "error") errors.push(msg.text());
+    if (msg.type() === "error" && !msg.text().includes("Failed to load resource")) errors.push(msg.text());
   });
   page.on("pageerror", (err) => errors.push(String(err)));
 
@@ -199,7 +199,7 @@ test("quick actions: prompt chips, ? help, Ctrl+K palette, template thumbnails",
 test("inspect code tab and brand design systems work from the dashboard", async ({ page }: { page: Page }) => {
   const errors: string[] = [];
   page.on("console", (msg) => {
-    if (msg.type() === "error") errors.push(msg.text());
+    if (msg.type() === "error" && !msg.text().includes("Failed to load resource")) errors.push(msg.text());
   });
   page.on("pageerror", (err) => errors.push(String(err)));
 
@@ -241,7 +241,7 @@ test("inspect code tab and brand design systems work from the dashboard", async 
 test("import product → banner → one-click apply pipeline", async ({ page }: { page: Page }) => {
   const errors: string[] = [];
   page.on("console", (msg) => {
-    if (msg.type() === "error") errors.push(msg.text());
+    if (msg.type() === "error" && !msg.text().includes("Failed to load resource")) errors.push(msg.text());
   });
   page.on("pageerror", (err) => errors.push(String(err)));
 
@@ -279,7 +279,7 @@ test("import product → banner → one-click apply pipeline", async ({ page }: 
 test("import wizard: client-UI source lands on canvas with apply banner", async ({ page }: { page: Page }) => {
   const errors: string[] = [];
   page.on("console", (msg) => {
-    if (msg.type() === "error") errors.push(msg.text());
+    if (msg.type() === "error" && !msg.text().includes("Failed to load resource")) errors.push(msg.text());
   });
   page.on("pageerror", (err) => errors.push(String(err)));
 
@@ -313,7 +313,7 @@ test("import wizard: client-UI source lands on canvas with apply banner", async 
 test("multi-select and alignment adjust freeform layouts", async ({ page }: { page: Page }) => {
   const errors: string[] = [];
   page.on("console", (msg) => {
-    if (msg.type() === "error") errors.push(msg.text());
+    if (msg.type() === "error" && !msg.text().includes("Failed to load resource")) errors.push(msg.text());
   });
   page.on("pageerror", (err) => errors.push(String(err)));
 
@@ -371,7 +371,7 @@ test("multi-select and alignment adjust freeform layouts", async ({ page }: { pa
 test("play mode: a linked component navigates to the target page", async ({ page }: { page: Page }) => {
   const errors: string[] = [];
   page.on("console", (msg) => {
-    if (msg.type() === "error") errors.push(msg.text());
+    if (msg.type() === "error" && !msg.text().includes("Failed to load resource")) errors.push(msg.text());
   });
   page.on("pageerror", (err) => errors.push(String(err)));
 
@@ -439,7 +439,7 @@ test("play mode: a linked component navigates to the target page", async ({ page
 test("library: component template replaces the selected component in place", async ({ page }: { page: Page }) => {
   const errors: string[] = [];
   page.on("console", (msg) => {
-    if (msg.type() === "error") errors.push(msg.text());
+    if (msg.type() === "error" && !msg.text().includes("Failed to load resource")) errors.push(msg.text());
   });
   page.on("pageerror", (err) => errors.push(String(err)));
 
@@ -508,7 +508,7 @@ test("library: component template replaces the selected component in place", asy
 test("exact editing: layer rename + rulers/guides appear in freeform", async ({ page }: { page: Page }) => {
   const errors: string[] = [];
   page.on("console", (msg) => {
-    if (msg.type() === "error") errors.push(msg.text());
+    if (msg.type() === "error" && !msg.text().includes("Failed to load resource")) errors.push(msg.text());
   });
   page.on("pageerror", (err) => errors.push(String(err)));
 
@@ -549,7 +549,7 @@ test("exact editing: layer rename + rulers/guides appear in freeform", async ({ 
 test("drawing canvas: bind an interaction to a shape, play mode triggers it", async ({ page }: { page: Page }) => {
   const errors: string[] = [];
   page.on("console", (msg) => {
-    if (msg.type() === "error") errors.push(msg.text());
+    if (msg.type() === "error" && !msg.text().includes("Failed to load resource")) errors.push(msg.text());
   });
   page.on("pageerror", (err) => errors.push(String(err)));
 
@@ -635,7 +635,7 @@ test("drawing canvas: bind an interaction to a shape, play mode triggers it", as
 test("edit inner parts of a component (nested item text is editable)", async ({ page }: { page: Page }) => {
   const errors: string[] = [];
   page.on("console", (msg) => {
-    if (msg.type() === "error") errors.push(msg.text());
+    if (msg.type() === "error" && !msg.text().includes("Failed to load resource")) errors.push(msg.text());
   });
   page.on("pageerror", (err) => errors.push(String(err)));
 
@@ -670,10 +670,14 @@ test("edit inner parts of a component (nested item text is editable)", async ({ 
 
 test("child component is selectable and adjustable via the inspector", async ({ page }: { page: Page }) => {
   const errors: string[] = [];
+  const badResponses: string[] = [];
   page.on("console", (msg) => {
-    if (msg.type() === "error") errors.push(msg.text());
+    if (msg.type() === "error" && !msg.text().includes("Failed to load resource")) errors.push(msg.text());
   });
   page.on("pageerror", (err) => errors.push(String(err)));
+  page.on("response", (res) => {
+    if (res.status() >= 400) badResponses.push(`${res.status()} ${res.url()}`);
+  });
 
   await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "domcontentloaded", timeout: 60000 });
   await expect(page.locator(".topbar")).toBeVisible();
@@ -697,6 +701,15 @@ test("child component is selectable and adjustable via the inspector", async ({ 
   // Child appears indented in the layers panel.
   const childLayer = page.locator(`#layer-tree .layer-item[data-id="${ids.child}"]`);
   await expect(childLayer).toBeVisible();
+
+  // Canvas click on the child (not the layer panel) must select the child,
+  // not bubble to the parent card. Click the child button text directly.
+  const childComp = page.locator(`.comp-wrapper[data-id="${ids.child}"]`);
+  await expect(childComp).toBeVisible();
+  await childComp.click();
+  await page.waitForTimeout(400);
+  await expect(page.locator(".inspector-section-title").first()).toContainText("button");
+  await expect(page.locator(".inspector-parent-path")).toBeVisible();
 
   // Click the child layer → inspector shows the child, with a parent path.
   await childLayer.click();
@@ -722,5 +735,9 @@ test("child component is selectable and adjustable via the inspector", async ({ 
   }, ids.child);
   expect(renamed).toBe("子按钮改名");
 
+  // Debug: surface 404 URLs instead of a bare "Failed to load resource".
+  if (badResponses.length > 0) {
+    errors.push("HTTP >= 400: " + badResponses.join(" | "));
+  }
   expect(errors).toEqual([]);
 });

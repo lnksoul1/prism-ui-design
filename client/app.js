@@ -1433,6 +1433,12 @@ function attachFreeformDrag(wrapper, compId) {
     if (e.target.closest("[contenteditable='true']")) return;
     // 内联编辑文字：mousedown 不启动拖动，否则双击编辑会被打断。
     if (e.target.closest("[data-editable='true']")) return;
+    // 子组件拦截：点击落在内部子组件上时，不启动父组件拖动、不选中父，
+    // 让子组件自己的 click 处理器接管（否则 mousedown 冒泡会选中父组件）。
+    const inner = e.target.closest(".comp-wrapper");
+    if (inner && inner !== wrapper && inner.contains(e.target)) {
+      if (inner.dataset.id !== compId) return;
+    }
     e.preventDefault();
     selectComponent(compId);
     const startX = e.clientX;

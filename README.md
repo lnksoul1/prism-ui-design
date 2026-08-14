@@ -136,11 +136,15 @@ product (never a fresh page):
 - **交互模板 (Behavior templates)**: a new **交互** library tab binds preset
   interactions to the selected component in one click (打开链接新标签页 / 点击
   提示 / 跳转首页 / 显隐切换 / 表单提交反馈 / AI 联动指令), triggered in play mode.
-- **风格换装 (Style presets)**: clicking a style in the library restyles the
-  current product in place (existing `apply_style` path).
+- **设计系统 (Brand design systems)**: the library's default **设计系统** tab
+  lists 17 named design systems (Linear, Stripe, Vercel, Notion, Arc, Spotify,
+  Apple, GitHub, IBM Carbon, Shopify Polaris, Duolingo, Discord, Raycast,
+  Airbnb, Figma, Anthropic …) — one click restyles the whole project's tokens
+  (undoable, `POST /api/design-system/apply`).
 - Every path is undoable and broadcast; agents get the same power via
-  `design_apply_component_template` / `design_apply_behavior_template`, and
-  `GET /api/template-catalog` lists both catalogs.
+  `design_apply_component_template` / `design_apply_behavior_template` /
+  `design_apply_style_guide`, and `GET /api/template-catalog` lists both
+  component and behavior templates.
 
 ## Exact editing (精确编辑, freeform mode)
 

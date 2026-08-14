@@ -220,9 +220,9 @@ test("inspect code tab and brand design systems work from the dashboard", async 
   const copyEnabled = await page.locator(".inspector-copy-btn").isEnabled();
   expect(copyEnabled).toBe(true);
 
-  // Brand design systems: list renders 6 cards, applying Linear changes tokens
+  // Brand design systems: list renders all cards, applying Linear changes tokens
   await page.locator('.lib-tab[data-lib="designSystems"]').click();
-  await expect(page.locator(".ds-card")).toHaveCount(6, { timeout: 5000 });
+  await expect(page.locator(".ds-card")).toHaveCount(17, { timeout: 5000 });
   await page.locator(".ds-apply").first().click();
   await page.waitForFunction(
     async () => {

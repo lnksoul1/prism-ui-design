@@ -998,11 +998,13 @@ test(
         systems: Array<{ id: string; swatch: string | null; preview: { primary: string | null } }>;
       };
       assert.equal(list.success, true);
-      assert.equal(list.systems.length, 6);
+      assert.equal(list.systems.length, 17);
       const linear = list.systems.find((s) => s.id === "linear");
       assert.ok(linear);
       assert.ok(linear.swatch);
       assert.ok(linear.preview.primary);
+      assert.ok(list.systems.find((s) => s.id === "apple"), "apple brand system present");
+      assert.ok(list.systems.find((s) => s.id === "anthropic"), "anthropic brand system present");
 
       const applyRes = await fetch(`${base}/api/design-system/apply`, {
         method: "POST",

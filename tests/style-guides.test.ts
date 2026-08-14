@@ -55,7 +55,11 @@ test("style guide catalog covers the documented guides", () => {
 
 test("brand design systems are exposed and route through the same applier", () => {
   const ids = BRAND_DESIGN_SYSTEMS.map((s) => s.id);
-  for (const id of ["linear", "stripe", "vercel", "notion", "arc", "spotify"]) {
+  for (const id of [
+    "linear", "stripe", "vercel", "notion", "arc", "spotify",
+    "apple", "github", "ibm-carbon", "shopify-polaris", "duolingo",
+    "discord", "raycast", "airbnb", "figma", "anthropic", "linear-light",
+  ]) {
     assert.ok(ids.includes(id), `missing brand system ${id}`);
   }
   // Every brand system defines a primary + background so the preview card works
@@ -65,6 +69,7 @@ test("brand design systems are exposed and route through the same applier", () =
   }
   // Brand systems are matchable/applicable like any style guide
   assert.equal(matchStyleGuide("linear")?.id, "linear");
+  assert.equal(matchStyleGuide("apple")?.id, "apple");
   const result = applyStyleGuide("stripe", "minimal");
   assert.equal(result.guide_id, "stripe");
   const state = stateStore.getState();

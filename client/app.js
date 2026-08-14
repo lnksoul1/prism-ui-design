@@ -80,7 +80,6 @@ const I18N = {
     online: "{n} 人在线",
     layers: "图层",
     layerRenameHint: "双击重命名图层",
-    libStyles: "风格",
     libAnimations: "动效",
     libComponents: "组件",
     libInteractions: "交互",
@@ -357,7 +356,6 @@ const I18N = {
     online: "{n} online",
     layers: "Layers",
     layerRenameHint: "Double-click to rename the layer",
-    libStyles: "Styles",
     libAnimations: "Motion",
     libComponents: "Components",
     libInteractions: "Interactions",
@@ -5936,23 +5934,6 @@ function setupActivityFilter() {
 // ===== Design Library =====
 
 // Style presets data (mirrors server-side STYLE_PRESETS)
-const LIBRARY_STYLES = [
-  { id: "minimal", name: "Minimal", desc: "中性灰、留白、4px 小圆角", color: "#4A6FA5", icon: "○" },
-  { id: "bold", name: "Bold", desc: "210° 蓝、无圆角、强对比", color: "#2563EB", icon: "◆" },
-  { id: "playful", name: "Playful", desc: "330° 粉、大圆角、活泼", color: "#EC4899", icon: "◆" },
-  { id: "dark", name: "Dark", desc: "260° 紫、深色优先", color: "#8B5CF6", icon: "◐" },
-  { id: "editorial", name: "Editorial", desc: "30° 棕、衬线标题、无圆角", color: "#B45309", icon: "✦" },
-  { id: "tech", name: "Tech", desc: "190° 青、等宽点缀、6px 圆角", color: "#06B6D4", icon: "◇" },
-  { id: "glassmorphism", name: "Glassmorphism", desc: "毛玻璃、半透明、柔和高光", color: "#818CF8", icon: "◇" },
-  { id: "neumorphism", name: "Neumorphism", desc: "软 UI、同色双阴影", color: "#94A3B8", icon: "◍" },
-  { id: "claymorphism", name: "Claymorphism", desc: "3D 粘土、药丸圆角", color: "#F472B6", icon: "◉" },
-  { id: "aurora", name: "Aurora", desc: "极光渐变、紫色调", color: "#A78BFA", icon: "✧" },
-  { id: "brutalism", name: "Brutalism", desc: "硬阴影、粗边框、直角", color: "#FACC15", icon: "▣" },
-  { id: "cyberpunk", name: "Cyberpunk", desc: "霓虹 HUD、青色发光", color: "#22D3EE", icon: "◬" },
-  { id: "organic", name: "Organic", desc: "仿生形态、自然绿", color: "#4ADE80", icon: "✿" },
-  { id: "luxury", name: "Luxury", desc: "黑金 OLED、衬线奢华", color: "#D4AF37", icon: "♛" },
-];
-
 // Animation presets
 const LIBRARY_ANIMATIONS = [
   { id: "fadeUp", name: "淡入上移", desc: "从下方淡入", icon: "↑", entry: "fadeUp", duration: 0.4 },
@@ -6065,7 +6046,7 @@ const LIBRARY_TEMPLATES = [
   { id: "dashboard", name: "数据看板", desc: "导航 + 指标 + 卡片网格", icon: "▦", builtin: true },
 ];
 
-let currentLibraryTab = "styles";
+let currentLibraryTab = "designSystems";
 
 function setupDesignLibrary() {
   const libTabs = document.querySelectorAll(".lib-tab");
@@ -6088,8 +6069,7 @@ function renderLibraryList() {
   list.innerHTML = "";
 
   let items = [];
-  if (currentLibraryTab === "styles") items = LIBRARY_STYLES;
-  else if (currentLibraryTab === "animations") items = LIBRARY_ANIMATIONS;
+  if (currentLibraryTab === "animations") items = LIBRARY_ANIMATIONS;
   else if (currentLibraryTab === "components") items = LIBRARY_COMPONENTS;
   else if (currentLibraryTab === "interactions") items = LIBRARY_INTERACTIONS;
   else if (currentLibraryTab === "templates") items = LIBRARY_TEMPLATES;
@@ -6343,9 +6323,7 @@ async function renderSavedTemplates() {
 }
 
 function handleLibraryItemClick(item) {
-  if (currentLibraryTab === "styles") {
-    send({ type: "apply_style", style: item.id });
-  } else if (currentLibraryTab === "components") {
+  if (currentLibraryTab === "components") {
     if (item.isBlock) {
       // 组件模板 (curated block): replace selected in place, or add.
       applyComponentTemplateViaAPI(item, libraryReplaceMode && selectedComponentId ? selectedComponentId : null);
@@ -6500,9 +6478,7 @@ function showLibraryPreview(itemEl, item) {
 
   // Build preview content based on type
   let html = "";
-  if (currentLibraryTab === "styles") {
-    html = buildStylePreview(item);
-  } else if (currentLibraryTab === "animations") {
+  if (currentLibraryTab === "animations") {
     html = buildAnimationPreview(item);
   } else if (currentLibraryTab === "components") {
     html = buildComponentPreview(item);
@@ -6533,40 +6509,6 @@ function showLibraryPreview(itemEl, item) {
 function hideLibraryPreview() {
   const popup = $("lib-preview-popup");
   if (popup) popup.style.display = "none";
-}
-
-function buildStylePreview(item) {
-  const swatches = generateStyleSwatches(item.id);
-  return `
-    <div class="lib-preview-content">
-      <div class="lib-preview-title">${item.name} 风格</div>
-      <div class="lib-preview-desc">${item.desc}</div>
-      <div class="lib-preview-swatches">${swatches}</div>
-      <div class="lib-preview-hint">点击应用 · 拖到画布</div>
-    </div>
-  `;
-}
-
-function generateStyleSwatches(styleId) {
-  // Approximate color schemes for each style
-  const schemes = {
-    minimal: ["#ffffff", "#f3f4f6", "#e5e7eb", "#6b8cae", "#1a1a2e"],
-    bold: ["#fafafa", "#dbeafe", "#60a5fa", "#2563eb", "#0d0d0d"],
-    playful: ["#fff8f6", "#fce7f3", "#f472b6", "#ec4899", "#2d1b2e"],
-    dark: ["#0a0e14", "#1e1b2e", "#a78bfa", "#8b5cf6", "#c9d1d9"],
-    editorial: ["#fdfcfa", "#fef3c7", "#d97706", "#b45309", "#1c1917"],
-    tech: ["#f8fafc", "#0e1620", "#22d3ee", "#06b6d4", "#cbd5e1"],
-    glassmorphism: ["#eef2ff", "rgba(255,255,255,0.55)", "#a5b4fc", "#6366f1", "#312e81"],
-    neumorphism: ["#e0e5ec", "#e0e5ec", "#b8c0cc", "#94a3b8", "#4b5563"],
-    claymorphism: ["#fff1f5", "#fce7f0", "#f9a8d4", "#f472b6", "#4c1d2b"],
-    aurora: ["#f5f0ff", "#ede9fe", "#a78bfa", "#8b5cf6", "#2e1065"],
-    brutalism: ["#ffffff", "#facc15", "#111111", "#e5e7eb", "#111111"],
-    cyberpunk: ["#0d0221", "#150a33", "#22d3ee", "#ff00c8", "#e0e7ff"],
-    organic: ["#f6fbf2", "#dcfce7", "#86efac", "#4ade80", "#1c2b1a"],
-    luxury: ["#0b0a08", "#1c1917", "#d4af37", "#f5f0e0", "#f5efe0"],
-  };
-  const colors = schemes[styleId] || schemes.minimal;
-  return colors.map((c) => `<div class="lib-preview-swatch" style="background:${c}"></div>`).join("");
 }
 
 function buildAnimationPreview(item) {
@@ -6662,9 +6604,7 @@ function setupCanvasDropZone() {
 }
 
 function handleLibraryDrop(item, libType) {
-  if (libType === "styles") {
-    send({ type: "apply_style", style: item.id });
-  } else if (libType === "blocks") {
+  if (libType === "blocks") {
     // 组件模板 dropped on the canvas: add the block (drop never replaces)
     applyComponentTemplateViaAPI(item, null);
   } else if (libType === "components") {

@@ -509,6 +509,15 @@ class PrismBlockShapeUtil extends BaseBoxShapeUtil {
     return new Rectangle2d({ width: shape.props.w, height: shape.props.h });
   }
 
+  // tldraw 5.3: BaseBoxShapeUtil leaves the selection indicator to each
+  // custom shape; without this, selecting a prism-block crashes the editor.
+  getIndicatorPath(shape) {
+    const { w, h } = shape.props;
+    const path = new Path2D();
+    path.rect(0, 0, w, h);
+    return path;
+  }
+
   component(shape) {
     const p = shape.props;
     const isText = p.kind === "text";
@@ -1056,6 +1065,83 @@ window.PrismCanvas = {
 
   setTool(tool) {
     if (editorRef) editorRef.setCurrentTool(tool);
+  },
+
+  // ===== 自由编辑补缺 (P1): 形状/图片挂行为 =====
+
+  /** Ids of the currently selected shapes (empty array when none). */
+  getSelectedShapeIds() {
+    return editorRef ? editorRef.getSelectedShapeIds() : [];
+  },
+
+  /** Select one or more shapes by id (replaces the current selection). */
+  selectShape(ids) {
+    if (!editorRef) return false;
+    const list = Array.isArray(ids) ? ids : [ids];
+    const valid = list.filter((id) => editorRef.getShape(id));
+    editorRef.select(...valid);
+    return valid.length > 0;
+  },
+
+  /**
+   * Read the interaction behavior bound to a shape (from meta.behavior).
+   * Returns the behavior object or null.
+   */
+  getShapeBehavior(shapeId) {
+    if (!editorRef) return null;
+    const shape = editorRef.getShape(shapeId);
+    if (!shape) return null;
+    return (shape.meta && shape.meta.behavior) || null;
+  },
+
+  /**
+   * Bind (or clear, with null) an interaction behavior to a shape. Stored on
+   * shape.meta.behavior so the drawing survives save/load, and
+   * shapesToComponents carries it to the real component on "应用到预览".
+   */
+  setShapeBehavior(shapeId, behavior) {
+    if (!editorRef || !shapeId) return false;
+    const shape = editorRef.getShape(shapeId);
+    if (!shape) return false;
+    const meta = { ...(shape.meta || {}) };
+    if (behavior && typeof behavior === "object" && behavior.type) {
+      meta.behavior = { ...behavior };
+    } else {
+      delete meta.behavior;
+    }
+    editorRef.updateShapes([{ id: shapeId, type: shape.type, meta }]);
+    return true;
+  },
+
+  /** All shapes that carry an interaction behavior (for play mode). */
+  getShapesWithBehavior() {
+    if (!editorRef) return [];
+    return editorRef
+      .getCurrentPageShapes()
+      .filter((s) => s.meta && s.meta.behavior && s.meta.behavior.type)
+      .map((s) => ({ id: s.id, behavior: s.meta.behavior }));
+  },
+
+  /** Shape id at a viewport point (for play-mode click dispatch). */
+  getShapeAtPoint(clientX, clientY) {
+    if (!editorRef) return null;
+    const point = editorRef.screenToPage({ x: clientX, y: clientY });
+    const hit = editorRef.getShapeAtPoint(point, {
+      hitInside: true,
+      margin: 4,
+      filter: (s) => s.meta && s.meta.behavior && s.meta.behavior.type,
+    });
+    if (!hit) return null;
+    // Normalize: tldraw stores the behavior on meta; expose { id, behavior }.
+    return { id: hit.id, behavior: hit.meta && hit.meta.behavior };
+  },
+
+  /** Center of a shape in viewport coordinates (for tests/play clicking). */
+  getShapeCenter(shapeId) {
+    if (!editorRef) return null;
+    const bounds = editorRef.getShapePageBounds(shapeId);
+    if (!bounds) return null;
+    return editorRef.pageToScreen({ x: bounds.x + bounds.w / 2, y: bounds.y + bounds.h / 2 });
   },
 
   selectAll() {

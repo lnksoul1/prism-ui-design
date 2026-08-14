@@ -138,6 +138,7 @@
           <button class="toolbar-btn canvas-apply-btn" id="canvas-apply-btn" data-i18n="applyCanvas">应用到预览</button>
           <button class="toolbar-btn" id="canvas-export-btn" data-i18n="exportCanvas">写回页面文件</button>
           <button class="toolbar-btn" id="canvas-autolayout-btn" data-i18n="autoLayout">自动排列</button>
+          <button class="toolbar-btn" id="canvas-behavior-btn" data-i18n="canvasBehavior">⚡ 交互</button>
           <button class="toolbar-btn" id="canvas-clear-btn" data-i18n="clearCanvas">清空</button>
         </div>
         <button class="toolbar-btn play-btn" id="play-btn" data-i18n="playMode">▶ 播放</button>
@@ -188,6 +189,12 @@
     <div class="canvas-editor-wrap" id="canvas-editor-wrap" style="display:none">
       <div class="canvas-editor-hint" id="canvas-editor-hint"></div>
       <div class="canvas-editor" id="canvas-editor"></div>
+    </div>
+    <!-- 画布形状/图片行为绑定 (自由编辑补缺 P1) -->
+    <div class="canvas-behavior-menu" id="canvas-behavior-menu" style="display:none">
+      <div class="cb-menu-title" data-i18n="canvasBehaviorTitle">给选中的形状/图片绑定交互</div>
+      <div class="cb-menu-list" id="canvas-behavior-list"></div>
+      <button class="cb-menu-clear" id="canvas-behavior-clear" data-i18n="canvasBehaviorClear">清除交互</button>
     </div>
   </main>
 

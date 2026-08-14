@@ -207,6 +207,74 @@ test("shapesToComponents maps image shapes to image components with asset src", 
   assert.equal(components[0].props.alt, "photo.png");
 });
 
+test("shapesToComponents carries meta.behavior to the component (自由编辑补缺 P1)", () => {
+  const behavior = { type: "link", url: "https://example.com", new_tab: true };
+  const doc = docWithShapes([
+    // Drawn image with a bound behavior
+    {
+      id: "asset:1",
+      typeName: "asset",
+      src: "data:image/png;base64,AAAA",
+      name: "photo.png",
+    },
+    {
+      id: "shape:img",
+      typeName: "shape",
+      type: "image",
+      x: 5,
+      y: 6,
+      props: { w: 400, h: 300, assetId: "asset:1" },
+      meta: { behavior },
+    },
+    // Drawn geo shape with a behavior (button-like)
+    {
+      id: "shape:geo",
+      typeName: "shape",
+      type: "geo",
+      x: 10,
+      y: 320,
+      props: { w: 160, h: 48, fill: "solid", richText: richText("Go") },
+      meta: { behavior: { type: "toast", message: "已跳转" } },
+    },
+    // prism-block restored from a component with behavior
+    {
+      id: "shape:block",
+      typeName: "shape",
+      type: "geo",
+      x: 0,
+      y: 500,
+      props: { w: 120, h: 40, richText: richText("Buy") },
+      meta: {
+        prism: true,
+        componentId: "comp_orig_1",
+        componentType: "button",
+        componentVariant: "primary",
+        componentProps: { text: "Buy now" },
+        behavior: { type: "prompt", prompt: "优化按钮" },
+      },
+    },
+    // Decorative arrow with a behavior should still be skipped (no component)
+    {
+      id: "shape:arrow",
+      typeName: "shape",
+      type: "arrow",
+      x: 0,
+      y: 0,
+      props: {},
+      meta: { behavior: { type: "toast", message: "x" } },
+    },
+  ]);
+
+  const components = shapesToComponents(doc);
+  assert.equal(components.length, 3, "arrow still skipped");
+  const image = components.find((c) => c.type === "image");
+  assert.deepEqual(image?.behavior, behavior, "image shape keeps its behavior");
+  const geo = components.find((c) => c.props.text === "Go");
+  assert.deepEqual(geo?.behavior, { type: "toast", message: "已跳转" }, "drawn shape keeps its behavior");
+  const btn = components.find((c) => c.props.text === "Buy now");
+  assert.deepEqual(btn?.behavior, { type: "prompt", prompt: "优化按钮" }, "prism-block keeps its behavior");
+});
+
 test("shapesToComponents maps prism-block shapes to containers with style hints", () => {
   const doc = docWithShapes([
     {

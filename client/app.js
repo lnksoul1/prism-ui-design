@@ -177,6 +177,10 @@ const I18N = {
     designMode: "画布",
     saveCanvas: "保存画布",
     applyCanvas: "应用到预览",
+    canvasBehavior: "⚡ 交互",
+    canvasBehaviorTitle: "给选中的形状/图片绑定交互（播放模式点击触发）",
+    canvasBehaviorClear: "清除交互",
+    canvasBehaviorNone: "请先在画布中选中一个形状或图片",
     exportCanvas: "写回页面文件",
     clearCanvas: "清空",
     canvasEditorHint: "无限画布：拖拽移动、滚轮缩放；用右侧工具栏画形状/文字/箭头/图片，完成后点“应用到预览”",
@@ -450,6 +454,10 @@ const I18N = {
     designMode: "Draw",
     saveCanvas: "Save canvas",
     applyCanvas: "Apply to preview",
+    canvasBehavior: "⚡ Interact",
+    canvasBehaviorTitle: "Bind an interaction to the selected shape/image (triggers in play mode)",
+    canvasBehaviorClear: "Clear interaction",
+    canvasBehaviorNone: "Select a shape or image on the canvas first",
     exportCanvas: "Write back page file",
     clearCanvas: "Clear",
     canvasEditorHint: "Infinite canvas: drag to move, scroll to zoom. Use the right toolbar to draw shapes, text, arrows, and images, then click Apply",
@@ -7197,6 +7205,157 @@ async function applyTemplateForCanvas(templateId) {
   }
 }
 
+// ===== 自由编辑补缺 (P1): 画布形状/图片挂行为 + 画布播放触发 =====
+
+/** Build a concrete behavior from a client-side template id (mirrors server). */
+function buildCanvasBehavior(templateId, shapeId) {
+  const pages = currentState && currentState.pages ? currentState.pages : [];
+  const pageIds = pages.map((p) => p.id);
+  switch (templateId) {
+    case "open_link_new_tab":
+      return { type: "link", url: "https://example.com", new_tab: true };
+    case "toast_feedback":
+      return { type: "toast", message: "操作成功！" };
+    case "navigate_home":
+      return { type: "navigate", page_id: pageIds[0] || "" };
+    case "toggle_self":
+      return { type: "toggle", target_component_id: shapeId || "" };
+    case "submit_feedback":
+      return { type: "submit", form_id: "" };
+    case "ai_enhance":
+      return { type: "prompt", prompt: "优化这个组件的视觉效果" };
+    default:
+      return null;
+  }
+}
+
+function setupCanvasBehavior() {
+  const btn = $("canvas-behavior-btn");
+  const menu = $("canvas-behavior-menu");
+  const list = $("canvas-behavior-list");
+  const clearBtn = $("canvas-behavior-clear");
+  if (!btn || !menu || !list) return;
+
+  const hide = () => { menu.style.display = "none"; };
+
+  const applyToSelection = async (behavior) => {
+    const ids = window.PrismCanvas ? window.PrismCanvas.getSelectedShapeIds() : [];
+    if (ids.length === 0) {
+      showToastMsg(t("canvasBehaviorNone"), true);
+      return;
+    }
+    let applied = 0;
+    ids.forEach((id) => {
+      if (window.PrismCanvas.setShapeBehavior(id, behavior)) applied += 1;
+    });
+    hide();
+    if (applied > 0) {
+      showToastMsg(applied === 1 ? "已绑定交互（播放模式点击触发）" : `已为 ${applied} 个形状绑定交互`);
+      saveCurrentCanvas(false);
+    }
+  };
+
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (menu.style.display === "block") { hide(); return; }
+    // Render template list
+    list.innerHTML = "";
+    LIBRARY_INTERACTIONS.forEach((tpl) => {
+      const item = el("div", "cb-menu-item");
+      const iconEl = el("span", "cb-menu-icon", tpl.icon);
+      item.appendChild(iconEl);
+      const textEl = el("div", "cb-menu-text");
+      textEl.appendChild(el("div", "cb-menu-name", tpl.name));
+      textEl.appendChild(el("div", "cb-menu-desc", tpl.desc));
+      item.appendChild(textEl);
+      item.addEventListener("click", () => {
+        const ids = window.PrismCanvas ? window.PrismCanvas.getSelectedShapeIds() : [];
+        const shapeId = ids[0] || null;
+        const behavior = buildCanvasBehavior(tpl.id, shapeId);
+        if (behavior) applyToSelection(behavior);
+      });
+      list.appendChild(item);
+    });
+    const rect = btn.getBoundingClientRect();
+    menu.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - 240)) + "px";
+    menu.style.top = (rect.bottom + 6) + "px";
+    menu.style.display = "block";
+  });
+
+  if (clearBtn) {
+    clearBtn.addEventListener("click", () => applyToSelection(null));
+  }
+
+  // Click elsewhere closes the menu; Escape closes it too.
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest("#canvas-behavior-menu") && !e.target.closest("#canvas-behavior-btn")) hide();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") hide();
+  });
+}
+
+/**
+ * 画布播放模式：点击带行为的形状/图片时触发（与主画布播放模式同一心智）。
+ * Uses capture-phase pointerup on the document because tldraw registers its
+ * own window/document capture listeners that swallow events targeting the
+ * editor subtree.
+ */
+function setupCanvasPlayClick() {
+  document.addEventListener(
+    "pointerup",
+    (e) => {
+      if (!playMode || !canvasEditorMode) return;
+      if (!window.PrismCanvas || !window.PrismCanvas.isReady()) return;
+      const shape = window.PrismCanvas.getShapeAtPoint(e.clientX, e.clientY);
+      if (!shape || !shape.behavior) return;
+      e.stopPropagation();
+      dispatchCanvasShapeBehavior(shape.id, shape.behavior);
+    },
+    true
+  );
+}
+
+function dispatchCanvasShapeBehavior(shapeId, behavior) {
+  if (!behavior || !behavior.type) return;
+  switch (behavior.type) {
+    case "navigate":
+      if (behavior.page_id && behavior.page_id !== (currentState && currentState.currentPageId)) {
+        send({ type: "switch_page", pageId: behavior.page_id });
+      }
+      break;
+    case "link":
+      if (behavior.url) window.open(behavior.url, behavior.new_tab === false ? "_self" : "_blank", "noopener");
+      break;
+    case "toggle": {
+      if (!behavior.target_component_id) break;
+      const target = findCompDeep(getCurrentComponents(), behavior.target_component_id);
+      if (target) {
+        send({
+          type: "update_component",
+          id: target.id,
+          props: {},
+          visible: target.visible === false,
+        });
+      } else {
+        showToastMsg("toggle 目标未找到（画布形状可用「显隐切换」绑定自身）", true);
+      }
+      break;
+    }
+    case "toast":
+      showToastMsg(behavior.message || t("behaviorToastDefault"));
+      break;
+    case "submit":
+      showToastMsg(t("behaviorSubmitted"));
+      break;
+    case "prompt":
+      if (behavior.prompt) sendPrompt(behavior.prompt);
+      break;
+    default:
+      break;
+  }
+}
+
 // ===== Initialize =====
 
 // ===== Play Mode (click-through navigation between linked pages) =====
@@ -7402,6 +7561,8 @@ function init() {
   updateLlmBadge();
   setupDrawTools();
   setupApplyBanner();
+  setupCanvasBehavior();
+  setupCanvasPlayClick();
   setupCommandPalette();
   setupQuickActions();
   setupConflictCheck();

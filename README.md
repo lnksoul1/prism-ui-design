@@ -154,6 +154,20 @@ drag-and-drop:
   (persisted on `ComponentNode.name`, undoable); agents use
   `design_rename_component`.
 
+## Interactions on the drawing canvas (自由编辑补缺)
+
+Shapes and images drawn on the tldraw canvas are interactive too:
+
+- Select any shape/image → click the **⚡ 交互** button in the canvas toolbar →
+  bind one of the interaction templates (打开链接 / 点击提示 / 跳转首页 /
+  显隐切换 / 表单提交 / AI 联动) or clear it. The behavior lives on
+  `shape.meta.behavior` and persists with the saved canvas.
+- In **play mode** (▶ 播放), clicking a shape/image with a bound behavior
+  triggers it — same mental model as the main canvas.
+- **应用到预览 (Apply to preview)** carries `meta.behavior` into the
+  component (`shapesToComponents`), so behaviors survive the round trip and
+  the exported page keeps them.
+
 ## Built-in AI (BYO API key)
 
 The dashboard can generate pages itself — no external agent needed:

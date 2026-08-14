@@ -114,7 +114,7 @@ function cloneMetaComponent(meta: Record<string, unknown>): ComponentNode | null
     meta.componentProps && typeof meta.componentProps === "object"
       ? (JSON.parse(JSON.stringify(meta.componentProps)) as Record<string, unknown>)
       : {};
-  return {
+  const node: ComponentNode = {
     id:
       typeof meta.componentId === "string"
         ? meta.componentId
@@ -124,6 +124,11 @@ function cloneMetaComponent(meta: Record<string, unknown>): ComponentNode | null
     props,
     children: [],
   };
+  const behavior = meta.behavior as ComponentNode["behavior"];
+  if (behavior && typeof behavior === "object" && typeof behavior.type === "string") {
+    node.behavior = behavior;
+  }
+  return node;
 }
 
 function makeComponent(type: string, props: Record<string, unknown>, bounds: { x: number; y: number; w: number; h: number }): ComponentNode {
@@ -242,6 +247,12 @@ export function shapesToComponents(doc: unknown): ComponentNode[] {
       }
     } else {
       component = guessComponent(shape, assets);
+      // 自由编辑补缺 (P1): a drawn shape / image with a bound behavior keeps
+      // it when applied to the preview, so play mode triggers it.
+      const behavior = meta.behavior as ComponentNode["behavior"];
+      if (component && behavior && typeof behavior === "object" && typeof behavior.type === "string") {
+        component.behavior = behavior;
+      }
     }
 
     if (component) components.push(component);

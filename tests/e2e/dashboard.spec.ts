@@ -546,3 +546,89 @@ test("exact editing: layer rename + rulers/guides appear in freeform", async ({ 
 
   expect(errors).toEqual([]);
 });
+
+test("drawing canvas: bind an interaction to a shape, play mode triggers it", async ({ page }: { page: Page }) => {
+  const errors: string[] = [];
+  page.on("console", (msg) => {
+    if (msg.type() === "error") errors.push(msg.text());
+  });
+  page.on("pageerror", (err) => errors.push(String(err)));
+
+  await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "domcontentloaded", timeout: 60000 });
+  await expect(page.locator(".topbar")).toBeVisible();
+
+  // Open the drawing canvas and start from a template so there are shapes
+  await page.locator("#canvas-mode-design").click();
+  await expect(page.locator("#canvas-editor .tl-container")).toBeVisible({ timeout: 15000 });
+  await expect(page.locator("#canvas-template-modal")).toBeVisible({ timeout: 10000 });
+  await page.locator(".template-card").first().click();
+  await page.waitForFunction(
+    () => {
+      const canvas = (globalThis as { PrismCanvas?: { countShapes(): number } }).PrismCanvas;
+      return !!canvas && canvas.countShapes() > 0;
+    },
+    null,
+    { timeout: 10000 }
+  );
+
+  // Select exactly the first shape via the editor API, then bind 点击提示
+  const shapeId = await page.evaluate(() => {
+    const canvas = (globalThis as { PrismCanvas?: {
+      selectShape?: (ids: string[]) => boolean;
+      getSelectedShapeIds?: () => string[];
+    } }).PrismCanvas;
+    if (!canvas || !canvas.selectShape) return null;
+    canvas.selectAll();
+    const all = canvas.getSelectedShapeIds();
+    const first = all && all.length > 0 ? all[0] : null;
+    if (first) canvas.selectShape([first]);
+    return first;
+  });
+  expect(shapeId).toBeTruthy();
+
+  // Open the behavior menu and pick 点击提示 (toast)
+  await page.locator("#canvas-behavior-btn").click();
+  await expect(page.locator("#canvas-behavior-menu")).toBeVisible();
+  await page.locator(".cb-menu-item", { hasText: "点击提示" }).click();
+  await expect(page.locator("#prism-toast")).toContainText("已绑定交互", { timeout: 5000 });
+
+  // The behavior persisted into the saved canvas doc
+  const pageIdForCanvas = await page.evaluate(async () => {
+    const s = (await (await fetch("/api/state")).json()) as { currentPageId: string };
+    return s.currentPageId;
+  });
+  const behavior = await page.evaluate(async (pid) => {
+    const res = await fetch(`/api/canvas?pageId=${encodeURIComponent(pid)}`);
+    const s = (await res.json()) as {
+      doc?: { document?: { store?: Record<string, { meta?: { behavior?: { type: string } } }> } };
+    };
+    return s.doc;
+  }, pageIdForCanvas);
+  const shapesWithBehavior = await page.evaluate((doc) => {
+    const store = (doc as { document?: { store?: Record<string, unknown> } })?.document?.store || {};
+    return Object.values(store)
+      .filter((r) => (r as { typeName?: string }).typeName === "shape")
+      .map((r) => (r as { meta?: { behavior?: { type: string } } }).meta?.behavior?.type)
+      .filter(Boolean);
+  }, behavior);
+  expect(shapesWithBehavior).toContain("toast");
+
+  // Play mode: clicking the shape triggers the toast
+  await page.locator("#play-btn").click();
+  await page.waitForTimeout(300);
+  const center = await page.evaluate((id) => {
+    const canvas = (globalThis as { PrismCanvas?: { getShapeCenter?: (id: string) => { x: number; y: number } | null } }).PrismCanvas;
+    return canvas && canvas.getShapeCenter ? canvas.getShapeCenter(id) : null;
+  }, shapeId);
+  expect(center).toBeTruthy();
+  const hitBefore = await page.evaluate((pt) => {
+    const canvas = (globalThis as { PrismCanvas?: { getShapeAtPoint?: (x: number, y: number) => { id: string } | null } }).PrismCanvas;
+    return canvas && canvas.getShapeAtPoint ? canvas.getShapeAtPoint(pt.x, pt.y) : null;
+  }, center);
+  expect(hitBefore).toBeTruthy();
+  await page.mouse.click(center!.x, center!.y);
+  await expect(page.locator("#prism-toast")).toContainText("操作成功", { timeout: 5000 });
+  await page.keyboard.press("Escape");
+
+  expect(errors).toEqual([]);
+});

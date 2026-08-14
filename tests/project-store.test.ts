@@ -52,7 +52,7 @@ test("saveProject writes a loadable .prism.json file", () => {
 test("loadProject restores project name, pages, components, and tokens", () => {
   stateStore.setProjectName("Persisted", "ai");
   stateStore.setStyle("tech", "ai");
-  applyStyleTokenSet(stateStore, "tech", "#06B6D4", "ai");
+  applyStyleTokenSet(stateStore, "#06B6D4", "ai");
   const comp = stateStore.addComponent("navbar", "with_cta", { brand: "Prism" }, null, "ai");
   const saved = saveProject();
 

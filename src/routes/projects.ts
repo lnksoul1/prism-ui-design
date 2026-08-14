@@ -110,7 +110,7 @@ export function registerProjectsRoutes(): express.Router {
     const result = importClientUi(clear_existing === true);
     stateStore.setProjectName("Prism 客户端", "ai");
     stateStore.setStyle("minimal", "ai");
-    applyStyleTokenSet(stateStore, "minimal", "#7C3AED", "ai");
+    applyStyleTokenSet(stateStore, "#7C3AED", "ai");
     stateStore.switchPage(result.pageId, "ai");
     await recordProductImport(result.pageId, "client", "Prism 客户端界面", result.imported);
     res.json({ success: true, ...result, page_id: result.pageId, imported: result.imported });
@@ -156,12 +156,13 @@ export function registerProjectsRoutes(): express.Router {
   }));
 
   // API: Initialize design project (mirrors design_init MCP tool)
+  // 风格预设已移除：仅 project_name + 可选 base_color（中性默认 token）。
   router.post("/api/init", asyncHandler(async (req, res) => {
-    const { project_name, style, base_color } = req.body;
-    if (!project_name || !style) {
-      throw new HttpError(400, "Missing project_name or style");
+    const { project_name, base_color } = req.body;
+    if (!project_name) {
+      throw new HttpError(400, "Missing project_name");
     }
-    const result = designService.initProject(project_name, style, base_color);
+    const result = designService.initProject(project_name, base_color);
     res.json(result);
   }));
 

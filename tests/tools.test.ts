@@ -117,7 +117,7 @@ const VALID_PARAMS: Record<string, Record<string, unknown>> = {
   ui_generate_gradient: { base_color: "#6366F1", type: "linear", angle: 135, stops: 3 },
   ui_suggest_breakpoints: { framework: "tailwind", strategy: "mobile_first", response_format: "json" },
   ui_generate_design_tokens: { style: "minimal", base_color: "#6366F1", dark_mode: true, response_format: "json" },
-  design_init: { project_name: "Smoke Test", style: "minimal", base_color: "#2563EB" },
+  design_init: { project_name: "Smoke Test", base_color: "#2563EB" },
   design_add_component: { type: "hero", variant: "center", props: { title: "Hello" } },
   design_update_component: { id: "missing", props: { title: "x" }, layout: { x: 0, y: 0, w: 320, h: 160 } },
   design_rename_component: { component_id: "missing", name: "Hero 主标题" },
@@ -235,7 +235,6 @@ const EXPECT_STRUCTURED = new Set([
   "design_semantic_style",
   "design_list_capabilities",
   "design_import_webpage",
-  "design_list_style_presets",
   "design_list_components",
   "design_list_pages",
   "design_set_project_name",
@@ -267,7 +266,7 @@ const INVALID_PARAMS: Record<string, Record<string, unknown>> = {
   ui_generate_type_scale: { base_size: 100 },
   ui_generate_spacing_scale: { base_unit: 6 },
   ui_generate_gradient: { base_color: "#6366F1", stops: 9 },
-  design_init: { project_name: "x" },
+  design_init: {},
   design_add_component: {},
   design_rename_component: {},
   design_set_token: { category: "bogus", key: "k", value: "v" },
@@ -303,9 +302,9 @@ const INVALID_PARAMS: Record<string, Record<string, unknown>> = {
   design_z_order_component: { component_id: "comp_1", mode: "diagonal" },
 };
 
-test("registers all 75 tools with unique names", () => {
-  assert.equal(captured.length, 75);
-  assert.equal(new Set(captured.map((t) => t.name)).size, 75);
+test("registers all 74 tools with unique names", () => {
+  assert.equal(captured.length, 74);
+  assert.equal(new Set(captured.map((t) => t.name)).size, 74);
   for (const tool of captured) {
     assert.equal(typeof tool.handler, "function");
   }

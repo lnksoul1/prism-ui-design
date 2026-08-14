@@ -69,7 +69,6 @@ const TOOL_MANIFEST: Array<{ name: string; group: string; summary: string; examp
   { name: "design_apply_style_guide", group: "semantics", summary: "Apply a style guide", example: 'design_apply_style_guide(tag="brutalist")' },
   { name: "design_list_capabilities", group: "meta", summary: "Self-describing capability manifest", example: "design_list_capabilities()" },
   // Spec §8.2 alignment
-  { name: "design_list_style_presets", group: "design", summary: "List all 30 style presets (14 legacy + 16 new, aligned with awesome-design-skills)", example: "design_list_style_presets()" },
   { name: "design_list_components", group: "design", summary: "List components on the current page", example: "design_list_components()" },
   { name: "design_list_pages", group: "design", summary: "List all pages", example: "design_list_pages()" },
   { name: "design_set_project_name", group: "design", summary: "Rename the project", example: 'design_set_project_name(name="Landing")' },

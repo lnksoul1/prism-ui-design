@@ -1,14 +1,12 @@
 /**
  * Shared design-token generation.
  *
- * This logic used to exist in three places — the `design_init` MCP tool,
- * the `/api/init` REST endpoint, and the `apply_style` WebSocket handler —
- * and the copies had already drifted apart (e.g. radius token naming).
- * Keep generation here so every entry point produces an identical token set.
+ * Prism 无风格预设体系：token 由"中性默认基础" + 设计系统（style-guides.ts）
+ * 覆盖生成。`generateStyleTokens` 生成中性默认集，`applyStyleGuide` 再叠加
+ * 品牌设计系统的 token 覆盖（颜色/圆角/阴影/字体）。
  */
 
 import {
-  STYLE_PRESETS,
   FONT_PAIRINGS,
   TYPE_SCALE_RATIOS,
   type FontPairingData,
@@ -109,43 +107,33 @@ export const SHADOW_SYSTEM_PRESETS: Record<
 };
 
 /**
- * Generate the complete token set for a style preset.
- * Falls back to the preset's own base color when `baseColor` is missing
- * or not a valid hex value.
+ * Generate the neutral default token set (Prism 无风格预设：这是每次应用
+ * 设计系统前的中性基础，品牌设计系统再在其上覆盖颜色/圆角/阴影/字体)。
+ * `baseColor` 覆盖主色；缺省用中性蓝灰。
  */
 export function generateStyleTokens(
-  style: string,
   baseColor?: string
 ): StyleTokenSet {
-  const preset = STYLE_PRESETS[style];
-  if (!preset) {
-    throw new Error(`Unknown style preset: ${style}`);
-  }
-
   let baseHex: string;
   if (baseColor && isValidHex(baseColor)) {
     baseHex = normalizeHex(baseColor);
   } else {
-    baseHex = hslToHex({
-      h: preset.base_hue,
-      s: preset.saturation,
-      l: preset.lightness,
-    });
+    baseHex = hslToHex({ h: 220, s: 45, l: 50 });
   }
 
   const baseHsl = hexToHsl(baseHex);
   const harmonyColors = generateHarmony(baseHsl, "monochromatic");
   const neutralHsls = generateNeutralGrays(baseHsl, 11);
 
-  // Colors
+  // Colors — 中性默认
   const colors: Record<string, string> = {
     "color-primary": hslToHex(harmonyColors[1]),
     "color-primary-dark": hslToHex(harmonyColors[0]),
     "color-primary-light": hslToHex(harmonyColors[2]),
     "color-accent": hslToHex(harmonyColors[3]),
-    "color-bg": preset.bg_light,
-    "color-surface": hslToHex(adjustLightness({ h: baseHsl.h, s: 10, l: 98 }, 0)),
-    "color-text": preset.text_light,
+    "color-bg": "#FFFFFF",
+    "color-surface": "#F7F8FA",
+    "color-text": "#1A1A2E",
     "color-text-muted": hslToHex(neutralHsls[5]),
     "color-border": hslToHex(adjustLightness(neutralHsls[8], -5)),
     "color-success": "#22C55E",
@@ -153,9 +141,8 @@ export function generateStyleTokens(
     "color-error": "#EF4444",
   };
 
-  // Typography
-  const font =
-    FONT_PAIRINGS.find((p) => p.style === style) || FONT_PAIRINGS[0];
+  // Typography — 中性默认
+  const font = FONT_PAIRINGS[0];
   const ratio = TYPE_SCALE_RATIOS.perfect_fourth;
   const baseSize = 16;
 
@@ -176,8 +163,8 @@ export function generateStyleTokens(
     typography[`text-${name}`] = `${(size / 16).toFixed(3)}rem`;
   });
 
-  // Spacing
-  const spacingBase = preset.spacing_base;
+  // Spacing — 8px 基数
+  const spacingBase = 8;
   const spacingValues = [
     0,
     spacingBase,
@@ -194,15 +181,15 @@ export function generateStyleTokens(
     spacing[`space-${name}`] = `${(px / 16).toFixed(px % 16 === 0 ? 0 : 3)}rem`;
   });
 
-  // Shadows (5 elevation levels, sourced from the shared shadow presets)
-  const shadowPreset = SHADOW_SYSTEM_PRESETS[preset.shadow_style];
+  // Shadows — subtle 5 级
+  const shadowPreset = SHADOW_SYSTEM_PRESETS.subtle;
   const shadows: Record<string, string> = {};
   SHADOW_NAMES.forEach((name, i) => {
     shadows[`shadow-${name}`] = shadowPreset[i].shadow;
   });
 
-  // Radii
-  const radiusVals = RADIUS_PRESETS[preset.radius_style];
+  // Radii — 6px 默认
+  const radiusVals = RADIUS_PRESETS.subtle;
   const radii: Record<string, string> = {};
   RADIUS_NAMES.forEach((name, i) => {
     radii[`radius-${name}`] = `${radiusVals[i]}px`;
@@ -224,11 +211,10 @@ export function generateStyleTokens(
 /** Generate the token set and write every category into the state store. */
 export function applyStyleTokenSet(
   store: TokenBatchStore,
-  style: string,
   baseColor: string | undefined,
   source: TokenSource
 ): StyleTokenSet {
-  const tokens = generateStyleTokens(style, baseColor);
+  const tokens = generateStyleTokens(baseColor);
   store.setTokenBatch("colors", tokens.colors, source);
   store.setTokenBatch("typography", tokens.typography, source);
   store.setTokenBatch("spacing", tokens.spacing, source);

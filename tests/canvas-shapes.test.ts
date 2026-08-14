@@ -28,7 +28,7 @@ function docWithShapes(shapes: unknown[]): unknown {
 
 beforeEach(() => {
   stateStore.resetForTests();
-  applyStyleTokenSet(stateStore, "minimal", "#7C3AED", "ai");
+  applyStyleTokenSet(stateStore, "#7C3AED", "ai");
 });
 
 test("extractPlainText handles strings, rich-text docs, and arrays", () => {

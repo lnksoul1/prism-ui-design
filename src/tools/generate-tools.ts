@@ -43,14 +43,14 @@ export function generatePage(
   // Start a fresh project for the generated page.
   stateStore.clearAll("ai");
   stateStore.setProjectName(projectName, "ai");
-  stateStore.setStyle(style, "ai");
+  stateStore.setStyle("minimal", "ai");
 
   let adjectives: string[] = [];
   if (options.adjectives && options.adjectives.length > 0) {
     const semantic = applySemanticStyle(brief, options.adjectives, style, options.base_color);
     adjectives = semantic.adjectives;
   } else {
-    applyStyleTokenSet(stateStore, style, options.base_color, "ai");
+    applyStyleTokenSet(stateStore, options.base_color, "ai");
   }
 
   const componentIds = applyPageTemplate(template);

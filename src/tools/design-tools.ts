@@ -1172,46 +1172,29 @@ export function exportDesign(
 }
 
 // ===== Tool: design_init =====
-// Initialize a design project with style and optional base color
+// Initialize a design project with neutral default tokens and optional base color.
+// Prism 无风格预设：换肤统一走 design_apply_style_guide（设计系统）。
 
 export function registerDesignInitTool(server: McpServer): void {
   server.registerTool(
     "design_init",
     {
       title: "Initialize Design Project",
-      description: `Initialize a new design project. Sets the overall style, generates a complete token set, and clears any previous state.
+      description: `Initialize a new design project: neutral default token set + optional base color, and clears any previous state.
 
 The client dashboard will update in real-time when this is called.
 
 Args:
   - project_name (string): Name for this design project
-  - style (string): Design style — one of the 14 presets: minimal, bold, playful, dark, editorial, tech,
-    glassmorphism, neumorphism, claymorphism, aurora, brutalism, cyberpunk, organic, luxury
-  - base_color (string, optional): Override the preset base color (hex like "#6366F1")
+  - base_color (string, optional): Override the base color (hex like "#6366F1")
+
+To restyle the project afterwards, use design_apply_style_guide (17 brand design systems).
 
 Examples:
-  - design_init(project_name="电商促销页", style="bold", base_color="#F97316")
-  - design_init(project_name="极简博客", style="minimal")`,
+  - design_init(project_name="电商促销页", base_color="#F97316")
+  - design_init(project_name="极简博客")`,
       inputSchema: {
         project_name: z.string().describe("Project name"),
-        style: z
-          .enum([
-            "minimal",
-            "bold",
-            "playful",
-            "dark",
-            "editorial",
-            "tech",
-            "glassmorphism",
-            "neumorphism",
-            "claymorphism",
-            "aurora",
-            "brutalism",
-            "cyberpunk",
-            "organic",
-            "luxury",
-          ])
-          .describe("Design style preset"),
         base_color: z
           .string()
           .optional()
@@ -1228,11 +1211,10 @@ Examples:
       try {
         stateStore.clearAll("ai");
         stateStore.setProjectName(params.project_name, "ai");
-        stateStore.setStyle(params.style, "ai");
+        stateStore.setStyle("minimal", "ai");
 
         const tokens = applyStyleTokenSet(
           stateStore,
-          params.style,
           params.base_color,
           "ai"
         );
@@ -1240,7 +1222,6 @@ Examples:
         const summary = [
           `# Design Project Initialized: ${params.project_name}`,
           ``,
-          `**Style:** ${params.style}`,
           `**Base Color:** ${tokens.baseHex}`,
           `**Font:** ${tokens.font.display.name} + ${tokens.font.body.name}`,
           ``,
@@ -1251,6 +1232,7 @@ Examples:
           `- Radii: ${Object.keys(tokens.radii).length}`,
           `- Transitions: ${Object.keys(tokens.transitions).length}`,
           ``,
+          `Restyle anytime with design_apply_style_guide (17 brand design systems).`,
           `The client dashboard is now live. Use design_add_component to start building the UI.`,
         ].join("\n");
 
@@ -1259,7 +1241,7 @@ Examples:
           structuredContent: {
             success: true,
             project_name: params.project_name,
-            style: params.style,
+            style: "minimal",
             base_color: tokens.baseHex,
             token_count:
               Object.keys(tokens.colors).length +

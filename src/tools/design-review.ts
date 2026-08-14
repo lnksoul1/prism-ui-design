@@ -185,9 +185,8 @@ export function autoImprove(): { actions: AutoImproveAction[]; component_count: 
 
   const tokenCount = Object.values(state.tokens).reduce((sum, cat) => sum + Object.keys(cat).length, 0);
   if (tokenCount === 0) {
-    const style = state.style || "minimal";
-    applyStyleTokenSet(stateStore, style, undefined, "ai");
-    actions.push({ action: "apply_style_preset", detail: `Generated complete token set for "${style}".` });
+    applyStyleTokenSet(stateStore, undefined, "ai");
+    actions.push({ action: "apply_style_preset", detail: `Generated the neutral default token set.` });
   }
 
   if (!types.has("navbar")) {
@@ -343,7 +342,7 @@ export function createBrandStyle(
   }
 
   const baseStyle = options.base_style || stateStore.getState().style || "minimal";
-  applyStyleTokenSet(stateStore, baseStyle, valid[0], "preset");
+  applyStyleTokenSet(stateStore, valid[0], "preset");
 
   const decisions: BrandDecision[] = [];
   const note = (category: "colors" | "radii" | "shadows", key: string, value: string, reason: string) => {

@@ -7,7 +7,7 @@ import { applyStyleTokenSet } from "../src/tokens.js";
 beforeEach(() => {
   stateStore.resetForTests();
   stateStore.setProjectName("Export Test", "ai");
-  applyStyleTokenSet(stateStore, "tech", "#06B6D4", "ai");
+  applyStyleTokenSet(stateStore, "#06B6D4", "ai");
   stateStore.addComponent("navbar", "simple", { brand: "Prism" }, null, "ai");
   stateStore.addComponent("hero", "centered", { title: "Hello", subtitle: "world", button_text: "Go" }, null, "ai");
   stateStore.addComponent("stats", undefined, { items: [{ value: "100+", label: "Users" }] }, null, "ai");

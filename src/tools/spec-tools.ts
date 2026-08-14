@@ -2,14 +2,12 @@
  * Spec-alignment tools (prism-design-spec.html §8.2).
  *
  * Small read/write tools that match the design spec's MCP tool list:
- * list style presets / components / pages, set project name, get/delete
- * tokens, and batch-set tokens.
+ * list components / pages, set project name, get/delete tokens,
+ * and batch-set tokens.
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { STYLE_PRESETS } from "../constants.js";
-import { STYLE_PRESETS_V2, listAllStyleSlugs, isV2Style } from "../style-presets-v2.js";
 import { stateStore } from "../state.js";
 import { tokensToDtcg } from "../tokens/dtcgi.js";
 import { deleteToken, setPlatform, setTokenBatch } from "../service/design-service.js";
@@ -25,54 +23,6 @@ const PLATFORMS = [
 ] as const;
 
 export function registerSpecTools(server: McpServer): void {
-  server.registerTool(
-    "design_list_style_presets",
-    {
-      title: "List Style Presets",
-      description: "List all 30 built-in style presets (14 legacy + 16 new, aligned with awesome-design-skills). V2 presets include full token systems (colors/font/spacing/radius/elevation/a11y/governance).",
-      inputSchema: {},
-      annotations: {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
-      },
-    },
-    async () => {
-      const slugs = listAllStyleSlugs();
-      const presets = slugs.map((id) => {
-        const v2 = STYLE_PRESETS_V2[id];
-        const p = v2 || STYLE_PRESETS[id];
-        return {
-          id,
-          name: p.name,
-          description: p.description,
-          category: v2?.category,
-          inspiration: v2?.inspiration,
-          isV2: isV2Style(id),
-          base_hue: p.base_hue,
-          saturation: p.saturation,
-          lightness: p.lightness,
-          radius_style: p.radius_style,
-          shadow_style: p.shadow_style,
-          spacing_base: p.spacing_base,
-          hasFullTokens: !!v2?.colors,
-          recommendedReactBits: v2?.recommendedReactBits?.length || 0,
-        };
-      });
-      const v2Count = presets.filter((p) => p.isV2).length;
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `# Style Presets (${presets.length} total, ${v2Count} V2 with full tokens)\n\n${presets.map((p) => `- ${p.id} — ${p.name}${p.isV2 ? " ★" : ""} (${p.category || "legacy"}, hue ${p.base_hue}°, ${p.inspiration || ""})`).join("\n")}`,
-          },
-        ],
-        structuredContent: { success: true, count: presets.length, v2Count, presets },
-      };
-    }
-  );
-
   server.registerTool(
     "design_list_components",
     {

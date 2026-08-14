@@ -18,7 +18,6 @@ export interface StylePreset {
   bg_dark: string;
   text_light: string;
   text_dark: string;
-  // —— V2 扩展字段（可选，向后兼容；完整数据见 style-presets-v2.ts） ——
   slug?: string;
   category?: StyleCategory;
   inspiration?: string;
@@ -38,7 +37,7 @@ export interface StylePreset {
   recommendedReactBits?: string[];
 }
 
-// ===== V2 辅助类型（S1: 数据化设计系统字段） =====
+// ===== V2 杈呭姪绫诲瀷锛圫1: 鏁版嵁鍖栬璁＄郴缁熷瓧娈碉級 =====
 
 export type StyleCategory =
   | "foundational"
@@ -164,208 +163,8 @@ export interface A11ySpec {
   focusRingSpec: string;
 }
 
-// 14 style presets (spec 3.5): the original 6 + 8 trend-aligned styles.
-export const STYLE_PRESETS: Record<string, StylePreset> = {
-  minimal: {
-    name: "Minimal",
-    description: "中性灰、留白、无衬线 Inter 字体、4px 小圆角",
-    base_hue: 220,
-    saturation: 10,
-    lightness: 50,
-    shadow_style: "subtle",
-    radius_style: "sharp",
-    spacing_base: 8,
-    bg_light: "#ffffff",
-    bg_dark: "#0f1115",
-    text_light: "#1a1a2e",
-    text_dark: "#e8e8ec",
-  },
-  bold: {
-    name: "Bold",
-    description: "210° 蓝、高饱和、无圆角、强视觉层级",
-    base_hue: 210,
-    saturation: 80,
-    lightness: 50,
-    shadow_style: "medium",
-    radius_style: "none",
-    spacing_base: 8,
-    bg_light: "#fafafa",
-    bg_dark: "#12101f",
-    text_light: "#0d0d0d",
-    text_dark: "#f0f0f5",
-  },
-  playful: {
-    name: "Playful",
-    description: "330° 粉、Poppins/Nunito、黄金比例、16px 大圆角",
-    base_hue: 330,
-    saturation: 70,
-    lightness: 60,
-    shadow_style: "medium",
-    radius_style: "pill",
-    spacing_base: 8,
-    bg_light: "#fff8f6",
-    bg_dark: "#1a1015",
-    text_light: "#2d1b2e",
-    text_dark: "#fce8e4",
-  },
-  dark: {
-    name: "Dark",
-    description: "260° 紫、深色优先、JetBrains Mono 点缀",
-    base_hue: 260,
-    saturation: 60,
-    lightness: 40,
-    shadow_style: "sharp",
-    radius_style: "rounded",
-    spacing_base: 8,
-    bg_light: "#f5f7fa",
-    bg_dark: "#0a0e14",
-    text_light: "#0a0e14",
-    text_dark: "#c9d1d9",
-  },
-  editorial: {
-    name: "Editorial",
-    description: "30° 棕、Playfair Display 衬线、无圆角",
-    base_hue: 30,
-    saturation: 30,
-    lightness: 40,
-    shadow_style: "subtle",
-    radius_style: "none",
-    spacing_base: 8,
-    bg_light: "#fdfcfa",
-    bg_dark: "#161310",
-    text_light: "#1c1917",
-    text_dark: "#e7e5e4",
-  },
-  tech: {
-    name: "Tech",
-    description: "190° 青、Space Grotesk/JetBrains Mono、6px 小圆角",
-    base_hue: 190,
-    saturation: 70,
-    lightness: 50,
-    shadow_style: "sharp",
-    radius_style: "subtle",
-    spacing_base: 4,
-    bg_light: "#f8fafc",
-    bg_dark: "#080d14",
-    text_light: "#0f172a",
-    text_dark: "#cbd5e1",
-  },
-  glassmorphism: {
-    name: "Glassmorphism",
-    description: "240° 蓝、Outfit/Inter、12px 圆角、毛玻璃质感",
-    base_hue: 240,
-    saturation: 40,
-    lightness: 55,
-    shadow_style: "subtle",
-    radius_style: "rounded",
-    spacing_base: 8,
-    bg_light: "#EEF2FF",
-    bg_dark: "#111631",
-    text_light: "#312E81",
-    text_dark: "#E0E7FF",
-  },
-  neumorphism: {
-    name: "Neumorphism",
-    description: "220° 灰、Nunito Sans、12px 圆角、软 UI 双阴影",
-    base_hue: 220,
-    saturation: 8,
-    lightness: 65,
-    shadow_style: "medium",
-    radius_style: "rounded",
-    spacing_base: 8,
-    bg_light: "#E0E5EC",
-    bg_dark: "#23272E",
-    text_light: "#4B5563",
-    text_dark: "#D1D5DB",
-  },
-  claymorphism: {
-    name: "Claymorphism",
-    description: "320° 粉、Quicksand/Nunito、药丸圆角、3D 粘土质感",
-    base_hue: 320,
-    saturation: 50,
-    lightness: 70,
-    shadow_style: "medium",
-    radius_style: "pill",
-    spacing_base: 8,
-    bg_light: "#FFF1F5",
-    bg_dark: "#2A1520",
-    text_light: "#4C1D2B",
-    text_dark: "#FCE7F0",
-  },
-  aurora: {
-    name: "Aurora",
-    description: "270° 紫、Space Grotesk/Inter、12px 圆角、极光渐变",
-    base_hue: 270,
-    saturation: 70,
-    lightness: 50,
-    shadow_style: "medium",
-    radius_style: "rounded",
-    spacing_base: 8,
-    bg_light: "#F5F0FF",
-    bg_dark: "#0F0A1E",
-    text_light: "#2E1065",
-    text_dark: "#EDE9FE",
-  },
-  brutalism: {
-    name: "Brutalism",
-    description: "50° 黄、Archivo Black/Space Mono、无圆角、硬阴影",
-    base_hue: 50,
-    saturation: 90,
-    lightness: 50,
-    shadow_style: "sharp",
-    radius_style: "none",
-    spacing_base: 4,
-    bg_light: "#FFFFFF",
-    bg_dark: "#111111",
-    text_light: "#111111",
-    text_dark: "#F5F5F5",
-  },
-  cyberpunk: {
-    name: "Cyberpunk",
-    description: "180° 青、Orbitron/Share Tech Mono、无圆角、霓虹 HUD",
-    base_hue: 180,
-    saturation: 100,
-    lightness: 50,
-    shadow_style: "sharp",
-    radius_style: "none",
-    spacing_base: 4,
-    bg_light: "#EAF6F8",
-    bg_dark: "#0D0221",
-    text_light: "#083344",
-    text_dark: "#E0E7FF",
-  },
-  organic: {
-    name: "Organic",
-    description: "90° 绿、Fraunces/DM Sans、药丸圆角、仿生形态",
-    base_hue: 90,
-    saturation: 30,
-    lightness: 50,
-    shadow_style: "medium",
-    radius_style: "pill",
-    spacing_base: 8,
-    bg_light: "#F6FBF2",
-    bg_dark: "#10160E",
-    text_light: "#1C2B1A",
-    text_dark: "#E7F0E2",
-  },
-  luxury: {
-    name: "Luxury",
-    description: "45° 金、Cormorant Garamond/Jost、4px 圆角、黑金 OLED",
-    base_hue: 45,
-    saturation: 35,
-    lightness: 50,
-    shadow_style: "subtle",
-    radius_style: "sharp",
-    spacing_base: 8,
-    bg_light: "#FDFBF5",
-    bg_dark: "#0B0A08",
-    text_light: "#1C1917",
-    text_dark: "#F5EFE0",
-  },
-};
-
 // ===== Motion Profiles (upgrade plan U4) =====
-// Per-style default motion behavior. Looked up by the same key as STYLE_PRESETS.
+// Per-design-system default motion behavior (falls back to "minimal").
 // `engine: "css"` keeps exports dependency-free; `engine: "gsap"` opts into the
 // premium runtime (Lenis + GSAP) when exportRuntime is "standard" or "full".
 
@@ -401,8 +200,7 @@ export const STYLE_MOTION_PROFILES: Record<string, MotionProfile> = {
   cyberpunk:     { entry: "glitch",     hover: "glow",      duration: 0.5, easing: "power4.out",     stagger: 0.03, engine: "gsap", scrollReveal: true  },
   organic:       { entry: "fadeUp",     hover: "lift",      duration: 0.8, easing: "easeOut",        stagger: 0.10, engine: "css",  scrollReveal: true  },
   luxury:        { entry: "cinematic", hover: "lift",      duration: 1.0, easing: "power2.out",     stagger: 0.12, engine: "css",  scrollReveal: true  },
-  // —— 新增 16 风格的 motion profile（S3）——
-  bento:        { entry: "scaleIn",   hover: "lift",      duration: 0.4, easing: "power2.out",     stagger: 0.06, engine: "css",  scrollReveal: true  },
+  // 鈥斺€?鏂板 16 椋庢牸鐨?motion profile锛圫3锛夆€斺€?  bento:        { entry: "scaleIn",   hover: "lift",      duration: 0.4, easing: "power2.out",     stagger: 0.06, engine: "css",  scrollReveal: true  },
   material:     { entry: "fadeUp",    hover: "ripple",    duration: 0.3, easing: "easeOut",        stagger: 0.05, engine: "css",  scrollReveal: true  },
   shadcn:       { entry: "fadeIn",     hover: "lift",      duration: 0.2, easing: "easeOut",        stagger: 0.04, engine: "css",  scrollReveal: false },
   neobrutalism: { entry: "scaleIn",   hover: "scaleUp",   duration: 0.15,easing: "steps(2)",       stagger: 0.02, engine: "css",  scrollReveal: false },
@@ -425,10 +223,9 @@ export function getMotionProfile(style: string): MotionProfile {
   return STYLE_MOTION_PROFILES[style] || STYLE_MOTION_PROFILES.minimal;
 }
 
-// ===== Motion Token Set (S4: 动效 token 化，差异化优势) =====
-// awesome-design-skills 与 awesome-design-md 均未定义动效 token 层；
-// Prism 将动效 token 化作为差异化护城河。
-
+// ===== Motion Token Set (S4: 鍔ㄦ晥 token 鍖栵紝宸紓鍖栦紭鍔? =====
+// awesome-design-skills 涓?awesome-design-md 鍧囨湭瀹氫箟鍔ㄦ晥 token 灞傦紱
+// Prism 灏嗗姩鏁?token 鍖栦綔涓哄樊寮傚寲鎶ゅ煄娌炽€?
 export interface MotionTokenSet {
   duration: {
     instant: number;

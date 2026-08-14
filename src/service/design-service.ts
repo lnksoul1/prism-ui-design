@@ -11,7 +11,7 @@
 import { z } from "zod";
 import { stateStore, type AlignMode, type AnimationDef, type ComponentBehavior, type ComponentLayout, type ZOrderMode } from "../state.js";
 import { applyStyleTokenSet } from "../tokens.js";
-import { STYLE_PRESETS } from "../constants.js";
+import { applyStyleGuide } from "../style-guides.js";
 import { executeUserPrompt, type PromptExecutionResult } from "../prompt-executor.js";
 import { getBehaviorTemplate, getComponentTemplate } from "../template-catalog.js";
 
@@ -88,21 +88,16 @@ export interface InitProjectResult {
   token_count: number;
 }
 
-export function initProject(projectName: string, style: string, baseColor?: string): InitProjectResult {
+export function initProject(projectName: string, baseColor?: string): InitProjectResult {
   stateStore.clearAll("ai");
   stateStore.setProjectName(projectName, "ai");
-  stateStore.setStyle(style, "ai");
+  stateStore.setStyle("minimal", "ai");
 
-  const preset = STYLE_PRESETS[style];
-  if (!preset) {
-    throw new Error(`Unknown style: ${style}`);
-  }
-
-  const tokens = applyStyleTokenSet(stateStore, style, baseColor, "ai");
+  const tokens = applyStyleTokenSet(stateStore, baseColor, "ai");
   return {
     success: true,
     project_name: projectName,
-    style,
+    style: "minimal",
     base_color: tokens.baseHex,
     font: `${tokens.font.display.name} + ${tokens.font.body.name}`,
     token_count:
@@ -115,10 +110,10 @@ export function initProject(projectName: string, style: string, baseColor?: stri
   };
 }
 
-export function applyStyle(style: string, source: MutationSource = "user"): boolean {
-  if (!STYLE_PRESETS[style]) return false;
-  stateStore.setStyle(style, source);
-  applyStyleTokenSet(stateStore, style, undefined, source);
+export function applyStyle(_style: string, source: MutationSource = "user"): boolean {
+  // 风格预设体系已移除：统一走设计系统（design_apply_style_guide）。
+  stateStore.setStyle("minimal", source);
+  applyStyleTokenSet(stateStore, undefined, source);
   return true;
 }
 
@@ -506,6 +501,10 @@ export const wsMessageSchema = z.discriminatedUnion("type", [
     style: z.string().min(1),
   }),
   z.strictObject({
+    type: z.literal("apply_style_guide"),
+    tag: z.string().min(1),
+  }),
+  z.strictObject({
     type: z.literal("apply_component_template"),
     template_id: z.string().min(1),
     target_id: z.string().optional(),
@@ -616,8 +615,17 @@ export function applyClientMessage(msg: WsClientMessage): { ok: boolean; detail:
       return { ok, detail: ok ? `z-order ${msg.id}` : `component ${msg.id} not found` };
     }
     case "apply_style": {
+      // 兼容旧客户端：apply_style 现在映射到中性默认 token（风格预设已移除）。
       const ok = applyStyle(msg.style, "user");
       return { ok, detail: ok ? `style ${msg.style}` : `unknown style ${msg.style}` };
+    }
+    case "apply_style_guide": {
+      try {
+        const result = applyStyleGuide(msg.tag);
+        return { ok: true, detail: `design system ${result.guide_name} applied (${result.overrides.length} overrides)` };
+      } catch (error) {
+        return { ok: false, detail: error instanceof Error ? error.message : String(error) };
+      }
     }
     case "apply_component_template": {
       const result = applyComponentTemplate(msg.template_id, msg.target_id || null, "user");

@@ -113,7 +113,7 @@ test(
       const initRes = await fetch(`${base}/api/init`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ project_name: "Integration", style: "bold", base_color: "#2563EB" }),
+        body: JSON.stringify({ project_name: "Integration", base_color: "#2563EB" }),
       });
       const init = (await initRes.json()) as { success: boolean; token_count: number };
       assert.equal(init.success, true);

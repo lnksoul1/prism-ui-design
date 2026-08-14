@@ -11,7 +11,6 @@ import {
   adjustLightness,
 } from "../utils/color.js";
 import {
-  STYLE_PRESETS,
   FONT_PAIRINGS,
   TYPE_SCALE_RATIOS,
 } from "../constants.js";
@@ -66,7 +65,7 @@ Examples:
     },
     async (params) => {
       try {
-        const preset = STYLE_PRESETS[params.style];
+        // 无风格预设：中性默认基础色（220° 蓝灰），base_color 可覆盖。
 
         // Determine base color
         let baseHex: string;
@@ -83,11 +82,7 @@ Examples:
           }
           baseHex = normalizeHex(params.base_color);
         } else {
-          baseHex = hslToHex({
-            h: preset.base_hue,
-            s: preset.saturation,
-            l: preset.lightness,
-          });
+          baseHex = hslToHex({ h: 220, s: 45, l: 50 });
         }
 
         const baseHsl = hexToHsl(baseHex);
@@ -101,14 +96,14 @@ Examples:
         colors["color-primary-dark"] = hslToHex(harmonyColors[0]);
         colors["color-primary-light"] = hslToHex(harmonyColors[2]);
         colors["color-accent"] = hslToHex(harmonyColors[3]);
-        colors["color-bg"] = preset.bg_light;
+        colors["color-bg"] = "#FFFFFF";
         colors["color-surface"] = hslToHex(
           adjustLightness(
             { h: baseHsl.h, s: 10, l: 98 },
             0
           )
         );
-        colors["color-text"] = preset.text_light;
+        colors["color-text"] = "#1A1A2E";
         colors["color-text-muted"] = hslToHex(
           neutralHsls[5]
         );
@@ -129,14 +124,14 @@ Examples:
           colors["color-primary-dark-mode"] = hslToHex(
             adjustLightness(harmonyColors[1], 10)
           );
-          colors["color-bg-dark"] = preset.bg_dark;
+          colors["color-bg-dark"] = "#0F1115";
           colors["color-surface-dark"] = hslToHex(
             adjustLightness(
               { h: baseHsl.h, s: 15, l: 15 },
               0
             )
           );
-          colors["color-text-dark"] = preset.text_dark;
+          colors["color-text-dark"] = "#E8E8EC";
           colors["color-text-muted-dark"] = hslToHex(
             adjustLightness(neutralHsls[5], -20)
           );
@@ -146,9 +141,7 @@ Examples:
         }
 
         // ===== Typography =====
-        const fontMatch =
-          FONT_PAIRINGS.find((p) => p.style === params.style) ||
-          FONT_PAIRINGS[0];
+        const fontMatch = FONT_PAIRINGS[0];
         const ratio = TYPE_SCALE_RATIOS.perfect_fourth;
         const baseSize = 16;
 
@@ -175,7 +168,7 @@ Examples:
 
         // ===== Spacing =====
         const spacing: Record<string, string> = {};
-        const spacingBase = preset.spacing_base;
+        const spacingBase = 8;
         const spacingValues = [
           0,
           spacingBase,
@@ -217,7 +210,7 @@ Examples:
           ],
         };
 
-        const shadowStyle = preset.shadow_style;
+        const shadowStyle = "subtle";
         const shadowVals = shadowPresets[shadowStyle];
         const shadowNames = ["sm", "md", "lg", "xl", "2xl"];
         const shadows: Record<string, string> = {};
@@ -232,7 +225,7 @@ Examples:
           rounded: [0, 8, 12, 16, 24],
           pill: [0, 12, 16, 24, 32],
         };
-        const radiusStyle = preset.radius_style;
+        const radiusStyle = "subtle";
         const radiusVals = radiusPresets[radiusStyle];
         const radiusNames = ["none", "sm", "md", "lg", "xl"];
         const radii: Record<string, string> = {};

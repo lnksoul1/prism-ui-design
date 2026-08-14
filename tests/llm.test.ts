@@ -22,7 +22,7 @@ beforeEach(() => {
   originalDir = process.env.PRISM_PROJECT_DIR;
   process.env.PRISM_PROJECT_DIR = tmp;
   stateStore.resetForTests();
-  applyStyleTokenSet(stateStore, "minimal", "#7C3AED", "ai");
+  applyStyleTokenSet(stateStore, "#7C3AED", "ai");
 });
 
 afterEach(() => {
@@ -166,7 +166,7 @@ test("parseSpec tolerates fenced JSON and plain JSON", () => {
   assert.equal(parseSpec(""), null);
 });
 
-test("applySpec builds a new page from a spec and applies style", () => {
+test("applySpec builds a new page from a spec and applies tokens", () => {
   const { nodes, targetPageId } = applySpec({
     page: "new",
     style: "bold",
@@ -182,7 +182,8 @@ test("applySpec builds a new page from a spec and applies style", () => {
   assert.equal(state.pages.length, 2, "a fresh page was created");
   assert.equal(state.currentPageId, targetPageId);
   assert.equal(state.components.length, 2);
-  assert.equal(state.style, "bold");
+  // 风格预设已移除：style 仅记录，token 用中性默认 + base_color
+  assert.equal(state.style, "minimal");
   assert.match(state.tokens.colors["color-primary"].value, /^#[0-9A-Fa-f]{6}$/);
 });
 
@@ -227,7 +228,7 @@ test("generatePageFromPrompt runs the full pipeline with a stubbed provider", as
     assert.equal(state.pages.length, 2);
     assert.equal(state.components[0].type, "hero");
     assert.equal(state.components[0].props.title, "宠物店");
-    assert.equal(state.style, "playful");
+    assert.equal(state.style, "minimal"); // 风格预设已移除，统一 minimal 记录
   } finally {
     globalThis.fetch = original;
   }

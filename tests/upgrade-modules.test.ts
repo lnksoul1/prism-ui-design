@@ -190,7 +190,7 @@ describe("state: export runtime level", () => {
 describe("export: runtime CDN injection", () => {
   test("minimal runtime emits no external scripts", () => {
     stateStore.setProjectName("Min", "ai");
-    applyStyleTokenSet(stateStore, "bold", "#3366FF", "ai");
+    applyStyleTokenSet(stateStore, "#3366FF", "ai");
     stateStore.setExportRuntime("minimal", "ai");
     const html = exportDesign("html");
     assert.doesNotMatch(html, /cdn\.jsdelivr\.net/);
@@ -200,7 +200,7 @@ describe("export: runtime CDN injection", () => {
   test("standard runtime + gsap style injects the GSAP CDN", () => {
     stateStore.setProjectName("Std", "ai");
     stateStore.setStyle("bold", "ai"); // bold → gsap engine
-    applyStyleTokenSet(stateStore, "bold", "#3366FF", "ai");
+    applyStyleTokenSet(stateStore, "#3366FF", "ai");
     stateStore.setExportRuntime("standard", "ai");
     const html = exportDesign("html");
     assert.match(html, /cdn\.jsdelivr\.net\/npm\/gsap/);
@@ -209,7 +209,7 @@ describe("export: runtime CDN injection", () => {
   test("standard runtime + lenis-gsap scroll injects Lenis CDN + init", () => {
     stateStore.setProjectName("Lenis", "ai");
     stateStore.setStyle("minimal", "ai");
-    applyStyleTokenSet(stateStore, "minimal", "#111111", "ai");
+    applyStyleTokenSet(stateStore, "#111111", "ai");
     stateStore.setScroll("lenis-gsap", { lerp: 0.1 }, "ai");
     stateStore.setExportRuntime("standard", "ai");
     const html = exportDesign("html");
@@ -220,7 +220,7 @@ describe("export: runtime CDN injection", () => {
   test("full runtime + vanta background injects three.js + vanta + init", () => {
     stateStore.setProjectName("Vanta", "ai");
     stateStore.setStyle("dark", "ai"); // dark → gsap engine
-    applyStyleTokenSet(stateStore, "dark", "#0a0e14", "ai");
+    applyStyleTokenSet(stateStore, "#0a0e14", "ai");
     const hero = stateStore.addComponent("hero", "centered", { title: "Hi" }, null, "ai");
     stateStore.setVantaBackground(hero.id, { effect: "waves", params: { color: 0x005588 } }, "ai");
     stateStore.setExportRuntime("full", "ai");

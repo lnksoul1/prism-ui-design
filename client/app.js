@@ -151,7 +151,7 @@ const I18N = {
     commentEmpty: "暂无评论",
     commentPlaceholder: "评论选中的组件...",
     addComment: "添加",
-    searchLibrary: "搜索组件/风格/动效...",
+    searchLibrary: "搜索组件/设计系统/动效...",
     searchActivity: "搜索操作...",
     searchTokens: "搜索令牌...",
     saveCurrent: "保存当前设计",
@@ -6031,7 +6031,6 @@ function setupActivityFilter() {
 
 // ===== Design Library =====
 
-// Style presets data (mirrors server-side STYLE_PRESETS)
 // Animation presets
 const LIBRARY_ANIMATIONS = [
   { id: "fadeUp", name: "淡入上移", desc: "从下方淡入", icon: "↑", entry: "fadeUp", duration: 0.4 },

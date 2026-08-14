@@ -24,6 +24,7 @@
 import { stateStore, type ComponentNode, type DesignState } from "./state.js";
 import { applyStyleTokenSet } from "./tokens.js";
 import { applyPageTemplate } from "./tools/design-tools.js";
+import { applyStyleGuide, matchStyleGuide } from "./style-guides.js";
 import { FONT_PAIRINGS } from "./constants.js";
 import { adjustLightness, hexToHsl, hslToHex } from "./utils/color.js";
 
@@ -70,36 +71,6 @@ const COLOR_NAMES: Record<string, string> = {
   white: "#FFFFFF",
   米: "#FAF7F2",
   beige: "#FAF7F2",
-};
-
-const STYLE_NAMES: Record<string, string> = {
-  minimal: "minimal",
-  简约: "minimal",
-  bold: "bold",
-  大胆: "bold",
-  playful: "playful",
-  活泼: "playful",
-  editorial: "editorial",
-  编辑: "editorial",
-  tech: "tech",
-  科技: "tech",
-  glassmorphism: "glassmorphism",
-  玻璃: "glassmorphism",
-  neumorphism: "neumorphism",
-  拟物: "neumorphism",
-  claymorphism: "claymorphism",
-  黏土: "claymorphism",
-  aurora: "aurora",
-  极光: "aurora",
-  brutalism: "brutalism",
-  粗野: "brutalism",
-  cyberpunk: "cyberpunk",
-  赛博: "cyberpunk",
-  organic: "organic",
-  有机: "organic",
-  luxury: "luxury",
-  奢华: "luxury",
-  高级: "luxury",
 };
 
 const COMPONENT_NAMES: Record<string, string> = {
@@ -501,13 +472,12 @@ export function executeUserPrompt(prompt: string): PromptExecutionResult {
     return { executed: true, summary: "已切换为浅色模式", action: "set_light_theme" };
   }
 
-  // 7) Style preset
-  if (hasAny(lower, ["风格", "style"])) {
-    const style = findFirst(lower, STYLE_NAMES);
-    if (style) {
-      const primary = state.tokens.colors["color-primary"]?.value;
-      applyStyleTokenSet(stateStore, style, primary || "#7C3AED", "user");
-      return { executed: true, summary: `已应用 ${style} 风格`, action: "apply_style" };
+  // 7) Design system (风格预设已移除；自然语言"应用 XX 设计系统/风格"走品牌设计系统)
+  if (hasAny(lower, ["设计系统", "品牌风格", "风格", "style", "换肤", "换主题", "design system"])) {
+    const system = matchStyleGuide(lower.trim());
+    if (system) {
+      applyStyleGuide(system.id);
+      return { executed: true, summary: `已应用设计系统「${system.name}」`, action: "apply_style_guide" };
     }
   }
 

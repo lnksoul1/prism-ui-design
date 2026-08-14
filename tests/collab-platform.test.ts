@@ -9,7 +9,7 @@ beforeEach(() => {
 });
 
 test("platform snapshots save, list, and restore per-platform pages", () => {
-  applyStyleTokenSet(stateStore, "minimal", undefined, "ai");
+  applyStyleTokenSet(stateStore, undefined, "ai");
   stateStore.addComponent("hero", "centered", { title: "Web" }, null, "ai");
   stateStore.savePlatformSnapshot("web-desktop", "ai");
 
@@ -31,7 +31,7 @@ test("platform snapshots save, list, and restore per-platform pages", () => {
 });
 
 test("comments attach to components and can be listed/removed", () => {
-  applyStyleTokenSet(stateStore, "tech", undefined, "ai");
+  applyStyleTokenSet(stateStore, undefined, "ai");
   const button = stateStore.addComponent("button", "primary", { text: "Go" }, null, "ai");
 
   const c1 = stateStore.addComment(button.id, "对比度偏低，建议加深主色", "designer", "user");

@@ -26,9 +26,10 @@ full product definition.
   dashboard window (`electron/main.cjs`).
 - **Freeform canvas by default**: drag/resize any component, snap to
   guides/edges, edit the inner parts of a component in place, reorder layers.
-- **30 style presets** (V2 full design systems) + **17 brand design systems**
-  (Linear, Stripe, Vercel, Notion, Arc, Spotify, Apple, GitHub, IBM Carbon,
-  Shopify Polaris, Duolingo, Discord, Raycast, Airbnb, Figma, Anthropic …)
+- **17 brand design systems** (Linear, Stripe, Vercel, Notion, Arc, Spotify,
+  Apple, GitHub, IBM Carbon, Shopify Polaris, Duolingo, Discord, Raycast,
+  Airbnb, Figma, Anthropic …) — one-click restyling; no style presets, the
+  design system is the only theming layer.
 - **41 component types** (Atomic Design: input, table, alert, tooltip, bento grid, skeleton, command palette, glass card, FAB, marquee, toggle, cookie banner …)
 - **20 animations** (13 entry + 7 hover, with duration/delay/easing/stagger)
 - **Complete design token system** generation in a single call
@@ -73,7 +74,7 @@ The dashboard has a **Preview / Draw** toggle in the canvas toolbar. Draw mode e
 - Auto-arrange: select shapes and arrange them into a tidy column with one click
 - Library drag & drop: drag components from the left library straight onto the canvas — a token-colored block is created at the drop point and autosaved
 - Prompt delivery status: sending a prompt shows a "queued" chip, which flips to "accepted ✓" when the agent polls `design_check_prompts` (REST fallback when WebSocket is down)
-- Built-in prompt engine: change primary/background color (name or #hex), switch light/dark mode, apply one of 14 style presets, generate one of 5 page templates, add common components, undo, or clear — executed instantly **without an external agent**; unmatched prompts stay queued for the agent
+- Built-in prompt engine: change primary/background color (name or #hex), switch light/dark mode, apply a design system by name (e.g. "换成玻璃拟态风格"), generate one of 5 page templates, add common components, undo, or clear — executed instantly **without an external agent**; unmatched prompts stay queued for the agent
 - Scrollable side panels: layers / library / versions / comments / tokens / activity scroll with the column
 - Template-first start: a blank canvas offers one-click templates (SaaS, e-commerce, blog, portfolio, dashboard, blank)
 - Autosave with debounce to `POST /api/canvas`; "Write back page file" exports the drawing as a real HTML page (`client/canvas-page.html`)
@@ -221,7 +222,7 @@ connected client.
 
 | Tool | Description |
 |------|-------------|
-| `design_init` | Initialize a design project, set style, and generate the complete token set |
+| `design_init` | Initialize a design project with neutral default tokens (+ optional base color) |
 | `design_add_component` | Add a UI component (hero, navbar, card, etc.) to the canvas |
 | `design_update_component` | Update properties of an existing component |
 | `design_rename_component` | Rename a component's layer (shown in the layers panel, empty reverts to the default) |
@@ -257,10 +258,9 @@ connected client.
 | `design_import_design_md` | Import tokens from a Google DESIGN.md document |
 | `design_import_webpage` | Import a webpage URL / HTML as components |
 | `design_get_style_guide` | Look up a named style guide (glassmorphism, brutalist, …) |
-| `design_apply_style_guide` | Apply a style guide on top of a style preset |
+| `design_apply_style_guide` | Apply a brand design system over the neutral default tokens |
 | `design_semantic_style` | Map natural-language adjectives to tokens with traceable reasons |
 | `design_list_capabilities` | Self-describing capability manifest for agents |
-| `design_list_style_presets` | List the 14 built-in style presets |
 | `design_list_components` | List components on the current page |
 | `design_list_pages` | List all pages |
 | `design_set_project_name` | Rename the project |
@@ -536,7 +536,7 @@ ui-design-mcp-server/
 ├── src/
 │   ├── index.ts              # Main entry point
 │   ├── types.ts              # TypeScript interfaces
-│   ├── constants.ts          # Font pairings, style presets, breakpoints
+│   ├── constants.ts          # Font pairings, motion profiles, breakpoints
 │   ├── utils/
 │   │   ├── color.ts          # Color theory engine (HSL, contrast, harmony)
 │   │   └── formatter.ts      # Output formatting helpers

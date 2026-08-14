@@ -27,7 +27,7 @@ test("suggestImprovements flags missing tokens and structure on an empty state",
 });
 
 test("suggestImprovements gives fewer warnings on a complete page", () => {
-  applyStyleTokenSet(stateStore, "minimal", undefined, "ai");
+  applyStyleTokenSet(stateStore, undefined, "ai");
   stateStore.addComponent("navbar", "simple", { brand: "Logo" }, null, "ai");
   stateStore.addComponent("hero", "centered", { title: "Hi" }, null, "ai");
   stateStore.addComponent("cta", "centered", { title: "Go" }, null, "ai");
@@ -51,7 +51,7 @@ test("createBrandStyle derives brand tokens with traceable reasons", () => {
 });
 
 test("reflowPage orders sections canonically and records history", () => {
-  applyStyleTokenSet(stateStore, "minimal", undefined, "ai");
+  applyStyleTokenSet(stateStore, undefined, "ai");
   const footer = stateStore.addComponent("footer", undefined, {}, null, "ai");
   const hero = stateStore.addComponent("hero", "centered", { title: "H" }, null, "ai");
   const navbar = stateStore.addComponent("navbar", "simple", { brand: "L" }, null, "ai");
@@ -88,7 +88,7 @@ test("autoImprove generates tokens and fills missing structure on an empty state
 });
 
 test("autoImprove is a no-op on a complete page", () => {
-  applyStyleTokenSet(stateStore, "minimal", undefined, "ai");
+  applyStyleTokenSet(stateStore, undefined, "ai");
   stateStore.addComponent("navbar", "simple", { brand: "L" }, null, "ai");
   stateStore.addComponent("hero", "centered", { title: "H" }, null, "ai");
   stateStore.addComponent("footer", undefined, {}, null, "ai");

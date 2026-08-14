@@ -12,18 +12,18 @@ export function registerPrompts(server: McpServer): void {
       description: "Build a full page from a natural-language brief using Prism design tools.",
       argsSchema: {
         brief: z.string().describe("What the user wants the page to contain"),
-        style: z.string().optional().describe("Style preset: minimal | bold | playful | dark | editorial | tech"),
+        design_system: z.string().optional().describe("Brand design system to apply (e.g. linear, stripe, apple, notion)"),
       },
     },
     async (args) => {
-      const style = args.style ? `Use the "${args.style}" style preset. ` : "";
+      const ds = args.design_system ? `After init, apply design system "${args.design_system}" with design_apply_style_guide. ` : "";
       return {
         messages: [
           {
             role: "user",
             content: {
               type: "text",
-              text: `Build a complete page for the following brief: "${args.brief}". ${style}Initialize a project with design_init, apply a template or add components section by section (hero, features, content, pricing/CTA, footer), generate tokens, and finish with design_get_state to summarize what was built. Keep component props in Chinese when the brief is in Chinese.`,
+              text: `Build a complete page for the following brief: "${args.brief}". ${ds}Initialize a project with design_init, apply a template or add components section by section (hero, features, content, pricing/CTA, footer), generate tokens, and finish with design_get_state to summarize what was built. Keep component props in Chinese when the brief is in Chinese.`,
             },
           },
         ],

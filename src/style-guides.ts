@@ -714,9 +714,9 @@ export interface AppliedGuide {
 }
 
 /**
- * Apply a style guide on top of a base style preset. The guide's token
- * overrides win over the preset tokens; sources are marked "user" so the
- * change is visible to the AI in the activity log.
+ * Apply a design system (style guide) over the neutral default tokens.
+ * Prism 无风格预设：先应用中性默认 token，再用设计系统的覆盖
+ * （颜色/圆角/阴影/字体）。Sources 标记 "user" 以便 AI 在活动日志可见。
  */
 export function applyStyleGuide(tag: string, baseStyle?: string): AppliedGuide {
   const guide = matchStyleGuide(tag);
@@ -726,7 +726,7 @@ export function applyStyleGuide(tag: string, baseStyle?: string): AppliedGuide {
     );
   }
   const style = baseStyle || stateStore.getState().style || "minimal";
-  applyStyleTokenSet(stateStore, style, undefined, "preset");
+  applyStyleTokenSet(stateStore, undefined, "preset");
 
   const overrides: AppliedGuide["overrides"] = [];
   const applyGroup = (

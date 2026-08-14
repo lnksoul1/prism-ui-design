@@ -11,7 +11,6 @@
 import { stateStore } from "./state.js";
 import {
   FONT_PAIRINGS,
-  STYLE_PRESETS,
   type FontPairingData,
 } from "./constants.js";
 import { hslToHex, hexToHsl, adjustLightness } from "./utils/color.js";
@@ -141,8 +140,6 @@ export function applySemanticStyle(
   }
 
   const style = baseStyle || stateStore.getState().style || "minimal";
-  const preset = STYLE_PRESETS[style];
-  if (!preset) throw new Error(`Unknown base style: ${style}`);
 
   // Aggregate adjective deltas
   let hueShift = 0;
@@ -175,11 +172,11 @@ export function applySemanticStyle(
   const fontMood = Object.entries(fontVotes).sort((a, b) => b[1] - a[1])[0][0] as
     "serif" | "sans" | "geometric" | "mono";
 
-  // Compute a new base color from the preset hue + adjective hue shifts
+  // Compute a new base color from the neutral default hue + adjective hue shifts
   const startHsl = hexToHsl(baseColor && /^#[0-9A-Fa-f]{6}$/.test(baseColor) ? baseColor : hslToHex({
-    h: preset.base_hue,
-    s: preset.saturation,
-    l: preset.lightness,
+    h: 220,
+    s: 45,
+    l: 50,
   }));
   const adjustedHsl = {
     h: (startHsl.h + hueShift + 360) % 360,
@@ -188,8 +185,8 @@ export function applySemanticStyle(
   };
   const newBaseHex = hslToHex(adjustedHsl);
 
-  // Generate the base preset token set with the adjusted base color
-  applyStyleTokenSet(stateStore, style, newBaseHex, "preset");
+  // Generate the neutral default token set with the adjusted base color
+  applyStyleTokenSet(stateStore, newBaseHex, "preset");
 
   const decisions: SemanticDecision[] = [];
   const note = (category: string, key: string, value: string, reason: string) => {

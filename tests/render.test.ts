@@ -13,7 +13,7 @@ let handler: (params: unknown) => Promise<{
 beforeEach(() => {
   stateStore.resetForTests();
   stateStore.setProjectName("Render Test", "ai");
-  applyStyleTokenSet(stateStore, "bold", "#2563EB", "ai");
+  applyStyleTokenSet(stateStore, "#2563EB", "ai");
   stateStore.addComponent("hero", "centered", { title: "Render Check", subtitle: "hi", button_text: "Go" }, null, "ai");
 
   handler = (() => {}) as never;

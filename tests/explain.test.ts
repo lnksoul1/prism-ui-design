@@ -6,7 +6,7 @@ import { explainDesign, nameColor } from "../src/tools/explain-tools.js";
 
 beforeEach(() => {
   stateStore.resetForTests();
-  applyStyleTokenSet(stateStore, "minimal", "#7C3AED", "ai");
+  applyStyleTokenSet(stateStore, "#7C3AED", "ai");
 });
 
 test("nameColor names colors the way non-designers do", () => {

@@ -16,7 +16,6 @@ import {
   isValidHex,
   HarmonyScheme,
 } from "../utils/color.js";
-import { STYLE_PRESETS } from "../constants.js";
 import { formatCssVariables, markdownTable } from "../utils/formatter.js";
 
 const ROLES: Record<string, string[]> = {
@@ -150,12 +149,8 @@ Examples:
           }
           baseHex = normalizeHex(params.base_color);
         } else {
-          const preset = STYLE_PRESETS[params.style];
-          baseHex = hslToHex({
-            h: preset.base_hue,
-            s: preset.saturation,
-            l: preset.lightness,
-          });
+          // 无风格预设：中性默认基础色
+          baseHex = hslToHex({ h: 220, s: 45, l: 50 });
         }
 
         const baseHsl = hexToHsl(baseHex);

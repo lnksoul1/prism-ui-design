@@ -38,7 +38,7 @@ test("createVersion snapshots current state and lists newest first", () => {
 });
 
 test("restoreVersion reverts components and tokens", () => {
-  applyStyleTokenSet(stateStore, "minimal", "#4A6FA5", "ai");
+  applyStyleTokenSet(stateStore, "#4A6FA5", "ai");
   const primaryBefore = stateStore.getState().tokens.colors["color-primary"].value;
   stateStore.addComponent("button", "primary", { text: "A" }, null, "ai");
   const v1 = createVersion("Before");

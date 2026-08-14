@@ -6,7 +6,7 @@ import { executeUserPrompt } from "../src/prompt-executor.js";
 
 beforeEach(() => {
   stateStore.resetForTests();
-  applyStyleTokenSet(stateStore, "minimal", "#7C3AED", "ai");
+  applyStyleTokenSet(stateStore, "#7C3AED", "ai");
 });
 
 test("changes the primary color from a natural-language instruction", () => {
@@ -36,10 +36,11 @@ test("switches theme modes", () => {
   assert.equal(stateStore.getState().themeMode, "light");
 });
 
-test("applies a style preset", () => {
+test("applies a design system from natural language", () => {
+  // 风格预设已移除：自然语言"XX风格"走品牌设计系统匹配（玻璃 → glassmorphism）。
   const result = executeUserPrompt("帮我换成玻璃拟态风格");
   assert.equal(result.executed, true);
-  assert.equal(result.action, "apply_style");
+  assert.equal(result.action, "apply_style_guide");
   const tokens = stateStore.getState().tokens;
   assert.ok(Object.keys(tokens.colors).length > 0, "style tokens should be regenerated");
 });

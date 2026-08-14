@@ -38,17 +38,17 @@ test("addComponent rejects unknown types", () => {
 });
 
 test("initProject generates tokens including shadows", () => {
-  const result = initProject("Service Test", "bold", "#2563EB");
+  const result = initProject("Service Test", "#2563EB");
   assert.equal(result.success, true);
-  assert.equal(result.style, "bold");
+  assert.equal(result.style, "minimal");
   assert.ok(result.token_count >= 52);
   const tokens = stateStore.getState().tokens;
   assert.ok(Object.keys(tokens.shadows).length >= 5, "shadows tokens generated");
   assert.ok(tokens.shadows["shadow-md"]);
 });
 
-test("applyStyle returns false for unknown styles", () => {
-  assert.equal(applyStyle("not-a-style"), false);
+test("applyStyle applies the neutral default tokens", () => {
+  // 风格预设已移除：applyStyle 固定应用中性默认 token（兼容旧调用）。
   assert.equal(applyStyle("tech"), true);
   assert.ok(stateStore.getState().tokens.shadows["shadow-lg"]);
 });
@@ -78,6 +78,7 @@ test("ws schema accepts valid client messages", () => {
     { type: "align_components", ids: ["a", "b"], mode: "center_x" },
     { type: "z_order_component", id: "comp_1", mode: "front" },
     { type: "apply_style", style: "minimal" },
+    { type: "apply_style_guide", tag: "linear" },
     { type: "apply_component_template", template_id: "hero_split_cta" },
     { type: "apply_component_template", template_id: "pricing_3col", target_id: "comp_1" },
     { type: "apply_behavior_template", component_id: "comp_1", template_id: "toast_feedback" },

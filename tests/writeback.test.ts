@@ -16,7 +16,7 @@ beforeEach(() => {
   cpSync(path.resolve(process.cwd(), "client"), clientDir, { recursive: true });
   stateStore.resetForTests();
   stateStore.setProjectName("Writeback", "ai");
-  applyStyleTokenSet(stateStore, "minimal", "#7C3AED", "ai");
+  applyStyleTokenSet(stateStore, "#7C3AED", "ai");
 });
 
 afterEach(() => {

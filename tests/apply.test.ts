@@ -20,7 +20,7 @@ beforeEach(() => {
   process.env.PRISM_PROJECT_DIR = tmp;
   process.env.PRISM_PRODUCT_DIR = productTmp;
   stateStore.resetForTests();
-  applyStyleTokenSet(stateStore, "minimal", "#7C3AED", "ai");
+  applyStyleTokenSet(stateStore, "#7C3AED", "ai");
 });
 
 afterEach(() => {

@@ -25,7 +25,7 @@ afterEach(() => {
 
 test("saveTemplate writes a .prism-template.json file with style + tokens + pages", () => {
   stateStore.setProjectName("Template Source", "ai");
-  applyStyleTokenSet(stateStore, "tech", "#06B6D4", "ai");
+  applyStyleTokenSet(stateStore, "#06B6D4", "ai");
   stateStore.addComponent("navbar", "with_cta", { brand: "Prism" }, null, "ai");
   stateStore.addComponent("hero", "centered", { title: "T" }, null, "ai");
 
@@ -43,7 +43,7 @@ test("saveTemplate writes a .prism-template.json file with style + tokens + page
 test("loadTemplate restores style/tokens/pages and preserves project name", () => {
   stateStore.setProjectName("Original Project", "ai");
   stateStore.setStyle("bold", "ai");
-  applyStyleTokenSet(stateStore, "bold", "#7C3AED", "ai");
+  applyStyleTokenSet(stateStore, "#7C3AED", "ai");
   stateStore.addComponent("cta", "centered", { title: "Go" }, null, "ai");
   const saved = saveTemplate("CTA");
 

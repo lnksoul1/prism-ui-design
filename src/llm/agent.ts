@@ -161,8 +161,9 @@ export function applySpec(spec: PageSpec): { nodes: ComponentNode[]; targetPageI
   const nodes = (spec.components || []).map(makeNode).filter((n): n is ComponentNode => !!n);
 
   if (spec.style) {
-    stateStore.setStyle(spec.style, "ai");
-    applyStyleTokenSet(stateStore, spec.style, spec.base_color || undefined, "ai");
+    // 风格预设体系已移除：style 仅作记录（设计系统换肤走 design_apply_style_guide）。
+    stateStore.setStyle("minimal", "ai");
+    applyStyleTokenSet(stateStore, spec.base_color || undefined, "ai");
   }
 
   let targetPageId: string | null = stateStore.getState().currentPageId;

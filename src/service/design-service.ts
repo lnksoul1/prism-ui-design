@@ -9,10 +9,10 @@
  */
 
 import { z } from "zod";
-import { stateStore, type AnimationDef, type ComponentLayout } from "../state.js";
+import { stateStore, type AlignMode, type AnimationDef, type ComponentBehavior, type ComponentLayout, type ZOrderMode } from "../state.js";
 import { applyStyleTokenSet } from "../tokens.js";
 import { STYLE_PRESETS } from "../constants.js";
-import { executeUserPrompt } from "../prompt-executor.js";
+import { executeUserPrompt, type PromptExecutionResult } from "../prompt-executor.js";
 
 export type MutationSource = "ai" | "user";
 
@@ -197,6 +197,10 @@ export function removeComponent(id: string, source: MutationSource = "user"): bo
   return stateStore.removeComponent(id, source);
 }
 
+export function duplicateComponent(id: string, source: MutationSource = "user") {
+  return stateStore.duplicateComponent(id, source);
+}
+
 export function reorderComponent(
   fromId: string,
   toId: string,
@@ -208,6 +212,18 @@ export function reorderComponent(
 
 export function setAnimation(componentId: string, animation: AnimationDef, source: MutationSource = "user"): boolean {
   return stateStore.setAnimation(componentId, animation, source);
+}
+
+export function setBehavior(componentId: string, behavior: ComponentBehavior | null, source: MutationSource = "user"): boolean {
+  return stateStore.setBehavior(componentId, behavior, source);
+}
+
+export function alignComponents(ids: string[], mode: AlignMode, source: MutationSource = "user"): boolean {
+  return stateStore.alignComponents(ids, mode, source);
+}
+
+export function zOrderComponent(id: string, mode: ZOrderMode, source: MutationSource = "user"): boolean {
+  return stateStore.zOrderComponent(id, mode, source);
 }
 
 // ===== Pages =====
@@ -248,7 +264,12 @@ export function redo() {
   return stateStore.redo();
 }
 
-export function setPendingPrompt(prompt: string): void {
+/**
+ * Queue a user prompt and run the built-in executor against it. Returns the
+ * executor result so both the REST and WebSocket channels can acknowledge
+ * the outcome (executed locally vs. queued for an external agent).
+ */
+export function submitPrompt(prompt: string): PromptExecutionResult {
   stateStore.setPendingPrompt(prompt);
   stateStore.recordPrompt(prompt);
   const result = executeUserPrompt(prompt);
@@ -257,6 +278,12 @@ export function setPendingPrompt(prompt: string): void {
     stateStore.clearPendingPrompt();
     stateStore.recordPromptExecuted(result.summary, result.action || "prompt_executed");
   }
+  return result;
+}
+
+/** @deprecated Use submitPrompt (returns the execution result). */
+export function setPendingPrompt(prompt: string): void {
+  submitPrompt(prompt);
 }
 
 // ===== WebSocket message schemas =====
@@ -285,6 +312,10 @@ export const wsMessageSchema = z.discriminatedUnion("type", [
   }),
   z.strictObject({
     type: z.literal("remove_component"),
+    id: z.string().min(1),
+  }),
+  z.strictObject({
+    type: z.literal("duplicate_component"),
     id: z.string().min(1),
   }),
   z.strictObject({ type: z.literal("undo") }),
@@ -341,6 +372,32 @@ export const wsMessageSchema = z.discriminatedUnion("type", [
     stagger: z.number().optional(),
   }),
   z.strictObject({
+    type: z.literal("set_behavior"),
+    component_id: z.string().min(1),
+    behavior: z
+      .object({
+        type: z.enum(["navigate", "link", "toggle", "toast", "submit", "prompt"]),
+        page_id: z.string().optional(),
+        url: z.string().optional(),
+        new_tab: z.boolean().optional(),
+        target_component_id: z.string().optional(),
+        message: z.string().optional(),
+        form_id: z.string().optional(),
+        prompt: z.string().optional(),
+      })
+      .nullable(),
+  }),
+  z.strictObject({
+    type: z.literal("align_components"),
+    ids: z.array(z.string().min(1)).min(2),
+    mode: z.enum(["left", "center_x", "right", "top", "center_y", "bottom", "distribute_x", "distribute_y"]),
+  }),
+  z.strictObject({
+    type: z.literal("z_order_component"),
+    id: z.string().min(1),
+    mode: z.enum(["front", "back", "forward", "backward"]),
+  }),
+  z.strictObject({
     type: z.literal("apply_style"),
     style: z.string().min(1),
   }),
@@ -368,6 +425,13 @@ export function applyClientMessage(msg: WsClientMessage): { ok: boolean; detail:
     case "remove_component": {
       const ok = removeComponent(msg.id, "user");
       return { ok, detail: ok ? `component ${msg.id}` : `component ${msg.id} not found` };
+    }
+    case "duplicate_component": {
+      const copy = duplicateComponent(msg.id, "user");
+      return {
+        ok: !!copy,
+        detail: copy ? `component ${copy.id}` : `component ${msg.id} not found`,
+      };
     }
     case "undo":
       return { ok: undo(), detail: "undo" };
@@ -420,6 +484,18 @@ export function applyClientMessage(msg: WsClientMessage): { ok: boolean; detail:
       if (msg.stagger !== undefined) animation.stagger = msg.stagger;
       const ok = setAnimation(msg.component_id, animation, "user");
       return { ok, detail: ok ? `animation ${msg.component_id}` : `component ${msg.component_id} not found` };
+    }
+    case "set_behavior": {
+      const ok = setBehavior(msg.component_id, msg.behavior, "user");
+      return { ok, detail: ok ? `behavior ${msg.component_id}` : `component ${msg.component_id} not found` };
+    }
+    case "align_components": {
+      const ok = alignComponents(msg.ids, msg.mode, "user");
+      return { ok, detail: ok ? `align ${msg.ids.length} components` : "align failed (need 2+ valid components)" };
+    }
+    case "z_order_component": {
+      const ok = zOrderComponent(msg.id, msg.mode, "user");
+      return { ok, detail: ok ? `z-order ${msg.id}` : `component ${msg.id} not found` };
     }
     case "apply_style": {
       const ok = applyStyle(msg.style, "user");

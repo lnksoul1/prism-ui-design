@@ -3,10 +3,12 @@
   "version": "1.1.0",
   "description": "MCP server providing UI design assistance tools — color palettes, typography, spacing, shadows, design tokens, contrast checks, and more",
   "type": "module",
-  "main": "dist/index.js",
+  "main": "electron/main.cjs",
   "scripts": {
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
+    "app": "electron .",
+    "app:package": "electron-builder --dir",
     "build": "tsc",
     "build:canvas": "esbuild client/src/canvas-entry.jsx --bundle --minify --outfile=client/vendor/prism-canvas.js --format=iife --jsx=automatic --target=chrome110",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true}); require('fs').rmSync('.test-build',{recursive:true,force:true})\"",
@@ -14,7 +16,7 @@
     "format": "prettier --write .",
     "check": "npm run lint && npm test",
     "test:e2e": "playwright test tests/e2e",
-    "test": "npm run build && tsc -p tsconfig.tests.json && node --test .test-build/tests/state.test.js .test-build/tests/tokens.test.js .test-build/tests/tools.test.js .test-build/tests/service.test.js .test-build/tests/project-store.test.js .test-build/tests/token-interop.test.js .test-build/tests/audit.test.js .test-build/tests/render.test.js .test-build/tests/templates.test.js .test-build/tests/versions.test.js .test-build/tests/design-md.test.js .test-build/tests/semantics.test.js .test-build/tests/style-guides.test.js .test-build/tests/webpage-import.test.js .test-build/tests/design-review.test.js .test-build/tests/exports.test.js .test-build/tests/collab-platform.test.js .test-build/tests/canvas-shapes.test.js .test-build/tests/prompt-executor.test.js .test-build/tests/writeback.test.js .test-build/tests/server.test.js .test-build/tests/animations.test.js .test-build/tests/upgrade-modules.test.js .test-build/tests/style-presets-v2.test.js"
+    "test": "npm run build && tsc -p tsconfig.tests.json && node --test .test-build/tests/state.test.js .test-build/tests/tokens.test.js .test-build/tests/tools.test.js .test-build/tests/service.test.js .test-build/tests/project-store.test.js .test-build/tests/token-interop.test.js .test-build/tests/audit.test.js .test-build/tests/render.test.js .test-build/tests/templates.test.js .test-build/tests/versions.test.js .test-build/tests/design-md.test.js .test-build/tests/semantics.test.js .test-build/tests/style-guides.test.js .test-build/tests/webpage-import.test.js .test-build/tests/design-review.test.js .test-build/tests/exports.test.js .test-build/tests/collab-platform.test.js .test-build/tests/canvas-shapes.test.js .test-build/tests/prompt-executor.test.js .test-build/tests/explain.test.js .test-build/tests/llm.test.js .test-build/tests/electron.test.js .test-build/tests/apply.test.js .test-build/tests/writeback.test.js .test-build/tests/server.test.js .test-build/tests/animations.test.js .test-build/tests/upgrade-modules.test.js .test-build/tests/style-presets-v2.test.js"
   },
   "engines": {
     "node": ">=18"
@@ -34,6 +36,7 @@
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.10.0",
     "@types/ws": "^8.5.13",
+    "electron": "^43.4.0",
     "esbuild": "^0.28.2",
     "eslint": "^10.8.1",
     "eslint-config-prettier": "^10.1.8",

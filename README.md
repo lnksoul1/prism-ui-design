@@ -12,7 +12,13 @@ An MCP (Model Context Protocol) server that provides comprehensive UI design ass
 
 ## Features
 
-- **71 MCP tools** covering the full spectrum of UI design needs
+- **75 MCP tools** covering the full spectrum of UI design needs- **Built-in LLM channel** (product definition v2): fill in your own API key
+  (OpenAI-compatible / Anthropic / Gemini) in the AI settings dialog and the
+  dashboard itself can generate pages from natural language — no external
+  agent required. Unmatched prompts automatically fall through to it.
+- **Desktop app** (Electron shell): `npm run app` — double-click experience;
+  the main process starts the bundled server on a free port and opens the
+  dashboard window (`electron/main.cjs`).
 - **Color theory engine** with HSL-based harmony generation (monochromatic, analogous, complementary, split-complementary, triadic, tetradic)
 - **WCAG 2.1 contrast checker** with AA/AAA compliance scoring
 - **Curated font pairings** with Google Fonts integration
@@ -22,6 +28,34 @@ An MCP (Model Context Protocol) server that provides comprehensive UI design ass
 - **Complete design token system** generation in a single call
 - **Dual transport support**: stdio (local) and Streamable HTTP (remote)
 - **Zero external API dependencies** — all generation is algorithmic
+
+## Built for non-professionals (non-designers)
+
+The dashboard is designed so people without design vocabulary or coding
+skills can drive it. See
+[prism-nonprofessional-painpoints.md](./prism-nonprofessional-painpoints.md)
+for the full pain-point analysis and benchmark against open-source tools
+(OpenUI, Lovable, draw-a-ui, v0, ui-toolkit-mcp …).
+
+- **Everyday-language prompt engine (v2)**: beyond colors/themes/templates,
+  plain instructions just work — "把标题改成「你好」" (edit copy), "字太小了，
+  大一点" (font scale), "间距更紧凑" (spacing), "整体调亮一点" (brightness),
+  "改成直角" (radius), "换成衬线字体" (font pairing), "检查一下对比度"
+  (contrast report), "重做" (redo). All executed locally, no agent required.
+- **Never a dead end**: when an instruction is not understood, it is still
+  queued for the agent — but the dashboard immediately shows clickable
+  example instructions (REST + WebSocket both acknowledge the outcome).
+- **Templates are non-destructive**: applying a template to a non-empty page
+  opens a fresh page instead of erroring.
+- **"解读" (Explain) button** + `design_explain_design` / `GET /api/explain`:
+  reads the tokens and explains the design in plain language (style, dominant
+  color, personality adjectives, fonts, contrast warnings) and lists concrete
+  instructions you can say next — clicking one fills the prompt bar.
+- **Starter examples on the empty canvas**: one-click example instructions
+  (change primary color / generate a template / bigger text / brighter page)
+  so nobody faces a blank page.
+- **Open-in-new-tab preview**: the export modal can open the generated HTML
+  as a standalone single-file page — save it or share it without any tooling.
 
 ## Canvas-first editing (tldraw)
 
@@ -56,7 +90,47 @@ npm start
 
 # Run via HTTP
 TRANSPORT=http PORT=3100 npm start
+
+# Desktop app (Electron shell, double-click experience)
+npm run app
 ```
+
+## Import → adjust → one-click apply (your product, not a generator)
+
+Prism is an **adjustment surface for your own product**, not a first-time
+prototype generator:
+
+1. **导入 (Import)**: `⋯ → 导入` and pick **项目文件夹 / 网页 URL / HTML 代码**
+   (or upload an HTML file). Your page is fetched/parsed into editable
+   components on a fresh page (`POST /api/import/product`), and the source is
+   recorded (`GET /api/imports`).
+2. **调整 (Adjust)**: precisely and freely — freeform move/resize,
+   multi-select + align/distribute, z-order, layers, behaviors, tokens.
+3. **一键应用 (Apply)**: `POST /api/apply` writes `prism-adjusted-<page>.html`
+   (exactly what you see) and `prism-adjustments.css` (design-token overrides
+   you can link into your own product) into `PRISM_PRODUCT_DIR` (default
+   `~/.prism/products`), keeping timestamped backups. `POST /api/apply/rollback`
+   restores the latest backup.
+
+The dashboard shows an apply banner whenever the current page came from an
+imported product.
+
+## Built-in AI (BYO API key)
+
+The dashboard can generate pages itself — no external agent needed:
+
+1. Open **⋯ → AI 设置** and pick a provider: OpenAI-compatible (OpenAI /
+   DeepSeek / 通义 / 智谱 / local endpoints via a custom base URL),
+   Anthropic Claude, or Google Gemini; paste your API key and save.
+2. Type a request in the prompt bar (e.g. "帮我做一个咖啡店的首页"). If the
+   local instruction engine cannot match it, the built-in AI takes over, the
+   page appears on the canvas, and the status flips to "AI 已生成…".
+3. The key is stored only in `~/.prism/projects/llm-config.json` (or your
+   `PRISM_PROJECT_DIR`), never logged, never returned by the API (masked).
+
+The LLM generates structured component JSON that goes through the same
+service/state layer as the MCP tools — fully undoable and broadcast to every
+connected client.
 
 ## Tools
 
@@ -135,6 +209,10 @@ TRANSPORT=http PORT=3100 npm start
 | `design_remove_comment` | Remove a review comment |
 | `design_generate_page` | Generate a page from a brief (template + semantic style) |
 | `design_review_and_improve` | One-call review loop: score, fix, re-score + a11y audit |
+| `design_explain_design` | Explain the current design in plain language + suggest follow-up instructions (read-only) |
+| `design_set_behavior` | Bind an interaction to a component — navigate / link / toggle / toast / submit / prompt (play mode) |
+| `design_align_components` | Align/distribute multiple components in freeform space (single undo step) |
+| `design_z_order_component` | Reorder component stacking — front / back / forward / backward |
 
 ## Testing
 
@@ -145,8 +223,9 @@ npm test
 The test suite covers the state store (undo/redo, pages, tokens, conflicts),
 style-preset token generation, all MCP tool schemas, the shared service layer,
 project persistence, DTCG token interop, accessibility audit, render preview,
-and an HTTP + WebSocket integration chain (**254 tests passing**), plus an
-optional Playwright browser smoke (`npm run test:e2e`).
+the prompt executor v1/v2 intents, plain-language design explanation, and an
+HTTP + WebSocket integration chain (**392 tests passing**), plus an optional
+Playwright browser smoke (`npm run test:e2e`).
 
 ## Templates, versions, semantics & style guides
 
@@ -302,6 +381,7 @@ stats + chart, etc.) so non-designers can pick a starting point visually.
 | `PRISM_AUTOLOAD` | on | Restore the autosave checkpoint on startup (`off` disables) |
 | `PRISM_AUTOIMPORT` | on | Auto-import workspace pages on startup (`off` starts with a fresh Home page) |
 | `PRISM_PREVIEWS_DIR` | `.prism-previews` | Screenshot output directory (tool only) |
+| `PRISM_PRODUCT_DIR` | `~/.prism/products` | One-click apply output directory (adjusted HTML + adjustment CSS, with backups) |
 | `PRISM_SKIP_E2E` | off | Skip Playwright browser smoke tests (`1` skips) |
 
 ## Quality gates

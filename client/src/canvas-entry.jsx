@@ -34,9 +34,95 @@ let mountOptions = {};
 let loading = false;
 let suppressSaveUntil = 0;
 let saveTimer = null;
+let recoverNextMount = false;
 
 const SAVE_DEBOUNCE_MS = 700;
 const AUTO_LAYOUT_GAP = 28;
+
+// Shape types the current tldraw runtime can render. Any other type in a
+// persisted snapshot is dropped so a stale/corrupt document can never crash
+// the editor (tldraw throws a ValidationError for unknown shape types).
+const KNOWN_SHAPE_TYPES = new Set([
+  "group",
+  "prism-block",
+  "text",
+  "bookmark",
+  "draw",
+  "geo",
+  "note",
+  "line",
+  "frame",
+  "arrow",
+  "highlight",
+  "embed",
+  "image",
+  "video",
+]);
+
+const PRISM_BLOCK_DEFAULTS = {
+  w: 360,
+  h: 200,
+  label: "Block",
+  kind: "card",
+  bg: "#ffffff",
+  fg: "#1a1a1a",
+  border: "#e5e5e5",
+  radius: "8px",
+  fontSize: 15,
+  fontFamily: "system-ui, sans-serif",
+  align: "start",
+  bold: false,
+  icon: "▢",
+};
+
+/**
+ * Deep-copy a tldraw snapshot and strip anything the current runtime cannot
+ * render: unknown shape types are removed, and prism-block props are coerced
+ * back to their declared schema (filling missing/wrong-typed fields from
+ * defaults). Returns a safe snapshot that `loadSnapshot` can always load.
+ */
+function sanitizeSnapshot(doc) {
+  if (!doc || typeof doc !== "object") return doc;
+  let copy;
+  try {
+    copy = JSON.parse(JSON.stringify(doc));
+  } catch {
+    return doc;
+  }
+  const store = copy && copy.document && copy.document.store;
+  if (!store || typeof store !== "object") return copy;
+
+  const num = (v, d) => (typeof v === "number" && Number.isFinite(v) ? v : d);
+  const str = (v, d) => (typeof v === "string" ? v : d);
+
+  for (const key of Object.keys(store)) {
+    const rec = store[key];
+    if (!rec || typeof rec !== "object" || rec.typeName !== "shape") continue;
+    if (typeof rec.type !== "string" || !KNOWN_SHAPE_TYPES.has(rec.type)) {
+      delete store[key];
+      continue;
+    }
+    if (rec.type === "prism-block") {
+      const p = rec.props && typeof rec.props === "object" ? rec.props : {};
+      rec.props = {
+        w: num(p.w, PRISM_BLOCK_DEFAULTS.w),
+        h: num(p.h, PRISM_BLOCK_DEFAULTS.h),
+        label: str(p.label, PRISM_BLOCK_DEFAULTS.label),
+        kind: str(p.kind, PRISM_BLOCK_DEFAULTS.kind),
+        bg: str(p.bg, PRISM_BLOCK_DEFAULTS.bg),
+        fg: str(p.fg, PRISM_BLOCK_DEFAULTS.fg),
+        border: str(p.border, PRISM_BLOCK_DEFAULTS.border),
+        radius: str(p.radius, PRISM_BLOCK_DEFAULTS.radius),
+        fontSize: num(p.fontSize, PRISM_BLOCK_DEFAULTS.fontSize),
+        fontFamily: str(p.fontFamily, PRISM_BLOCK_DEFAULTS.fontFamily),
+        align: str(p.align, PRISM_BLOCK_DEFAULTS.align),
+        bold: typeof p.bold === "boolean" ? p.bold : PRISM_BLOCK_DEFAULTS.bold,
+        icon: str(p.icon, PRISM_BLOCK_DEFAULTS.icon),
+      };
+    }
+  }
+  return copy;
+}
 
 // Default block sizes for known Prism component types (px).
 const DEFAULT_SIZES = {
@@ -488,6 +574,64 @@ function clearSaveTimer() {
   }
 }
 
+/**
+ * Error boundary around the tldraw app. A render-time error inside tldraw
+ * (e.g. a shape whose props drifted across a version bump) would otherwise
+ * surface tldraw's own dead-end "reset data" screen. Here we show a
+ * recoverable fallback that remounts a fresh editor and re-materializes the
+ * design from the component tree.
+ */
+class CanvasErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, message: "" };
+  }
+
+  static getDerivedStateFromError(err) {
+    return { hasError: true, message: String((err && err.message) || err) };
+  }
+
+  componentDidCatch(err) {
+    console.error("[PrismCanvas] editor render error:", err);
+  }
+
+  handleReset = () => {
+    this.setState({ hasError: false });
+    if (window.PrismCanvas && typeof window.PrismCanvas.recover === "function") {
+      window.PrismCanvas.recover();
+    }
+  };
+
+  render() {
+    if (this.state.hasError) {
+      return React.createElement(
+        "div",
+        { className: "prism-canvas-error" },
+        React.createElement("div", { className: "prism-canvas-error-icon" }, "⚠"),
+        React.createElement(
+          "p",
+          { className: "prism-canvas-error-title" },
+          "画布加载失败"
+        ),
+        React.createElement(
+          "p",
+          { className: "prism-canvas-error-detail" },
+          "可能是旧的画布数据与当前版本不兼容。点击下方按钮从组件重新生成画布，不会丢失设计。"
+        ),
+        this.state.message
+          ? React.createElement("pre", { className: "prism-canvas-error-msg" }, this.state.message)
+          : null,
+        React.createElement(
+          "button",
+          { className: "prism-canvas-error-btn", onClick: this.handleReset },
+          "从组件重新生成画布"
+        )
+      );
+    }
+    return this.props.children;
+  }
+}
+
 function PrismCanvasApp({ locale }) {
   const handleMount = React.useCallback((editor) => {
     editorRef = editor;
@@ -511,6 +655,19 @@ function PrismCanvasApp({ locale }) {
       },
       { source: "user", scope: "document" }
     );
+    // After a crash recovery, skip the normal document load and let the
+    // `onRecover` callback drive re-materialization from components.
+    if (recoverNextMount) {
+      recoverNextMount = false;
+      if (mountOptions.onRecover) {
+        try {
+          mountOptions.onRecover();
+        } catch (err) {
+          console.error("[PrismCanvas] onRecover handler failed:", err);
+        }
+      }
+      return;
+    }
     if (mountOptions.onMount) {
       try {
         mountOptions.onMount(editor);
@@ -520,13 +677,17 @@ function PrismCanvasApp({ locale }) {
     }
   }, []);
 
-  return React.createElement(Tldraw, {
-    onMount: handleMount,
-    locale: locale || "en",
-    autoFocus: true,
-    shapeUtils: [PrismBlockShapeUtil, ...defaultShapeUtils],
-    components: mountOptions.components || {},
-  });
+  return React.createElement(
+    CanvasErrorBoundary,
+    null,
+    React.createElement(Tldraw, {
+      onMount: handleMount,
+      locale: locale || "en",
+      autoFocus: true,
+      shapeUtils: [PrismBlockShapeUtil, ...defaultShapeUtils],
+      components: mountOptions.components || {},
+    })
+  );
 }
 
 function renderApp() {
@@ -613,13 +774,13 @@ window.PrismCanvas = {
     editorRef.updateShapes(updates);
   },
 
-  /** Load a tldraw snapshot (JSON). Returns false if not ready. */
+  /** Load a tldraw snapshot (JSON). Returns false if not ready or invalid. */
   loadSnapshot(snapshot) {
     if (!editorRef || !snapshot) return false;
     loading = true;
     clearSaveTimer();
     try {
-      loadSnapshot(editorRef.store, snapshot);
+      loadSnapshot(editorRef.store, sanitizeSnapshot(snapshot));
       editorRef.zoomToFit();
       return true;
     } catch (err) {
@@ -629,6 +790,30 @@ window.PrismCanvas = {
       setTimeout(() => {
         loading = false;
       }, 80);
+    }
+  },
+
+  /**
+   * Recover from a fatal editor error: tear down the crashed React tree and
+   * remount a fresh editor, then hand control to `mountOptions.onRecover` so
+   * the dashboard re-materializes the design from its component tree.
+   */
+  recover() {
+    clearSaveTimer();
+    if (rootRef) {
+      try {
+        rootRef.unmount();
+      } catch (err) {
+        console.error("[PrismCanvas] unmount during recovery failed:", err);
+      }
+      rootRef = null;
+    }
+    editorRef = null;
+    storeRef = null;
+    if (containerRef) {
+      recoverNextMount = true;
+      rootRef = createRoot(containerRef);
+      renderApp();
     }
   },
 

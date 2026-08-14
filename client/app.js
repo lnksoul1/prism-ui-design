@@ -32,8 +32,11 @@ let draggedComponentId = null;
 let currentExportFormat = "html";
 let conflictCheckInterval = null;
 let selectedComponentId = null;
+let selectedIds = [];
 let canvasZoom = 100;
 let canvasMode = "flow";
+let playMode = false;
+let pendingDrawTool = null;
 let myClientId = null;
 const remoteCursors = new Map();
 let lastCursorSent = 0;
@@ -59,6 +62,16 @@ function el(tag, className, text) {
 
 // ===== i18n (F8) =====
 
+/**
+ * @typedef {Object.<string, string>} I18nDictionary
+ * Bilingual i18n dictionary — zh and en MUST have identical keys.
+ * Values may contain {placeholder} tokens replaced by t(key, vars).
+ */
+
+/**
+ * Bilingual translation table.
+ * @satisfies {{ zh: I18nDictionary, en: I18nDictionary }}
+ */
 const I18N = {
   zh: {
     connected: "已连接",
@@ -100,6 +113,10 @@ const I18N = {
     content: "内容",
     layout: "布局",
     animation: "动效",
+    appearance: "外观",
+    fill: "填充",
+    textColor: "文字颜色",
+    radius: "圆角",
     entry: "入场",
     hover: "悬停",
     duration: "时长",
@@ -226,6 +243,95 @@ const I18N = {
     dsApply: "应用",
     dsApplied: "已应用设计系统「{name}」",
     dsError: "应用设计系统失败",
+    explainBtn: "解读",
+    explainTitle: "用大白话解读你的设计",
+    explainLoading: "解读中…",
+    explainFailed: "解读失败",
+    tryThese: "你可以这样说（点击试试）",
+    openPreview: "新标签页打开",
+    previewOpened: "已在独立标签页打开预览（可直接保存或分享这个网页文件）",
+    promptNotUnderstood: "没有听懂这条指令（已排队给 AI）。你也可以直接说：",
+    chipBigger: "字太小了，大一点",
+    chipGlass: "玻璃拟态风格",
+    chipPricing: "加一个定价表",
+    chipUndo: "撤销",
+    examplesHint: "或直接说一句话试试：",
+    dismiss: "关闭",
+    playLink: "页面跳转",
+    playLinkPlaceholder: "选择目标页",
+    playLinked: "点击此组件将跳转到「{page}」",
+    playMode: "▶ 播放",
+    playExit: "■ 退出播放",
+    duplicate: "复制",
+    duplicateDone: "已复制组件",
+    moveUp: "上移",
+    moveDown: "下移",
+    zoomFit: "适应屏幕",
+    zoom100: "100%",
+    more: "更多",
+    platform: "平台",
+    toolSelect: "选择",
+    toolHand: "抓手",
+    toolPen: "画笔",
+    toolShape: "形状",
+    toolArrow: "箭头",
+    toolText: "文字",
+    toolNote: "便签",
+    llmSettings: "AI 设置",
+    llmDesc: "填写你自己的 API Key 后，直接在指令栏说需求即可让内置 AI 生成页面。Key 只保存在本机，不会上传到任何服务器。",
+    llmProvider: "服务商",
+    llmBaseUrl: "API 地址（OpenAI 兼容）",
+    llmKey: "API Key",
+    llmModel: "模型",
+    llmTest: "测试连接",
+    llmSave: "保存",
+    llmSaved: "已保存",
+    llmTesting: "正在测试…",
+    llmTestOk: "连接成功：{reply}",
+    llmTestFail: "连接失败：{error}",
+    llmGenerating: "AI 正在生成页面…",
+    llmFailed: "AI 生成失败：{error}",
+    behavior: "交互",
+    behaviorNone: "无",
+    behaviorNavigate: "跳转页面",
+    behaviorLink: "打开链接",
+    behaviorToggle: "显示/隐藏",
+    behaviorToast: "提示消息",
+    behaviorSubmit: "表单提交",
+    behaviorPrompt: "触发指令",
+    behaviorUrl: "链接地址",
+    behaviorTarget: "目标组件",
+    behaviorMessage: "提示内容",
+    behaviorPromptText: "指令内容",
+    behaviorPlayHint: "在播放模式中点击生效",
+    behaviorSubmitted: "表单已提交 ✓",
+    behaviorToastDefault: "操作成功",
+    alignLeft: "左对齐",
+    alignCenterX: "水平居中",
+    alignRight: "右对齐",
+    alignTop: "顶对齐",
+    alignCenterY: "垂直居中",
+    alignBottom: "底对齐",
+    distributeX: "水平分布",
+    distributeY: "垂直分布",
+    zFront: "置顶",
+    zBack: "置底",
+    importProduct: "导入你的产品",
+    importProductDesc: "导入你自己做的网站或 App 页面，在画布上精确调整后，可以一键应用回产物。",
+    importTabFolder: "项目文件夹",
+    importTabUrl: "网页 URL",
+    importTabHtml: "HTML 代码",
+    importFile: "选择 HTML 文件",
+    importStart: "开始导入",
+    importDone: "导入完成",
+    importFailed: "导入失败",
+    importedBanner: "已导入：{source}（{n} 个组件）· 调整后点击「一键应用」写回产物",
+    applyAdjustments: "✍ 一键应用",
+    applyRollback: "↺ 回滚上次应用",
+    appliedResult: "已应用 {n} 个文件到产品目录（备份：{backup}）",
+    appliedError: "应用失败",
+    rolledBack: "已回滚：{file}",
+    rollbackNone: "没有可回滚的备份",
   },
   en: {
     connected: "Connected",
@@ -267,6 +373,10 @@ const I18N = {
     content: "Content",
     layout: "Layout",
     animation: "Animation",
+    appearance: "Appearance",
+    fill: "Fill",
+    textColor: "Text color",
+    radius: "Radius",
     entry: "Entry",
     hover: "Hover",
     duration: "Duration",
@@ -393,8 +503,110 @@ const I18N = {
     dsApply: "Apply",
     dsApplied: "Applied design system \"{name}\"",
     dsError: "Failed to apply design system",
+    explainBtn: "Explain",
+    explainTitle: "Your design in plain language",
+    explainLoading: "Explaining…",
+    explainFailed: "Explain failed",
+    tryThese: "Try saying (click one)",
+    openPreview: "Open in new tab",
+    previewOpened: "Preview opened in a separate tab (you can save or share this single-file page)",
+    promptNotUnderstood: "I didn't understand that (queued for the AI). You can also say:",
+    chipBigger: "Make the text bigger",
+    chipGlass: "Glassmorphism style",
+    chipPricing: "Add a pricing table",
+    chipUndo: "Undo",
+    examplesHint: "Or just say something like:",
+    dismiss: "Dismiss",
+    playLink: "Page link",
+    playLinkPlaceholder: "Choose target page",
+    playLinked: "Clicking this component opens {page}",
+    playMode: "▶ Play",
+    playExit: "■ Exit play",
+    duplicate: "Duplicate",
+    duplicateDone: "Component duplicated",
+    moveUp: "Move up",
+    moveDown: "Move down",
+    zoomFit: "Fit to screen",
+    zoom100: "100%",
+    more: "More",
+    platform: "Platform",
+    toolSelect: "Select",
+    toolHand: "Hand",
+    toolPen: "Pen",
+    toolShape: "Shape",
+    toolArrow: "Arrow",
+    toolText: "Text",
+    toolNote: "Note",
+    llmSettings: "AI settings",
+    llmDesc: "Add your own API key and the built-in AI can generate pages right from the prompt bar. The key stays on this machine and is never uploaded.",
+    llmProvider: "Provider",
+    llmBaseUrl: "API base URL (OpenAI-compatible)",
+    llmKey: "API key",
+    llmModel: "Model",
+    llmTest: "Test connection",
+    llmSave: "Save",
+    llmSaved: "Saved",
+    llmTesting: "Testing…",
+    llmTestOk: "Connected: {reply}",
+    llmTestFail: "Connection failed: {error}",
+    llmGenerating: "AI is generating the page…",
+    llmFailed: "AI generation failed: {error}",
+    behavior: "Interaction",
+    behaviorNone: "None",
+    behaviorNavigate: "Navigate to page",
+    behaviorLink: "Open link",
+    behaviorToggle: "Show / hide",
+    behaviorToast: "Toast message",
+    behaviorSubmit: "Submit form",
+    behaviorPrompt: "Trigger instruction",
+    behaviorUrl: "Link URL",
+    behaviorTarget: "Target component",
+    behaviorMessage: "Message",
+    behaviorPromptText: "Instruction",
+    behaviorPlayHint: "Triggers in play mode",
+    behaviorSubmitted: "Form submitted ✓",
+    behaviorToastDefault: "Done",
+    alignLeft: "Align left",
+    alignCenterX: "Align center X",
+    alignRight: "Align right",
+    alignTop: "Align top",
+    alignCenterY: "Align center Y",
+    alignBottom: "Align bottom",
+    distributeX: "Distribute X",
+    distributeY: "Distribute Y",
+    zFront: "Bring to front",
+    zBack: "Send to back",
+    importProduct: "Import your product",
+    importProductDesc: "Import a page of your own website or app, adjust it precisely on the canvas, then apply the changes back to the product with one click.",
+    importTabFolder: "Project folder",
+    importTabUrl: "Webpage URL",
+    importTabHtml: "HTML code",
+    importFile: "Choose HTML file",
+    importStart: "Start import",
+    importDone: "Imported",
+    importFailed: "Import failed",
+    importedBanner: "Imported: {source} ({n} components) · adjust, then click Apply to write back",
+    applyAdjustments: "✍ Apply",
+    applyRollback: "↺ Roll back",
+    appliedResult: "Applied {n} files to the product directory (backup: {backup})",
+    appliedError: "Apply failed",
+    rolledBack: "Rolled back: {file}",
+    rollbackNone: "No backup to roll back",
   },
 };
+
+// Runtime key-parity assertion: zh and en must have identical keys.
+(function assertI18nParity() {
+  const zhKeys = Object.keys(I18N.zh).sort();
+  const enKeys = Object.keys(I18N.en).sort();
+  const zhMissing = zhKeys.filter((k) => !(k in I18N.en));
+  const enMissing = enKeys.filter((k) => !(k in I18N.zh));
+  if (zhMissing.length || enMissing.length) {
+    console.warn(
+      "[i18n] key parity violated — zh-only:", zhMissing, "en-only:", enMissing
+    );
+  }
+})();
 
 let uiLang = "zh";
 try {
@@ -403,6 +615,12 @@ try {
   uiLang = "zh";
 }
 
+/**
+ * Translate a key in the current UI language, with optional {placeholder} interpolation.
+ * @param {keyof typeof I18N.zh} key - translation key (validated against zh dictionary)
+ * @param {Object.<string, string|number>=} vars - placeholder values
+ * @returns {string}
+ */
 function t(key, vars) {
   const table = I18N[uiLang] || I18N.zh;
   let text = table[key] !== undefined ? table[key] : I18N.zh[key] !== undefined ? I18N.zh[key] : key;
@@ -617,6 +835,25 @@ function handleMessage(msg) {
       setPromptStatus(t("promptExecuted", { summary: msg.summary || "" }), "accepted");
       showToastMsg(t("promptExecuted", { summary: msg.summary || "" }));
       break;
+    case "prompt_result":
+      // Executed prompts already arrived as prompt_executed above; here we
+      // surface the engine's example instructions when it could not act.
+      if (msg.llm === "generating") {
+        setPromptStatus(t("llmGenerating"), "queued");
+        showToastMsg(t("llmGenerating"));
+        break;
+      }
+      if (!msg.executed) {
+        setPromptStatus(t("promptQueued"), "queued");
+        if (Array.isArray(msg.suggestions) && msg.suggestions.length > 0) {
+          showPromptSuggestions(msg.suggestions);
+        }
+      }
+      break;
+    case "llm_error":
+      setPromptStatus(t("llmFailed", { error: msg.summary || "" }), "queued");
+      showToastMsg(t("llmFailed", { error: msg.summary || "" }), true);
+      break;
   }
 }
 
@@ -655,7 +892,10 @@ function handleChange(change) {
     case "removeComponent":
     case "reorderComponent":
     case "reorder_component":
+    case "duplicateComponent":
+    case "setBehavior":
       renderCanvas();
+      renderLayerPanel();
       break;
     case "setAnimation":
       renderCanvas();
@@ -754,17 +994,17 @@ function renderAll() {
 
   // Check conflicts
   checkConflicts();
+
+  // 导入 → 一键应用 banner
+  renderImportBanner();
 }
 
 function syncPlatformFromState() {
   if (!currentState || typeof currentState.activePlatform !== "string") return;
   if (currentState.activePlatform === currentPlatform) return;
   currentPlatform = currentState.activePlatform;
-  const btn = document.querySelector(`.platform-btn[data-platform="${CSS.escape(currentPlatform)}"]`);
-  if (btn) {
-    document.querySelectorAll(".platform-btn").forEach((b) => b.classList.remove("active"));
-    btn.classList.add("active");
-  }
+  const select = $("platform-select");
+  if (select && select.value !== currentPlatform) select.value = currentPlatform;
 }
 
 // Helper: get current page's components (with backward compat)
@@ -783,6 +1023,18 @@ function getCurrentComponents() {
 }
 
 // ===== Canvas Rendering =====
+
+// Starter instructions shown on the empty canvas so nobody faces a blank page.
+const EXAMPLE_PROMPTS = [
+  { id: "color", zh: "把主色改成蓝色", en: "make the primary color blue" },
+  { id: "template", zh: "生成一个 SaaS 模板", en: "generate a SaaS template" },
+  { id: "font", zh: "字太小了，大一点", en: "make the text bigger" },
+  { id: "bright", zh: "整体调亮一点", en: "brighten the page a bit" },
+];
+
+function examplePromptText(p) {
+  return p[uiLang] || p.zh;
+}
 
 function renderCanvas() {
   const canvas = $("canvas");
@@ -822,6 +1074,10 @@ function renderCanvas() {
               <span class="pa-icon">✎</span>
               <span><span class="pa-title">${t("startWithCanvas")}</span><br><span class="pa-desc">${t("startWithCanvasDesc")}</span></span>
             </button>
+          </div>
+          <div class="placeholder-examples">
+            <span class="examples-hint">${t("examplesHint")}</span>
+            ${EXAMPLE_PROMPTS.map((p) => `<button class="example-btn" data-ex="${p.id}">${examplePromptText(p)}</button>`).join("")}
           </div>
         </div>
       </div>
@@ -902,6 +1158,12 @@ function renderCanvas() {
         setCanvasEditorMode(true);
       });
     }
+    document.querySelectorAll(".example-btn").forEach((btn) => {
+      const ex = EXAMPLE_PROMPTS.find((p) => p.id === btn.dataset.ex);
+      if (ex) {
+        btn.addEventListener("click", () => sendPrompt(examplePromptText(ex)));
+      }
+    });
     meta.textContent = "0 个组件";
     // Apply platform class even on placeholder
     applyPlatform(canvas);
@@ -1003,28 +1265,57 @@ function renderComponent(comp) {
     // Ignore clicks on overlay controls and active inline editing
     if (e.target.closest(".comp-delete") || e.target.closest(".comp-drag-handle")) return;
     if (e.target.closest("[contenteditable='true']")) return;
-    selectComponent(comp.id);
+    // Play mode: dispatch the bound behavior (行为模型 P1), with a legacy
+    // fallback to page links saved by older versions.
+    if (playMode) {
+      if (hasClickableBehavior(comp)) {
+        dispatchBehavior(comp);
+      } else {
+        const link = ((currentState && currentState.pageLinks) || []).find(
+          (l) => l.source_component_id === comp.id
+        );
+        if (link && link.to_page_id && link.to_page_id !== (currentState && currentState.currentPageId)) {
+          send({ type: "switch_page", pageId: link.to_page_id });
+        }
+      }
+      return;
+    }
+    selectComponent(comp.id, e.shiftKey);
   });
 
-  // Overlay with badge, drag handle, and delete button
-  const overlay = el("div", "comp-overlay");
-  const badge = el("span", "comp-badge", `${comp.type}${comp.variant ? "/" + comp.variant : ""}`);
-  overlay.appendChild(badge);
+  let dragHandle = null;
 
-  // Drag handle for reorder (instead of making entire wrapper draggable)
-  const dragHandle = el("span", "comp-drag-handle", "⠿");
-  dragHandle.title = "拖拽排序";
-  dragHandle.draggable = true;
-  overlay.appendChild(dragHandle);
+  if (playMode) {
+    // Components with a behavior (or a legacy page link) are click-through.
+    if (hasClickableBehavior(comp)) {
+      wrapper.classList.add("play-linked");
+    } else {
+      const link = ((currentState && currentState.pageLinks) || []).find(
+        (l) => l.source_component_id === comp.id
+      );
+      if (link && link.to_page_id) wrapper.classList.add("play-linked");
+    }
+  } else {
+    // Overlay with badge, drag handle, and delete button
+    const overlay = el("div", "comp-overlay");
+    const badge = el("span", "comp-badge", `${comp.type}${comp.variant ? "/" + comp.variant : ""}`);
+    overlay.appendChild(badge);
 
-  const deleteBtn = el("button", "comp-delete", "删除");
-  deleteBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    handleDeleteComponent(comp.id);
-  });
-  overlay.appendChild(deleteBtn);
+    // Drag handle for reorder (instead of making entire wrapper draggable)
+    dragHandle = el("span", "comp-drag-handle", "⠿");
+    dragHandle.title = "拖拽排序";
+    dragHandle.draggable = true;
+    overlay.appendChild(dragHandle);
 
-  wrapper.appendChild(overlay);
+    const deleteBtn = el("button", "comp-delete", "删除");
+    deleteBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      handleDeleteComponent(comp.id);
+    });
+    overlay.appendChild(deleteBtn);
+
+    wrapper.appendChild(overlay);
+  }
 
   // Render the actual component
   const content = renderComponentContent(comp);
@@ -1056,11 +1347,12 @@ function renderComponent(comp) {
     });
   }
 
-  // Attach drag & drop handlers (using drag handle, not wrapper)
-  attachDragHandlers(wrapper, comp.id, dragHandle);
-
-  // Setup inline editing for data-editable elements
-  setupInlineEditing(wrapper, comp.id);
+  if (!playMode) {
+    // Attach drag & drop handlers (using drag handle, not wrapper)
+    attachDragHandlers(wrapper, comp.id, dragHandle);
+    // Setup inline editing for data-editable elements
+    setupInlineEditing(wrapper, comp.id);
+  }
 
   if (comp.id === selectedComponentId) {
     wrapper.classList.add("selected");
@@ -1170,6 +1462,76 @@ function getCompById(id) {
   return getCurrentComponents().find((c) => c.id === id) || null;
 }
 
+function findCompDeep(nodes, id) {
+  if (!Array.isArray(nodes)) return null;
+  for (const node of nodes) {
+    if (node.id === id) return node;
+    const found = findCompDeep(node.children, id);
+    if (found) return found;
+  }
+  return null;
+}
+
+function findAllComponents(nodes) {
+  const out = [];
+  const walk = (list) => {
+    if (!Array.isArray(list)) return;
+    for (const node of list) {
+      out.push(node);
+      walk(node.children);
+    }
+  };
+  walk(nodes);
+  return out;
+}
+
+// ===== Behavior model (P1): dispatch an interaction in play mode =====
+
+function dispatchBehavior(comp) {
+  const b = comp && comp.behavior;
+  if (!b || !b.type) return;
+  switch (b.type) {
+    case "navigate":
+      if (b.page_id && b.page_id !== (currentState && currentState.currentPageId)) {
+        send({ type: "switch_page", pageId: b.page_id });
+      }
+      break;
+    case "link":
+      if (b.url) {
+        window.open(b.url, b.new_tab === false ? "_self" : "_blank", "noopener");
+      }
+      break;
+    case "toggle": {
+      if (!b.target_component_id) break;
+      const target = findCompDeep(getCurrentComponents(), b.target_component_id);
+      if (target) {
+        send({
+          type: "update_component",
+          id: target.id,
+          props: {},
+          visible: target.visible === false,
+        });
+      }
+      break;
+    }
+    case "toast":
+      showToastMsg(b.message || t("behaviorToastDefault"));
+      break;
+    case "submit":
+      showToastMsg(t("behaviorSubmitted"));
+      break;
+    case "prompt":
+      if (b.prompt) sendPrompt(b.prompt);
+      break;
+    default:
+      break;
+  }
+}
+
+function hasClickableBehavior(comp) {
+  return !!(comp && comp.behavior && comp.behavior.type);
+}
+
 function sendUpdateComponent(id, props, layout) {
   send({ type: "update_component", id, props: props || {}, layout: layout || undefined });
 }
@@ -1249,21 +1611,144 @@ function getSelectedComp() {
   return getCurrentComponents().find((c) => c.id === selectedComponentId) || null;
 }
 
-function selectComponent(id) {
-  selectedComponentId = id;
+function getSelectedComps() {
+  if (!currentState || selectedIds.length === 0) return [];
+  const all = getCurrentComponents();
+  return selectedIds
+    .map((id) => findCompDeep(all, id))
+    .filter(Boolean);
+}
+
+function selectComponent(id, additive) {
+  if (additive) {
+    const idx = selectedIds.indexOf(id);
+    if (idx >= 0) {
+      selectedIds.splice(idx, 1);
+    } else {
+      selectedIds.push(id);
+    }
+    if (selectedIds.length === 0) {
+      selectedComponentId = null;
+    } else if (!selectedIds.includes(selectedComponentId)) {
+      selectedComponentId = selectedIds[selectedIds.length - 1];
+    }
+  } else {
+    selectedIds = [id];
+    selectedComponentId = id;
+  }
   document.querySelectorAll(".comp-wrapper.selected").forEach((w) => w.classList.remove("selected"));
-  const wrapper = document.querySelector(`.comp-wrapper[data-id="${CSS.escape(id)}"]`);
-  if (wrapper) wrapper.classList.add("selected");
+  selectedIds.forEach((sid) => {
+    const wrapper = document.querySelector(`.comp-wrapper[data-id="${CSS.escape(sid)}"]`);
+    if (wrapper) wrapper.classList.add("selected");
+  });
   renderInspector();
   renderLayerPanel();
   renderComments();
+  renderSelectionToolbar();
 }
 
 function deselectAll() {
   selectedComponentId = null;
+  selectedIds = [];
   document.querySelectorAll(".comp-wrapper.selected").forEach((w) => w.classList.remove("selected"));
   renderInspector();
   renderLayerPanel();
+  renderSelectionToolbar();
+}
+
+// ===== Selection floating toolbar (Pixso/Figma-style contextual actions) =====
+
+const ALIGN_ACTIONS = [
+  ["left", "⇤", "alignLeft"],
+  ["center_x", "⇹", "alignCenterX"],
+  ["right", "⇥", "alignRight"],
+  ["top", "⇧", "alignTop"],
+  ["center_y", "⇵", "alignCenterY"],
+  ["bottom", "⇩", "alignBottom"],
+  ["distribute_x", "⋮⇤⇥", "distributeX"],
+  ["distribute_y", "⋮⇧⇩", "distributeY"],
+];
+
+function renderSelectionToolbar() {
+  const bar = $("selection-toolbar");
+  if (!bar) return;
+  bar.innerHTML = "";
+  const comps = getSelectedComps();
+  if (comps.length === 0) {
+    bar.style.display = "none";
+    return;
+  }
+  bar.style.display = "flex";
+
+  const add = (label, icon, fn, title) => {
+    const btn = el("button", "sel-tool-btn", icon);
+    btn.type = "button";
+    btn.title = title || label;
+    btn.addEventListener("click", fn);
+    bar.appendChild(btn);
+  };
+
+  if (comps.length === 1) {
+    const comp = comps[0];
+    add(t("duplicate"), "⧉", () => duplicateSelected(comp.id), t("duplicate") + " (Ctrl+D)");
+    add(t("moveUp"), "↑", () => moveSelected(comp.id, -1), t("moveUp"));
+    add(t("moveDown"), "↓", () => moveSelected(comp.id, +1), t("moveDown"));
+    add(t("zFront"), "⤒", () => zOrderSelected(comp.id, "front"), t("zFront"));
+    add(t("zBack"), "⤓", () => zOrderSelected(comp.id, "back"), t("zBack"));
+    add(t("deleteComponent"), "✕", () => {
+      handleDeleteComponent(comp.id);
+      deselectAll();
+    }, t("deleteComponent"));
+  } else {
+    // Multi-select: alignment / distribution (freeform only) + bulk delete
+    const ids = comps.map((c) => c.id);
+    if (canvasMode === "freeform") {
+      ALIGN_ACTIONS.forEach(([mode, icon, key]) => {
+        add(t(key), icon, () => alignSelected(ids, mode), t(key));
+      });
+    }
+    add(t("deleteComponent"), "✕", () => {
+      ids.forEach((id) => handleDeleteComponent(id));
+      deselectAll();
+    }, t("deleteComponent"));
+  }
+}
+
+function alignSelected(ids, mode) {
+  fetch("/api/align", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids, mode }),
+  })
+    .then((r) => (r.ok ? r.json() : Promise.reject(new Error("HTTP " + r.status))))
+    .catch((err) => console.error("Align failed:", err));
+}
+
+function zOrderSelected(id, mode) {
+  fetch(`/api/component/${id}/z-order`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mode }),
+  }).catch((err) => console.error("Z-order failed:", err));
+}
+
+function duplicateSelected(id) {
+  send({ type: "duplicate_component", id });
+  showToastMsg(t("duplicateDone"));
+}
+
+function moveSelected(id, delta) {
+  const components = getCurrentComponents();
+  const idx = components.findIndex((c) => c.id === id);
+  if (idx === -1) return;
+  const targetIdx = idx + delta;
+  if (targetIdx < 0 || targetIdx >= components.length) return;
+  send({
+    type: "reorder_component",
+    fromId: id,
+    toId: components[targetIdx].id,
+    position: delta < 0 ? "before" : "after",
+  });
 }
 
 function isInspectorFocused() {
@@ -1322,6 +1807,46 @@ function renderInspectorProps(panel, comp) {
   const idLine = el("div", "inspector-id", `ID: ${comp.id}`);
   header.appendChild(idLine);
   panel.appendChild(header);
+
+  // Appearance (Pixso-style fill / text / radius) — always available.
+  const appearance = el("div", "inspector-section");
+  appearance.appendChild(el("div", "inspector-section-title", t("appearance")));
+  const addAppearanceColor = (label, key) => {
+    const row = el("div", "prop-row");
+    row.appendChild(el("div", "prop-label", label));
+    const group = el("div", "prop-color-row");
+    const swatch = el("div", "prop-color-swatch");
+    swatch.style.background = props[key] || "transparent";
+    const input = el("input", "prop-text-input");
+    input.value = props[key] || "";
+    input.spellcheck = false;
+    input.placeholder = "#hex";
+    input.addEventListener("input", () => {
+      swatch.style.background = input.value || "transparent";
+    });
+    input.addEventListener("change", () => {
+      sendUpdateComponent(comp.id, { [key]: input.value });
+      if (input.value) swatch.style.background = input.value;
+    });
+    group.appendChild(swatch);
+    group.appendChild(input);
+    row.appendChild(group);
+    appearance.appendChild(row);
+  };
+  addAppearanceColor(t("fill"), "bg");
+  addAppearanceColor(t("textColor"), "color");
+  const radiusRow = el("div", "prop-row");
+  radiusRow.appendChild(el("div", "prop-label", t("radius")));
+  const radiusInput = el("input", "prop-text-input");
+  radiusInput.value = props.radius || "";
+  radiusInput.placeholder = "8px";
+  radiusInput.spellcheck = false;
+  radiusInput.addEventListener("change", () => {
+    sendUpdateComponent(comp.id, { radius: radiusInput.value });
+  });
+  radiusRow.appendChild(radiusInput);
+  appearance.appendChild(radiusRow);
+  panel.appendChild(appearance);
 
   // Layout section (freeform mode)
   if (canvasMode === "freeform") {
@@ -1440,8 +1965,164 @@ function renderInspectorProps(panel, comp) {
   animSection.appendChild(durRow);
   panel.appendChild(animSection);
 
+  // Behavior (行为模型 P1): bind an interaction triggered in play mode
+  const behaviorSection = el("div", "inspector-section");
+  behaviorSection.appendChild(el("div", "inspector-section-title", t("behavior")));
+  const behavior = comp.behavior || null;
+  const pages = (currentState && currentState.pages) || [];
+  const otherPages = pages.filter((p) => p.id !== (currentState && currentState.currentPageId));
+  const allComponents = findAllComponents(getCurrentComponents());
+
+  const behaviorTypeSelect = el("select", "prop-select");
+  const behaviorTypes = [
+    ["", t("behaviorNone")],
+    ["navigate", t("behaviorNavigate")],
+    ["link", t("behaviorLink")],
+    ["toggle", t("behaviorToggle")],
+    ["toast", t("behaviorToast")],
+    ["submit", t("behaviorSubmit")],
+    ["prompt", t("behaviorPrompt")],
+  ];
+  behaviorTypeSelect.innerHTML = behaviorTypes
+    .map(([value, label]) => `<option value="${value}" ${behavior && behavior.type === value ? "selected" : ""}>${label}</option>`)
+    .join("");
+  const behaviorTypeRow = el("div", "prop-row");
+  behaviorTypeRow.appendChild(el("div", "prop-label", t("behavior")));
+  behaviorTypeRow.appendChild(behaviorTypeSelect);
+  behaviorSection.appendChild(behaviorTypeRow);
+
+  // Parameter rows per type (rebuilt on type change)
+  const paramsWrap = el("div", "behavior-params");
+  behaviorSection.appendChild(paramsWrap);
+
+  const saveBehavior = (next) => {
+    fetch(`/api/component/${comp.id}/behavior`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ behavior: next }),
+    })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("HTTP " + r.status))))
+      .then(() => {
+        comp.behavior = next || undefined;
+        fetchInitialState();
+        renderInspector();
+        renderCanvas();
+      })
+      .catch((err) => {
+        console.error("Set behavior failed:", err);
+        showToastMsg(t("dsError"), true);
+      });
+  };
+
+  const renderParams = () => {
+    paramsWrap.innerHTML = "";
+    const type = behaviorTypeSelect.value;
+    if (!type) return;
+    if (type === "navigate") {
+      const row = el("div", "prop-row");
+      row.appendChild(el("div", "prop-label", t("behaviorNavigate")));
+      const select = el("select", "prop-select");
+      select.innerHTML =
+        `<option value="">${t("playLinkPlaceholder")}</option>` +
+        otherPages
+          .map((p) => `<option value="${p.id}" ${behavior && behavior.page_id === p.id ? "selected" : ""}>${p.name}</option>`)
+          .join("");
+      select.addEventListener("change", () => {
+        saveBehavior(
+          select.value
+            ? { type: "navigate", page_id: select.value }
+            : null
+        );
+      });
+      row.appendChild(select);
+      paramsWrap.appendChild(row);
+    } else if (type === "link") {
+      const row = el("div", "prop-row");
+      row.appendChild(el("div", "prop-label", t("behaviorUrl")));
+      const input = el("input", "prop-text-input");
+      input.value = (behavior && behavior.url) || "";
+      input.placeholder = "https://…";
+      input.spellcheck = false;
+      input.addEventListener("change", () => {
+        const url = input.value.trim();
+        saveBehavior(url ? { type: "link", url, new_tab: true } : null);
+      });
+      row.appendChild(input);
+      paramsWrap.appendChild(row);
+    } else if (type === "toggle") {
+      const row = el("div", "prop-row");
+      row.appendChild(el("div", "prop-label", t("behaviorTarget")));
+      const select = el("select", "prop-select");
+      select.innerHTML =
+        `<option value="">${t("behaviorTarget")}…</option>` +
+        allComponents
+          .filter((c) => c.id !== comp.id)
+          .map((c) => `<option value="${c.id}" ${behavior && behavior.target_component_id === c.id ? "selected" : ""}>${c.type} · ${c.id.slice(-6)}</option>`)
+          .join("");
+      select.addEventListener("change", () => {
+        saveBehavior(select.value ? { type: "toggle", target_component_id: select.value } : null);
+      });
+      row.appendChild(select);
+      paramsWrap.appendChild(row);
+    } else if (type === "toast") {
+      const row = el("div", "prop-row");
+      row.appendChild(el("div", "prop-label", t("behaviorMessage")));
+      const input = el("input", "prop-text-input");
+      input.value = (behavior && behavior.message) || "";
+      input.placeholder = t("behaviorToastDefault");
+      input.addEventListener("change", () => {
+        const message = input.value.trim();
+        saveBehavior(message ? { type: "toast", message } : null);
+      });
+      row.appendChild(input);
+      paramsWrap.appendChild(row);
+    } else if (type === "submit") {
+      const hint = el("div", "inspector-hint", t("behaviorPlayHint") + " · " + t("behaviorSubmitted"));
+      paramsWrap.appendChild(hint);
+    } else if (type === "prompt") {
+      const row = el("div", "prop-row");
+      row.appendChild(el("div", "prop-label", t("behaviorPromptText")));
+      const input = el("input", "prop-text-input");
+      input.value = (behavior && behavior.prompt) || "";
+      input.placeholder = t("promptPlaceholder");
+      input.addEventListener("change", () => {
+        const prompt = input.value.trim();
+        saveBehavior(prompt ? { type: "prompt", prompt } : null);
+      });
+      row.appendChild(input);
+      paramsWrap.appendChild(row);
+    }
+  };
+
+  behaviorTypeSelect.addEventListener("change", () => {
+    const type = behaviorTypeSelect.value;
+    if (!type) {
+      saveBehavior(null);
+      paramsWrap.innerHTML = "";
+      return;
+    }
+    // Preserve prior params where sensible when switching types.
+    const base = behavior && behavior.type === type ? behavior : { type };
+    saveBehavior(base);
+    renderParams();
+  });
+  renderParams();
+
+  const behaviorInfo = el("div", "inspector-link-info");
+  if (behavior) {
+    const label = behaviorTypes.find(([v]) => v === behavior.type);
+    behaviorInfo.textContent = `${label ? label[1] : behavior.type} · ${t("behaviorPlayHint")}`;
+    behaviorInfo.style.display = "block";
+  }
+  behaviorSection.appendChild(behaviorInfo);
+  panel.appendChild(behaviorSection);
+
   // Actions
-  const actions = el("div", "inspector-section");
+  const actions = el("div", "inspector-actions");
+  const dupBtn = el("button", "inspector-action-btn", t("duplicate"));
+  dupBtn.title = t("duplicate") + " (Ctrl+D)";
+  dupBtn.addEventListener("click", () => duplicateSelected(comp.id));
+  actions.appendChild(dupBtn);
   const delBtn = el("button", "inspector-delete-btn", t("deleteComponent"));
   delBtn.addEventListener("click", () => {
     handleDeleteComponent(comp.id);
@@ -1510,11 +2191,37 @@ function renderLayerPanel() {
   }
   list.innerHTML = "";
   [...components].reverse().forEach((comp) => {
-    const item = el("div", "layer-item" + (comp.id === selectedComponentId ? " selected" : ""));
+    const item = el("div", "layer-item" + (selectedIds.includes(comp.id) ? " selected" : ""));
     item.dataset.id = comp.id;
     item.appendChild(el("span", "layer-icon", "◈"));
     item.appendChild(el("span", "layer-name", `${comp.type}${comp.variant ? "/" + comp.variant : ""}`));
-    item.addEventListener("click", () => selectComponent(comp.id));
+    item.addEventListener("click", (e) => {
+      selectComponent(comp.id, e.shiftKey || e.ctrlKey || e.metaKey);
+    });
+    // Drag to reorder layers (top-level stacking, 精确编辑 P0)
+    item.draggable = true;
+    item.addEventListener("dragstart", (e) => {
+      e.dataTransfer.setData("text/plain", comp.id);
+      item.classList.add("dragging");
+    });
+    item.addEventListener("dragend", () => item.classList.remove("dragging"));
+    item.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      item.classList.add("drop-target");
+    });
+    item.addEventListener("dragleave", () => item.classList.remove("drop-target"));
+    item.addEventListener("drop", (e) => {
+      e.preventDefault();
+      item.classList.remove("drop-target");
+      const fromId = e.dataTransfer.getData("text/plain");
+      if (!fromId || fromId === comp.id) return;
+      send({
+        type: "reorder_component",
+        fromId,
+        toId: comp.id,
+        position: "before",
+      });
+    });
     const del = el("button", "layer-del", "✕");
   del.title = t("deleteComponent");
     del.addEventListener("click", (e) => {
@@ -1531,6 +2238,7 @@ function setupZoom() {
   const zoomOut = $("zoom-out");
   const zoomIn = $("zoom-in");
   const reset = $("zoom-reset");
+  const fit = $("zoom-fit");
   const apply = (z) => {
     canvasZoom = Math.max(25, Math.min(200, z));
     const valueEl = $("zoom-value");
@@ -1538,9 +2246,20 @@ function setupZoom() {
     const wrap = $("canvas-scroll-wrap");
     if (wrap) wrap.style.zoom = canvasZoom / 100;
   };
+  const fitCanvas = () => {
+    const wrap = $("canvas-scroll-wrap");
+    const frame = $("canvas-frame") || $("canvas");
+    if (!wrap || !frame) return;
+    const cw = wrap.clientWidth;
+    const fw = frame.scrollWidth || frame.offsetWidth || cw;
+    if (cw > 0 && fw > 0) {
+      apply(Math.round((cw / fw) * 100));
+    }
+  };
   if (zoomOut) zoomOut.addEventListener("click", () => apply(canvasZoom - 10));
   if (zoomIn) zoomIn.addEventListener("click", () => apply(canvasZoom + 10));
   if (reset) reset.addEventListener("click", () => apply(100));
+  if (fit) fit.addEventListener("click", fitCanvas);
   document.addEventListener("keydown", (e) => {
     if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT" || e.target.tagName === "TEXTAREA") return;
     if (e.key === "=" || e.key === "+") { e.preventDefault(); apply(canvasZoom + 10); }
@@ -1560,13 +2279,21 @@ function setupCanvasShortcuts() {
     ) {
       return;
     }
-    if ((e.key === "Delete" || e.key === "Backspace") && selectedComponentId) {
+    if ((e.key === "Delete" || e.key === "Backspace") && (selectedComponentId || selectedIds.length > 0)) {
       e.preventDefault();
-      const comp = getSelectedComp();
-      if (comp) {
-        handleDeleteComponent(comp.id);
-        deselectAll();
+      const comps = getSelectedComps();
+      if (comps.length === 0) return;
+      if (comps.length === 1) {
+        handleDeleteComponent(comps[0].id);
+      } else {
+        comps.forEach((c) => handleDeleteComponent(c.id));
       }
+      deselectAll();
+    }
+    // Ctrl+D duplicates the selected component (Pixso/Figma convention).
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "d" && selectedComponentId) {
+      e.preventDefault();
+      duplicateSelected(selectedComponentId);
     }
   });
 }
@@ -3063,16 +3790,14 @@ function setupTabs() {
 // ===== Platform Switcher =====
 
 function setupPlatformSwitcher() {
-  const buttons = document.querySelectorAll(".platform-btn");
-  buttons.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      buttons.forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-      currentPlatform = btn.dataset.platform;
-      const canvas = $("canvas");
-      applyPlatform(canvas);
-      send({ type: "set_platform", platform: currentPlatform });
-    });
+  const select = $("platform-select");
+  if (!select) return;
+  select.value = currentPlatform;
+  select.addEventListener("change", () => {
+    currentPlatform = select.value;
+    const canvas = $("canvas");
+    applyPlatform(canvas);
+    send({ type: "set_platform", platform: currentPlatform });
   });
 }
 
@@ -3254,6 +3979,7 @@ function setupExportModal() {
   const modal = $("export-modal");
   const closeBtn = $("export-close");
   const copyBtn = $("export-copy");
+  const openBtn = $("export-open");
   const tabs = document.querySelectorAll(".export-tab");
 
   if (exportBtn) {
@@ -3295,6 +4021,34 @@ function setupExportModal() {
         copyBtn.textContent = "复制代码";
         copyBtn.classList.remove("copied");
       }, 2000);
+    });
+  }
+
+  // Open the exported HTML as a standalone page in a new tab — the fastest
+  // way for non-coders to see, save, or share what they built.
+  if (openBtn) {
+    openBtn.addEventListener("click", async () => {
+      try {
+        const response = await fetch("/api/export", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ format: "html" }),
+        });
+        if (!response.ok) throw new Error(String(response.status));
+        const data = await response.json();
+        const blob = new Blob([String(data.code || "")], { type: "text/html" });
+        const url = URL.createObjectURL(blob);
+        const win = window.open(url, "_blank");
+        if (!win) {
+          alert(t("previewOpened") + " (弹窗被拦截)");
+        } else {
+          showToastMsg(t("previewOpened"));
+        }
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+      } catch (err) {
+        console.error("Open preview failed:", err);
+        showToastMsg(t("explainFailed") + ": " + err.message, true);
+      }
     });
   }
 
@@ -3473,9 +4227,93 @@ function getCanvasInlineStyles() {
   return css;
 }
 
+// ===== Explain Design (plain-language, for non-professionals) =====
+
+function setupExplain() {
+  const btn = $("explain-btn");
+  const modal = $("explain-modal");
+  const closeBtn = $("explain-close");
+  if (!btn || !modal) return;
+
+  btn.addEventListener("click", openExplainModal);
+
+  if (closeBtn) {
+    closeBtn.addEventListener("click", () => {
+      modal.style.display = "none";
+    });
+  }
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) modal.style.display = "none";
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && modal.style.display === "flex") {
+      modal.style.display = "none";
+    }
+  });
+}
+
+function openExplainModal() {
+  const modal = $("explain-modal");
+  const content = $("explain-content");
+  if (!modal || !content) return;
+  modal.style.display = "flex";
+  content.innerHTML = `<p class="explain-loading">${t("explainLoading")}</p>`;
+  const lang = uiLang === "en" ? "en" : "zh";
+  fetch(`/api/explain?lang=${lang}`)
+    .then((response) => (response.ok ? response.json() : Promise.reject(new Error(String(response.status)))))
+    .then((data) => renderExplain(data))
+    .catch((err) => {
+      console.error("Explain failed:", err);
+      content.innerHTML = `<p class="explain-failed">${t("explainFailed")}</p>`;
+    });
+}
+
+function renderExplain(data) {
+  const content = $("explain-content");
+  if (!content) return;
+  content.innerHTML = "";
+
+  content.appendChild(el("p", "explain-summary", String(data.summary || "")));
+
+  if (Array.isArray(data.facts) && data.facts.length > 0) {
+    const facts = el("ul", "explain-facts");
+    data.facts.forEach((fact) => facts.appendChild(el("li", "explain-fact", String(fact))));
+    content.appendChild(facts);
+  }
+
+  if (Array.isArray(data.conflicts) && data.conflicts.length > 0) {
+    const box = el("div", "explain-conflicts");
+    data.conflicts.forEach((c) => box.appendChild(el("div", "explain-conflict", "⚠ " + String(c))));
+    content.appendChild(box);
+  }
+
+  if (Array.isArray(data.suggestions) && data.suggestions.length > 0) {
+    content.appendChild(el("div", "explain-try", t("tryThese")));
+    const list = el("div", "explain-suggestions");
+    data.suggestions.forEach((s) => {
+      const row = el("button", "explain-suggest", String(s.phrase));
+      row.type = "button";
+      const effect = el("span", "explain-suggest-effect", String(s.effect || ""));
+      row.appendChild(effect);
+      row.addEventListener("click", () => {
+        const modal = $("explain-modal");
+        if (modal) modal.style.display = "none";
+        const input = $("prompt-input");
+        if (input) {
+          input.value = String(s.phrase);
+          input.focus();
+        }
+      });
+      list.appendChild(row);
+    });
+    content.appendChild(list);
+  }
+}
+
 // ===== AI Prompt Bar =====
 
 let promptStatusTimer = null;
+let promptSuggestTimer = null;
 
 function setPromptStatus(text, cls) {
   const status = $("prompt-status");
@@ -3500,6 +4338,56 @@ function setupPromptBar() {
       sendPrompt();
     }
   });
+  input.addEventListener("input", () => hidePromptSuggestions());
+}
+
+/** Show clickable example instructions when the built-in engine cannot act. */
+function showPromptSuggestions(suggestions) {
+  const container = $("prompt-suggest");
+  if (!container || !Array.isArray(suggestions) || suggestions.length === 0) return;
+  container.innerHTML = "";
+  const label = el("span", "suggest-label", t("promptNotUnderstood"));
+  container.appendChild(label);
+  suggestions.slice(0, 4).forEach((phrase) => {
+    const chip = el("button", "suggest-chip", String(phrase));
+    chip.type = "button";
+    chip.addEventListener("click", () => {
+      hidePromptSuggestions();
+      sendPrompt(String(phrase));
+    });
+    container.appendChild(chip);
+  });
+  const dismiss = el("button", "suggest-dismiss", "×");
+  dismiss.type = "button";
+  dismiss.title = t("dismiss") || "关闭";
+  dismiss.addEventListener("click", hidePromptSuggestions);
+  container.appendChild(dismiss);
+  container.style.display = "flex";
+  // Auto-hide so the bar never blocks the canvas for long.
+  clearTimeout(promptSuggestTimer);
+  promptSuggestTimer = setTimeout(hidePromptSuggestions, 45000);
+}
+
+function hidePromptSuggestions() {
+  const container = $("prompt-suggest");
+  if (container) container.style.display = "none";
+  clearTimeout(promptSuggestTimer);
+}
+
+function applyPromptResult(result) {
+  if (!result) return;
+  if (result.executed) {
+    setPromptStatus(t("promptExecuted", { summary: result.summary || "" }), "accepted");
+    showToastMsg(t("promptExecuted", { summary: result.summary || "" }));
+  } else if (result.llm === "generating") {
+    setPromptStatus(t("llmGenerating"), "queued");
+    showToastMsg(t("llmGenerating"));
+  } else {
+    setPromptStatus(t("promptQueued"), "queued");
+    if (Array.isArray(result.suggestions) && result.suggestions.length > 0) {
+      showPromptSuggestions(result.suggestions);
+    }
+  }
 }
 
 function sendPrompt(text) {
@@ -3511,15 +4399,18 @@ function sendPrompt(text) {
     send({ type: "prompt", prompt: value });
   } else {
     // WebSocket unavailable: fall back to the REST prompt endpoint so the
-    // instruction still reaches the agent queue.
+    // instruction still reaches the agent queue, and surface its result.
     fetch("/api/prompt", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prompt: value }),
-    }).catch((err) => {
-      console.error("Prompt fallback failed:", err);
-      setPromptStatus(t("promptQueued") + " (WS↓)", "queued");
-    });
+    })
+      .then((response) => response.json())
+      .then((data) => applyPromptResult(data))
+      .catch((err) => {
+        console.error("Prompt fallback failed:", err);
+        setPromptStatus(t("promptQueued") + " (WS↓)", "queued");
+      });
   }
   setPromptStatus(t("promptQueued"), "queued");
   if (input) input.value = "";
@@ -3537,11 +4428,15 @@ function sendPrompt(text) {
 // ===== Quick actions: prompt chips, shortcuts help, command palette =====
 
 const QUICK_CHIP_PROMPTS = [
-  { key: "chipDark", prompt: "深色模式" },
-  { key: "chipLight", prompt: "浅色模式" },
-  { key: "chipSaaS", prompt: "应用 SaaS 模板" },
-  { key: "chipEcommerce", prompt: "应用电商模板" },
-  { key: "chipClear", prompt: "清空" },
+  { key: "chipDark", prompts: { zh: "深色模式", en: "dark mode" } },
+  { key: "chipLight", prompts: { zh: "浅色模式", en: "light mode" } },
+  { key: "chipSaaS", prompts: { zh: "应用 SaaS 模板", en: "apply the SaaS template" } },
+  { key: "chipEcommerce", prompts: { zh: "应用电商模板", en: "apply the e-commerce template" } },
+  { key: "chipBigger", prompts: { zh: "字太小了，大一点", en: "make the text bigger" } },
+  { key: "chipGlass", prompts: { zh: "换成玻璃拟态风格", en: "switch to the glassmorphism style" } },
+  { key: "chipPricing", prompts: { zh: "添加一个定价表", en: "add a pricing table" } },
+  { key: "chipUndo", prompts: { zh: "撤销", en: "undo" } },
+  { key: "chipClear", prompts: { zh: "清空", en: "clear all" } },
 ];
 
 function setupPromptChips() {
@@ -3551,7 +4446,7 @@ function setupPromptChips() {
   QUICK_CHIP_PROMPTS.forEach((chip) => {
     const btn = el("button", "prompt-chip", t(chip.key));
     btn.type = "button";
-    btn.addEventListener("click", () => sendPrompt(chip.prompt));
+    btn.addEventListener("click", () => sendPrompt(chip.prompts[uiLang] || chip.prompts.zh));
     container.appendChild(btn);
   });
 }
@@ -3942,16 +4837,76 @@ function setupImportModal() {
   const goBtn = $("import-go");
   const pathInput = $("import-path");
   const clearCheckbox = $("import-clear");
+  const urlInput = $("import-url");
+  const htmlTextarea = $("import-html");
+  const fileInput = $("import-file");
+  const fileBtn = $("import-file-btn");
   const resultDiv = $("import-result");
+
+  const resetResult = () => {
+    if (resultDiv) {
+      resultDiv.style.display = "none";
+      resultDiv.innerHTML = "";
+    }
+  };
+  const setResult = (html, cls) => {
+    if (!resultDiv) return;
+    resultDiv.style.display = "block";
+    resultDiv.innerHTML = `<div class="${cls}">${html}</div>`;
+  };
+  const setLoading = (text) => {
+    if (goBtn) {
+      goBtn.disabled = true;
+      goBtn.textContent = text;
+    }
+    setResult(`<div class="import-loading">${text}…</div>`, "");
+  };
+  const done = () => {
+    if (goBtn) {
+      goBtn.disabled = false;
+      goBtn.textContent = t("importStart");
+    }
+  };
+
+  // Tabs: folder / url / html
+  const tabs = document.querySelectorAll(".import-tab");
+  tabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      tabs.forEach((t) => t.classList.remove("active"));
+      tab.classList.add("active");
+      const which = tab.dataset.importTab;
+      ["folder", "url", "html"].forEach((pane) => {
+        const el = $("import-pane-" + pane);
+        if (el) el.style.display = pane === which ? "" : "none";
+      });
+      resetResult();
+    });
+  });
+
+  if (fileBtn && fileInput) {
+    fileBtn.addEventListener("click", () => fileInput.click());
+    fileInput.addEventListener("change", () => {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (htmlTextarea) htmlTextarea.value = String(reader.result || "");
+        // Switch to the HTML pane so the user can review before importing
+        tabs.forEach((t) => t.classList.toggle("active", t.dataset.importTab === "html"));
+        ["folder", "url", "html"].forEach((pane) => {
+          const el = $("import-pane-" + pane);
+          if (el) el.style.display = pane === "html" ? "" : "none";
+        });
+      };
+      reader.readAsText(file);
+    });
+  }
 
   if (importBtn) {
     importBtn.addEventListener("click", () => {
       modal.style.display = "flex";
-      pathInput.focus();
-      if (resultDiv) {
-        resultDiv.style.display = "none";
-        resultDiv.innerHTML = "";
-      }
+      resetResult();
+      if (pathInput && !pathInput.value) pathInput.focus();
     });
   }
 
@@ -3969,87 +4924,161 @@ function setupImportModal() {
 
   if (goBtn) {
     goBtn.addEventListener("click", async () => {
-      const folderPath = pathInput.value.trim();
-      if (!folderPath) {
-        pathInput.focus();
+      const activeTab = document.querySelector(".import-tab.active");
+      const which = activeTab ? activeTab.dataset.importTab : "folder";
+      const clearExisting = clearCheckbox ? clearCheckbox.checked : false;
+
+      // Folder import (existing flow)
+      if (which === "folder") {
+        const folderPath = pathInput.value.trim();
+        if (!folderPath) {
+          pathInput.focus();
+          return;
+        }
+        setLoading("正在扫描项目文件夹，提取页面组件");
+        try {
+          const response = await fetch("/api/import", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ path: folderPath, clear_existing: clearExisting }),
+          });
+          const data = await response.json();
+          if (data.success) {
+            const pagesHtml = data.pages
+              .map(
+                (p) =>
+                  `<div class="import-page-item"><span class="import-page-name">${p.name}</span><span class="import-page-count">${p.componentCount} 个组件</span></div>`
+              )
+              .join("");
+            setResult(
+              `<div class="import-success-icon">✓</div>
+               <div class="import-success-summary">扫描 ${data.scanned_files} 个文件，导入 ${data.pages_imported} 个页面，共 ${data.total_components} 个组件</div>
+               <div class="import-page-list">${pagesHtml}</div>`,
+              "import-success"
+            );
+            goBtn.textContent = t("importDone");
+            setTimeout(() => {
+              modal.style.display = "none";
+              done();
+            }, 2000);
+            fetchInitialState();
+          } else {
+            setResult(data.message || data.error || t("importFailed"), "import-error");
+            done();
+          }
+        } catch (err) {
+          setResult(`请求失败: ${err.message || err}`, "import-error");
+          done();
+        }
         return;
       }
 
-      const clearExisting = clearCheckbox ? clearCheckbox.checked : false;
-
-      // Show loading state
-      goBtn.disabled = true;
-      goBtn.textContent = "正在扫描和解析...";
-      if (resultDiv) {
-        resultDiv.style.display = "block";
-        resultDiv.innerHTML = '<div class="import-loading">正在扫描项目文件夹，提取页面组件...</div>';
+      // Product import (URL / HTML → 导入自己的产品 → 一键应用)
+      const payload = which === "url" ? { url: urlInput ? urlInput.value.trim() : "" } : { html: htmlTextarea ? htmlTextarea.value : "" };
+      if (which === "url" && !payload.url) {
+        urlInput.focus();
+        return;
       }
-
+      if (which === "html" && !payload.html) {
+        htmlTextarea.focus();
+        return;
+      }
+      setLoading(which === "url" ? "正在抓取并解析网页" : "正在解析 HTML");
       try {
-        const response = await fetch("/api/import", {
+        const response = await fetch("/api/import/product", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            path: folderPath,
-            clear_existing: clearExisting,
-          }),
+          body: JSON.stringify(payload),
         });
-
         const data = await response.json();
-
         if (data.success) {
-          const pagesHtml = data.pages
-            .map(
-              (p) =>
-                `<div class="import-page-item"><span class="import-page-name">${p.name}</span><span class="import-page-count">${p.componentCount} 个组件</span></div>`
-            )
-            .join("");
-
-          if (resultDiv) {
-            resultDiv.style.display = "block";
-            resultDiv.innerHTML = `
-              <div class="import-success">
-                <div class="import-success-icon">✓</div>
-                <div class="import-success-summary">
-                  扫描 ${data.scanned_files} 个文件，导入 ${data.pages_imported} 个页面，共 ${data.total_components} 个组件
-                </div>
-                <div class="import-page-list">${pagesHtml}</div>
-              </div>
-            `;
-          }
-          goBtn.textContent = "导入完成";
+          setResult(
+            `<div class="import-success-icon">✓</div>
+             <div class="import-success-summary">${data.message || ""}</div>`,
+            "import-success"
+          );
+          goBtn.textContent = t("importDone");
           setTimeout(() => {
             modal.style.display = "none";
-            goBtn.disabled = false;
-            goBtn.textContent = "开始导入";
-          }, 2000);
+            done();
+          }, 1500);
+          await fetchInitialState();
+          renderImportBanner();
         } else {
-          const msg = data.message || data.error || "导入失败";
-          if (resultDiv) {
-            resultDiv.style.display = "block";
-            resultDiv.innerHTML = `<div class="import-error">${msg}</div>`;
-          }
-          goBtn.disabled = false;
-          goBtn.textContent = "开始导入";
+          setResult(data.error || data.message || t("importFailed"), "import-error");
+          done();
         }
       } catch (err) {
-        if (resultDiv) {
-          resultDiv.style.display = "block";
-          resultDiv.innerHTML = `<div class="import-error">请求失败: ${err.message || err}</div>`;
-        }
-        goBtn.disabled = false;
-        goBtn.textContent = "开始导入";
+        setResult(`请求失败: ${err.message || err}`, "import-error");
+        done();
       }
     });
 
-    // Submit on Enter key
+    // Submit on Enter key (folder tab)
     if (pathInput) {
       pathInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          goBtn.click();
-        }
+        if (e.key === "Enter") goBtn.click();
       });
     }
+  }
+}
+
+// ===== 导入 → 调整 → 一键应用 banner =====
+
+function renderImportBanner() {
+  const banner = $("import-banner");
+  if (!banner) return;
+  const record = currentState && currentState.imports ? currentState.imports[currentState.currentPageId] : null;
+  if (!record) {
+    banner.style.display = "none";
+    return;
+  }
+  banner.style.display = "flex";
+  const text = $("import-banner-text");
+  if (text) {
+    text.textContent = t("importedBanner", { source: record.source, n: record.component_count });
+  }
+}
+
+function setupApplyBanner() {
+  const applyBtn = $("apply-btn");
+  const rollbackBtn = $("apply-rollback-btn");
+  const closeBtn = $("import-banner-close");
+  const banner = $("import-banner");
+
+  if (applyBtn) {
+    applyBtn.addEventListener("click", async () => {
+      applyBtn.disabled = true;
+      try {
+        const res = await fetch("/api/apply", { method: "POST" });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || String(res.status));
+        showToastMsg(t("appliedResult", { n: data.files.length, backup: data.backup ? data.backup.split(/[\\/]/).pop() : "—" }));
+      } catch (err) {
+        showToastMsg(t("appliedError") + ": " + err.message, true);
+      } finally {
+        applyBtn.disabled = false;
+      }
+    });
+  }
+  if (rollbackBtn) {
+    rollbackBtn.addEventListener("click", async () => {
+      rollbackBtn.disabled = true;
+      try {
+        const res = await fetch("/api/apply/rollback", { method: "POST" });
+        const data = await res.json();
+        showToastMsg(data.success ? t("rolledBack", { file: data.restored ? data.restored.split(/[\\/]/).pop() : "" }) : (data.message || t("rollbackNone")));
+      } catch (err) {
+        showToastMsg(t("appliedError") + ": " + err.message, true);
+      } finally {
+        rollbackBtn.disabled = false;
+      }
+    });
+  }
+  if (closeBtn && banner) {
+    closeBtn.addEventListener("click", () => {
+      banner.style.display = "none";
+    });
   }
 }
 
@@ -4583,7 +5612,7 @@ async function renderDesignSystems() {
   const list = $("library-list");
   if (!list) return;
   list.innerHTML = `<div class="library-empty">${t("libraryLoading")}</div>`;
-  let systems = [];
+  let systems;
   try {
     const res = await fetch("/api/design-systems");
     const data = await res.json();
@@ -5249,6 +6278,14 @@ function setCanvasEditorMode(design) {
             onMount: () => {
               canvasReady = true;
               loadCanvasIntoEditor();
+              if (pendingDrawTool) {
+                window.PrismCanvas.setTool(pendingDrawTool);
+                pendingDrawTool = null;
+              }
+            },
+            onRecover: () => {
+              canvasReady = true;
+              loadCanvasIntoEditor(true);
             },
             onChange: (snapshot) => {
               canvasDirty = true;
@@ -5269,6 +6306,7 @@ function setCanvasEditorMode(design) {
 
   if (previewBtn) previewBtn.classList.toggle("active", !design);
   if (designBtn) designBtn.classList.toggle("active", design);
+  applyDrawToolsState();
 }
 
 /**
@@ -5289,7 +6327,17 @@ async function loadCanvasIntoEditor(forceFromComponents) {
     const components = getCurrentComponents();
 
     if (data.doc) {
-      window.PrismCanvas.loadSnapshot(data.doc);
+      const loaded = window.PrismCanvas.loadSnapshot(data.doc);
+      // A stale/corrupt drawing can fail to load (unknown shape types, schema
+      // drift). Fall back to re-materializing from the component tree and
+      // overwrite the bad doc so the canvas never gets stuck broken.
+      if (!loaded) {
+        window.PrismCanvas.loadComponents(components || [], {
+          tokens: currentState.tokens,
+          themeMode: currentState.themeMode,
+        });
+        if (components && components.length > 0) saveCurrentCanvas(false);
+      }
     } else if (forceFromComponents || (components && components.length > 0)) {
       window.PrismCanvas.loadComponents(components || [], {
         tokens: currentState.tokens,
@@ -5450,6 +6498,178 @@ async function applyTemplateForCanvas(templateId) {
 
 // ===== Initialize =====
 
+// ===== Play Mode (click-through navigation between linked pages) =====
+
+function setupPlayMode() {
+  const btn = $("play-btn");
+  if (!btn) return;
+
+  const setPlayMode = (on) => {
+    playMode = on;
+    const canvas = $("canvas");
+    if (canvas) canvas.classList.toggle("play-mode", on);
+    btn.textContent = on ? t("playExit") : t("playMode");
+    btn.classList.toggle("active", on);
+    if (on) deselectAll();
+    renderCanvas();
+  };
+
+  btn.addEventListener("click", () => setPlayMode(!playMode));
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && playMode) {
+      setPlayMode(false);
+    }
+  });
+}
+
+// ===== "More" menu (topbar) =====
+
+function setupMoreMenu() {
+  const btn = $("more-btn");
+  const menu = $("more-dropdown");
+  if (!btn || !menu) return;
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    menu.style.display = menu.style.display === "none" ? "block" : "none";
+  });
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".more-menu")) menu.style.display = "none";
+  });
+  menu.addEventListener("click", () => {
+    menu.style.display = "none";
+  });
+}
+
+// ===== Built-in LLM channel (AI settings modal) =====
+
+function updateLlmBadge() {
+  const badge = $("llm-badge");
+  if (!badge) return;
+  fetch("/api/llm/config")
+    .then((r) => r.json())
+    .then((data) => {
+      badge.style.display = data.configured ? "inline-flex" : "none";
+      if (data.configured) badge.title = `${t("llmProvider")}: ${data.provider} · ${data.model}`;
+    })
+    .catch(() => {});
+}
+
+function setupLlmSettings() {
+  const openBtn = $("llm-settings-btn");
+  const modal = $("llm-modal");
+  const closeBtn = $("llm-close");
+  const provider = $("llm-provider");
+  const baseUrl = $("llm-base-url");
+  const keyInput = $("llm-key");
+  const model = $("llm-model");
+  const status = $("llm-status");
+  const saveBtn = $("llm-save-btn");
+  const testBtn = $("llm-test-btn");
+  if (!modal || !openBtn) return;
+
+  const setStatus = (text, cls) => {
+    if (!status) return;
+    status.textContent = text;
+    status.className = "llm-status" + (cls ? " " + cls : "");
+  };
+
+  openBtn.addEventListener("click", () => {
+    modal.style.display = "flex";
+    setStatus("", "");
+    fetch("/api/llm/config")
+      .then((r) => r.json())
+      .then((data) => {
+        if (provider) provider.value = data.provider || "openai";
+        if (baseUrl) baseUrl.value = data.base_url || "";
+        if (model) model.value = data.model || "";
+        if (keyInput) keyInput.placeholder = data.masked_key ? data.masked_key + "（已保存，留空保持不变）" : "sk-…";
+        toggleBaseField();
+      })
+      .catch(() => {});
+  });
+  if (closeBtn) closeBtn.addEventListener("click", () => { modal.style.display = "none"; });
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) modal.style.display = "none";
+  });
+
+  const toggleBaseField = () => {
+    const field = document.querySelector(".llm-base-field");
+    if (field) field.style.display = provider && provider.value === "openai" ? "" : "none";
+  };
+  if (provider) provider.addEventListener("change", toggleBaseField);
+
+  if (saveBtn) {
+    saveBtn.addEventListener("click", async () => {
+      setStatus(t("llmTesting"), "");
+      try {
+        const res = await fetch("/api/llm/config", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            provider: provider ? provider.value : "openai",
+            apiKey: keyInput ? keyInput.value : "",
+            model: model ? model.value : "",
+            baseUrl: baseUrl ? baseUrl.value : "",
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || String(res.status));
+        setStatus(t("llmSaved"), "ok");
+        if (keyInput) keyInput.value = "";
+        updateLlmBadge();
+      } catch (err) {
+        setStatus(t("llmTestFail", { error: err.message }), "err");
+      }
+    });
+  }
+
+  if (testBtn) {
+    testBtn.addEventListener("click", async () => {
+      setStatus(t("llmTesting"), "");
+      try {
+        const res = await fetch("/api/llm/test", { method: "POST" });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || String(res.status));
+        setStatus(t("llmTestOk", { reply: data.reply || "" }), "ok");
+      } catch (err) {
+        setStatus(t("llmTestFail", { error: err.message }), "err");
+      }
+    });
+  }
+}
+
+// ===== Drawing tool rail (canvas left edge) =====
+
+let activeDrawTool = "select";
+
+function applyDrawToolsState() {
+  const rail = $("canvas-tool-rail");
+  if (rail) rail.classList.toggle("active", canvasEditorMode);
+  document.querySelectorAll(".draw-tool").forEach((b) => {
+    b.classList.toggle("active", canvasEditorMode && b.dataset.tool === activeDrawTool);
+  });
+}
+
+function selectDrawTool(toolId) {
+  activeDrawTool = toolId;
+  pendingDrawTool = toolId;
+  if (!canvasEditorMode) {
+    setCanvasEditorMode(true);
+  } else if (window.PrismCanvas && window.PrismCanvas.isReady()) {
+    window.PrismCanvas.setTool(toolId);
+    pendingDrawTool = null;
+  }
+  applyDrawToolsState();
+}
+
+function setupDrawTools() {
+  document.querySelectorAll(".draw-tool").forEach((btn) => {
+    btn.addEventListener("click", () => selectDrawTool(btn.dataset.tool));
+  });
+  applyDrawToolsState();
+}
+
 function init() {
   setupI18n();
   setupTabs();
@@ -5473,6 +6693,13 @@ function init() {
   setupActivityFilter();
   setupScreenshot();
   setupPromptBar();
+  setupExplain();
+  setupPlayMode();
+  setupMoreMenu();
+  setupLlmSettings();
+  updateLlmBadge();
+  setupDrawTools();
+  setupApplyBanner();
   setupCommandPalette();
   setupQuickActions();
   setupConflictCheck();

@@ -4,7 +4,15 @@
 > 范围：`prism-ui-design-mcp`（服务端 + Dashboard）、`prism-studio-v2-prototype`、三份设计文档
 > 依据：源码审计（28 个 MCP 工具、REST/WS 双通道、客户端渲染引擎）+ 2026-08 外部调研
 
-> **实施进度（2026-08-12 更新）**
+> **实施进度（2026-08 最新，非专业人员体验专项）**
+> - ✅ **非专业人员体验专项**（详见 [`prism-nonprofessional-painpoints.md`](./prism-nonprofessional-painpoints.md)）：
+>   - 指令引擎 v2：改文字/文字颜色/字号缩放/间距/圆角/明暗/字体切换/对比度报告/重做/通用放大缩小/模板非破坏新页，未匹配指令返回可点击示例（中英双语）
+>   - 反向语义解释：`design_explain_design`（MCP）+ `GET /api/explain` + Dashboard「解读」按钮（大白话总结 + 7 条后续指令）
+>   - REST/WS 双通道指令回执（`prompt_result` / `/api/prompt` 返回 executed+summary+suggestions）
+>   - 客户端：空画布示例指令行、9 个双语快捷 chips、可点击建议条、「新标签页打开」独立预览
+>   - 补全 Play 模式客户端（播放按钮切换、检查器"页面跳转"选择器、点击组件跨页导航、Esc 退出）
+>   - 修复工作区未完成分支：StoredState 类型、page-link 契约（link_ 前缀/去重/400）、非法令牌分类 400
+>   - 测试：371 → 392 项全绿；lint 0 error；e2e 浏览器冒烟 6/6
 > - ✅ Phase A1 测试体系：259 项测试全绿 + Playwright e2e 冒烟 2/2
 > - ✅ Phase A2 持久化：`design_save_project` / `design_load_project` / `design_list_projects` + REST 端点 + 自动保存/启动恢复 + Dashboard 保存/加载按钮
 > - ✅ Phase A3 双通道收敛：`src/service/design-service.ts` 共享服务层 + WS 消息 zod 严格校验（拒绝未知类型/非法字段）

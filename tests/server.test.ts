@@ -144,6 +144,19 @@ test(
       assert.equal(exported.success, true);
       assert.ok(exported.code.includes("Hello Prism"), "exported HTML missing component content");
 
+      // P1.4: token changes broadcast a lightweight patch alongside the state
+      ws.send(
+        JSON.stringify({ type: "set_token", category: "colors", key: "color-primary", value: "#123456" })
+      );
+      await new Promise<void>((resolve) => setTimeout(resolve, 400));
+      const tokenChange = wsMessages.find(
+        (m) =>
+          m.type === "change" &&
+          (m.patch as { key?: string } | undefined)?.key === "color-primary"
+      );
+      assert.ok(tokenChange, "token change should carry a patch field");
+      assert.equal((tokenChange.patch as { value?: string }).value, "#123456");
+
       // New endpoints: render, projects, and validated token updates
       const renderRes = await fetch(`${base}/api/render`);
       const rendered = (await renderRes.json()) as { success: boolean; code_length: number; html: string };
@@ -903,6 +916,23 @@ test(
 
       const missing = await fetch(`${base}/api/component/comp_nope_123/code?format=html`);
       assert.equal(missing.status, 404);
+
+      // Library component code export (used by the design-library copy button)
+      const libRes = await fetch(`${base}/api/library-code`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "hero", variant: "centered", props: { title: "Lib Hero" } }),
+      });
+      const lib = (await libRes.json()) as { success: boolean; code: string };
+      assert.equal(lib.success, true);
+      assert.ok(lib.code.includes("Lib Hero"));
+
+      const badLib = await fetch(`${base}/api/library-code`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "not-a-component" }),
+      });
+      assert.equal(badLib.status, 400);
     } catch (error) {
       throw new Error(
         `${error instanceof Error ? error.message : String(error)}\n--- server logs ---\n${logs}`,
@@ -1004,6 +1034,555 @@ test(
 );
 
 test(
+  "page-link REST endpoints create, list, and remove play-mode links",
+  { timeout: 60000 },
+  async () => {
+    const port = await getFreePort();
+    const child = spawn(process.execPath, [SERVER_ENTRY], {
+      cwd: path.resolve(__dirname, "..", ".."),
+      env: {
+        ...process.env,
+        DASHBOARD_PORT: String(port),
+        PRISM_PROJECT_DIR: path.join(os.tmpdir(), "prism-server-links-test"),
+        PRISM_AUTOIMPORT: "off",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let logs = "";
+    child.stdout?.on("data", (d) => (logs += d.toString()));
+    child.stderr?.on("data", (d) => (logs += d.toString()));
+    const base = `http://127.0.0.1:${port}`;
+    const headers = { "Content-Type": "application/json" };
+
+    try {
+      await waitForHealth(`${base}/health`, 20000);
+
+      const fromState = (await (await fetch(`${base}/api/state`)).json()) as {
+        currentPageId: string;
+      };
+      const fromPage = fromState.currentPageId;
+      const pageRes = await fetch(`${base}/api/page`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ name: "Detail" }),
+      });
+      const page = (await pageRes.json()) as { page_id: string };
+
+      const createRes = await fetch(`${base}/api/page-links`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          from_page_id: fromPage,
+          to_page_id: page.page_id,
+          label: "Go Detail",
+          source_component_id: "comp_btn_1",
+        }),
+      });
+      const created = (await createRes.json()) as { success: boolean; link: { id: string; to_page_id: string } };
+      assert.equal(created.success, true);
+      assert.equal(created.link.to_page_id, page.page_id);
+
+      const list = (await (await fetch(`${base}/api/page-links`)).json()) as {
+        links: Array<{ id: string; source_component_id: string }>;
+      };
+      assert.equal(list.links.length, 1);
+      assert.equal(list.links[0].source_component_id, "comp_btn_1");
+
+      const delRes = await fetch(`${base}/api/page-links/${created.link.id}`, { method: "DELETE" });
+      assert.equal(delRes.status, 200);
+      const empty = (await (await fetch(`${base}/api/page-links`)).json()) as {
+        links: unknown[];
+      };
+      assert.equal(empty.links.length, 0);
+
+      const badRes = await fetch(`${base}/api/page-links`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ from_page_id: "page_nope", to_page_id: page.page_id }),
+      });
+      assert.equal(badRes.status, 400);
+    } catch (error) {
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}\n--- server logs ---\n${logs}`,
+        { cause: error }
+      );
+    } finally {
+      child.kill();
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(() => {
+          child.kill("SIGKILL");
+          resolve();
+        }, 3000);
+        child.once("exit", () => {
+          clearTimeout(timer);
+          resolve();
+        });
+      });
+    }
+  }
+);
+
+test(
+  "duplicate-component REST endpoint clones a component",
+  { timeout: 60000 },
+  async () => {
+    const port = await getFreePort();
+    const child = spawn(process.execPath, [SERVER_ENTRY], {
+      cwd: path.resolve(__dirname, "..", ".."),
+      env: {
+        ...process.env,
+        DASHBOARD_PORT: String(port),
+        PRISM_PROJECT_DIR: path.join(os.tmpdir(), "prism-duplicate-server"),
+        PRISM_AUTOIMPORT: "off",
+        PRISM_AUTOLOAD: "off",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let logs = "";
+    child.stderr?.on("data", (d) => (logs += d.toString()));
+    const base = `http://127.0.0.1:${port}`;
+    const headers = { "Content-Type": "application/json" };
+
+    try {
+      await waitForHealth(`${base}/health`, 20000);
+
+      const addRes = await fetch(`${base}/api/component`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ type: "button", props: { text: "Go" } }),
+      });
+      const added = (await addRes.json()) as { id: string };
+
+      const dupRes = await fetch(`${base}/api/component/${added.id}/duplicate`, { method: "POST" });
+      assert.equal(dupRes.status, 200);
+      const dup = (await dupRes.json()) as { success: boolean; id: string; type: string };
+      assert.equal(dup.success, true);
+      assert.equal(dup.type, "button");
+      assert.notEqual(dup.id, added.id);
+
+      const state = (await (await fetch(`${base}/api/state`)).json()) as {
+        components: Array<{ id: string; props: { text: string } }>;
+      };
+      assert.equal(state.components.length, 2);
+      assert.deepEqual(state.components.map((c) => c.props.text), ["Go", "Go"]);
+
+      const missing = await fetch(`${base}/api/component/comp_nope/duplicate`, { method: "POST" });
+      assert.equal(missing.status, 404);
+    } catch (error) {
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}\n--- server logs ---\n${logs}`,
+        { cause: error }
+      );
+    } finally {
+      child.kill();
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(() => {
+          child.kill("SIGKILL");
+          resolve();
+        }, 3000);
+        child.once("exit", () => {
+          clearTimeout(timer);
+          resolve();
+        });
+      });
+    }
+  }
+);
+
+test(
+  "behavior REST endpoint binds and clears component interactions",
+  { timeout: 60000 },
+  async () => {
+    const port = await getFreePort();
+    const child = spawn(process.execPath, [SERVER_ENTRY], {
+      cwd: path.resolve(__dirname, "..", ".."),
+      env: {
+        ...process.env,
+        DASHBOARD_PORT: String(port),
+        PRISM_PROJECT_DIR: path.join(os.tmpdir(), `prism-behavior-server-${Date.now()}`),
+        PRISM_AUTOIMPORT: "off",
+        PRISM_AUTOLOAD: "off",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let logs = "";
+    child.stderr?.on("data", (d) => (logs += d.toString()));
+    const base = `http://127.0.0.1:${port}`;
+    const headers = { "Content-Type": "application/json" };
+
+    try {
+      await waitForHealth(`${base}/health`, 20000);
+
+      const addRes = await fetch(`${base}/api/component`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ type: "button", props: { text: "Buy" } }),
+      });
+      const added = (await addRes.json()) as { id: string };
+
+      const setRes = await fetch(`${base}/api/component/${added.id}/behavior`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ behavior: { type: "toast", message: "已加入购物车" } }),
+      });
+      assert.equal(setRes.status, 200);
+      const state = (await (await fetch(`${base}/api/state`)).json()) as {
+        components: Array<{ id: string; behavior?: { type: string } }>;
+      };
+      assert.deepEqual(state.components[0].behavior, { type: "toast", message: "已加入购物车" });
+
+      // null clears the behavior
+      const clearRes = await fetch(`${base}/api/component/${added.id}/behavior`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ behavior: null }),
+      });
+      assert.equal(clearRes.status, 200);
+      const after = (await (await fetch(`${base}/api/state`)).json()) as {
+        components: Array<{ behavior?: unknown }>;
+      };
+      assert.equal(after.components[0].behavior, undefined);
+
+      // malformed body and unknown component are rejected
+      const badRes = await fetch(`${base}/api/component/${added.id}/behavior`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ behavior: "nope" }),
+      });
+      assert.equal(badRes.status, 400);
+
+      const missingRes = await fetch(`${base}/api/component/comp_nope/behavior`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ behavior: { type: "toast", message: "x" } }),
+      });
+      assert.equal(missingRes.status, 404);
+    } catch (error) {
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}\n--- server logs ---\n${logs}`,
+        { cause: error }
+      );
+    } finally {
+      child.kill();
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(() => {
+          child.kill("SIGKILL");
+          resolve();
+        }, 3000);
+        child.once("exit", () => {
+          clearTimeout(timer);
+          resolve();
+        });
+      });
+    }
+  }
+);
+
+test(
+  "align and z-order REST endpoints adjust freeform layouts",
+  { timeout: 60000 },
+  async () => {
+    const port = await getFreePort();
+    const child = spawn(process.execPath, [SERVER_ENTRY], {
+      cwd: path.resolve(__dirname, "..", ".."),
+      env: {
+        ...process.env,
+        DASHBOARD_PORT: String(port),
+        PRISM_PROJECT_DIR: path.join(os.tmpdir(), `prism-align-server-${Date.now()}`),
+        PRISM_AUTOIMPORT: "off",
+        PRISM_AUTOLOAD: "off",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let logs = "";
+    child.stderr?.on("data", (d) => (logs += d.toString()));
+    const base = `http://127.0.0.1:${port}`;
+    const headers = { "Content-Type": "application/json" };
+
+    try {
+      await waitForHealth(`${base}/health`, 20000);
+
+      const ids: string[] = [];
+      for (const type of ["button", "card", "image"]) {
+        const res = await fetch(`${base}/api/component`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ type, props: {} }),
+        });
+        const data = (await res.json()) as { id: string };
+        ids.push(data.id);
+      }
+      // Give each component a layout via update_component
+      const layouts = [
+        { x: 10, y: 10, w: 100, h: 40 },
+        { x: 200, y: 60, w: 120, h: 60 },
+        { x: 400, y: 20, w: 80, h: 30 },
+      ];
+      for (let i = 0; i < ids.length; i++) {
+        await fetch(`${base}/api/component/${ids[i]}`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ props: {}, layout: layouts[i] }),
+        });
+      }
+
+      const alignRes = await fetch(`${base}/api/align`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ ids, mode: "left" }),
+      });
+      assert.equal(alignRes.status, 200);
+      const state = (await (await fetch(`${base}/api/state`)).json()) as {
+        components: Array<{ id: string; layout: { x: number } }>;
+      };
+      for (const comp of state.components) {
+        assert.equal(comp.layout.x, 10, "all components align left");
+      }
+
+      const zRes = await fetch(`${base}/api/component/${ids[0]}/z-order`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ mode: "front" }),
+      });
+      assert.equal(zRes.status, 200);
+      const after = (await (await fetch(`${base}/api/state`)).json()) as {
+        components: Array<{ id: string }>;
+      };
+      assert.equal(after.components[after.components.length - 1].id, ids[0], "first component sent to front");
+
+      const badAlign = await fetch(`${base}/api/align`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ ids: [ids[0]], mode: "left" }),
+      });
+      assert.equal(badAlign.status, 400);
+    } catch (error) {
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}\n--- server logs ---\n${logs}`,
+        { cause: error }
+      );
+    } finally {
+      child.kill();
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(() => {
+          child.kill("SIGKILL");
+          resolve();
+        }, 3000);
+        child.once("exit", () => {
+          clearTimeout(timer);
+          resolve();
+        });
+      });
+    }
+  }
+);
+
+test(
+  "import → adjust → one-click apply pipeline writes products with rollback",
+  { timeout: 60000 },
+  async () => {
+    const port = await getFreePort();
+    const productTmp = path.join(os.tmpdir(), `prism-products-${Date.now()}`);
+    const child = spawn(process.execPath, [SERVER_ENTRY], {
+      cwd: path.resolve(__dirname, "..", ".."),
+      env: {
+        ...process.env,
+        DASHBOARD_PORT: String(port),
+        PRISM_PROJECT_DIR: path.join(os.tmpdir(), `prism-pipeline-${Date.now()}`),
+        PRISM_PRODUCT_DIR: productTmp,
+        PRISM_AUTOIMPORT: "off",
+        PRISM_AUTOLOAD: "off",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let logs = "";
+    child.stderr?.on("data", (d) => (logs += d.toString()));
+    const base = `http://127.0.0.1:${port}`;
+    const headers = { "Content-Type": "application/json" };
+
+    try {
+      await waitForHealth(`${base}/health`, 20000);
+
+      // 1) Import a pasted HTML page of the user's product
+      const importRes = await fetch(`${base}/api/import/product`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          html: `<html><body><nav><a>我的品牌</a></nav><main><h1>欢迎</h1><button>开始</button></main><footer>© 2026</footer></body></html>`,
+        }),
+      });
+      assert.equal(importRes.status, 200);
+      const imported = (await importRes.json()) as {
+        success: boolean;
+        page_id: string;
+        source: string;
+        imported: number;
+      };
+      assert.equal(imported.success, true);
+      assert.ok(imported.imported >= 2, "extracted components from the pasted page");
+      assert.equal(imported.source, "Pasted HTML");
+
+      // Import provenance is recorded
+      const importsRes = (await (await fetch(`${base}/api/imports`)).json()) as {
+        imports: Record<string, { source: string; component_count: number }>;
+      };
+      assert.ok(importsRes.imports[imported.page_id]);
+      assert.equal(importsRes.imports[imported.page_id].source, "Pasted HTML");
+
+      // 2) Adjust something (a token), then one-click apply
+      const adjustRes = await fetch(`${base}/api/token`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ category: "colors", key: "color-primary", value: "#FF5500" }),
+      });
+      assert.equal(adjustRes.status, 200);
+
+      const applyRes = await fetch(`${base}/api/apply`, { method: "POST" });
+      assert.equal(applyRes.status, 200);
+      const applied = (await applyRes.json()) as {
+        success: boolean;
+        files: Array<{ file: string; size: number }>;
+        backup: string | null;
+      };
+      assert.equal(applied.success, true);
+      assert.equal(applied.files.length, 2);
+      for (const f of applied.files) {
+        assert.ok(f.size > 0);
+      }
+      const { existsSync } = await import("fs");
+      assert.ok(existsSync(applied.files[0].file), "adjusted page written to product dir");
+
+      // 3) Apply again → a backup is created; rollback restores it
+      await fetch(`${base}/api/apply`, { method: "POST" });
+      const rollRes = await fetch(`${base}/api/apply/rollback`, { method: "POST" });
+      const rolled = (await rollRes.json()) as { success: boolean; restored: string | null };
+      assert.equal(rolled.success, true);
+      assert.ok(rolled.restored && existsSync(rolled.restored));
+    } catch (error) {
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}\n--- server logs ---\n${logs}`,
+        { cause: error }
+      );
+    } finally {
+      child.kill();
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(() => {
+          child.kill("SIGKILL");
+          resolve();
+        }, 3000);
+        child.once("exit", () => {
+          clearTimeout(timer);
+          resolve();
+        });
+      });
+    }
+  }
+);
+
+test(
+  "LLM channel config endpoints save, mask, and keep the key secret",
+  { timeout: 60000 },
+  async () => {
+    const port = await getFreePort();
+    const child = spawn(process.execPath, [SERVER_ENTRY], {
+      cwd: path.resolve(__dirname, "..", ".."),
+      env: {
+        ...process.env,
+        DASHBOARD_PORT: String(port),
+        PRISM_PROJECT_DIR: path.join(os.tmpdir(), `prism-llm-server-${Date.now()}`),
+        PRISM_AUTOIMPORT: "off",
+        PRISM_AUTOLOAD: "off",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let logs = "";
+    child.stderr?.on("data", (d) => (logs += d.toString()));
+    const base = `http://127.0.0.1:${port}`;
+    const headers = { "Content-Type": "application/json" };
+
+    try {
+      await waitForHealth(`${base}/health`, 20000);
+
+      // Not configured initially; generation is refused with a readable error
+      const initial = (await (await fetch(`${base}/api/llm/config`)).json()) as {
+        configured: boolean;
+      };
+      assert.equal(initial.configured, false);
+
+      const noCfg = await fetch(`${base}/api/llm/generate`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ prompt: "做一个首页" }),
+      });
+      assert.equal(noCfg.status, 400);
+
+      // Save a config with an unreachable base URL → generation fails loudly
+      const put = await fetch(`${base}/api/llm/config`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({
+          provider: "openai",
+          apiKey: "sk-test-1234567890",
+          baseUrl: "http://127.0.0.1:1/v1",
+          model: "gpt-4o-mini",
+        }),
+      });
+      assert.equal(put.status, 200);
+      const saved = (await put.json()) as { configured: boolean; masked_key: string };
+      assert.equal(saved.configured, true);
+      assert.equal(saved.masked_key, "sk-t…7890");
+
+      // The raw key must never come back over the API
+      const after = await (await fetch(`${base}/api/llm/config`)).json();
+      const raw = JSON.stringify(after);
+      assert.ok(!raw.includes("sk-test-1234567890"), "raw key must stay secret");
+      assert.ok(raw.includes("sk-t…7890"), "masked key should be exposed");
+
+      // Generation against the unreachable endpoint → 502 with a readable error
+      const gen = await fetch(`${base}/api/llm/generate`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ prompt: "做一个宠物店首页" }),
+      });
+      assert.equal(gen.status, 502);
+      const genErr = (await gen.json()) as { error: string };
+      assert.ok(genErr.error.length > 0);
+
+      // An empty apiKey on PUT keeps the previously stored key
+      const keep = await fetch(`${base}/api/llm/config`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ provider: "anthropic", model: "claude-sonnet-4-5" }),
+      });
+      assert.equal(keep.status, 200);
+      const kept = (await (await fetch(`${base}/api/llm/config`)).json()) as {
+        provider: string;
+        masked_key: string;
+      };
+      assert.equal(kept.provider, "anthropic");
+      assert.equal(kept.masked_key, "sk-t…7890", "key survives provider/model changes");
+    } catch (error) {
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}\n--- server logs ---\n${logs}`,
+        { cause: error }
+      );
+    } finally {
+      child.kill();
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(() => {
+          child.kill("SIGKILL");
+          resolve();
+        }, 3000);
+        child.once("exit", () => {
+          clearTimeout(timer);
+          resolve();
+        });
+      });
+    }
+  }
+);
+
+test(
   "built-in prompt executor reacts to instructions over REST and WS",
   { timeout: 60000 },
   async () => {
@@ -1044,6 +1623,17 @@ test(
         body: JSON.stringify({ prompt: "把主色改成蓝色" }),
       });
       assert.equal(promptRes.status, 200);
+      const promptResult = (await promptRes.json()) as {
+        success: boolean;
+        executed: boolean;
+        action: string;
+        summary: string;
+        suggestions: string[];
+      };
+      assert.equal(promptResult.success, true);
+      assert.equal(promptResult.executed, true);
+      assert.equal(promptResult.action, "set_primary_color");
+      assert.match(promptResult.summary, /主色/);
 
       await new Promise<void>((resolve) => {
         const timer = setInterval(() => {
@@ -1072,15 +1662,56 @@ test(
       );
 
       // An unmatched instruction stays queued for the agent (no receipt)
+      // but the REST response carries example suggestions for the user.
       const unmatchedRes = await fetch(`${base}/api/prompt`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: "hello agent please refine" }),
       });
       assert.equal(unmatchedRes.status, 200);
+      const unmatched = (await unmatchedRes.json()) as {
+        executed: boolean;
+        suggestions: string[];
+      };
+      assert.equal(unmatched.executed, false);
+      assert.ok(Array.isArray(unmatched.suggestions) && unmatched.suggestions.length > 0);
       await new Promise<void>((resolve) => setTimeout(resolve, 300));
       const executedCount = wsMessages.filter((m) => m.type === "prompt_executed").length;
       assert.equal(executedCount, 1, "unmatched prompt must not be executed");
+
+      // WS prompts get an immediate prompt_result acknowledgment
+      ws.send(JSON.stringify({ type: "prompt", prompt: "字太小了，大一点" }));
+      await new Promise<void>((resolve) => {
+        const timer = setInterval(() => {
+          if (wsMessages.some((m) => m.type === "prompt_result")) {
+            clearInterval(timer);
+            resolve();
+          }
+        }, 20);
+        setTimeout(() => {
+          clearInterval(timer);
+          resolve();
+        }, 6000);
+      });
+      const wsResult = wsMessages.find((m) => m.type === "prompt_result") as
+        | Record<string, unknown>
+        | undefined;
+      assert.ok(wsResult, "prompt_result broadcast missing for WS prompt");
+      assert.equal(wsResult.executed, true);
+
+      // The plain-language explanation endpoint is read-only and descriptive
+      const explainRes = await fetch(`${base}/api/explain`);
+      assert.equal(explainRes.status, 200);
+      const explain = (await explainRes.json()) as {
+        success: boolean;
+        summary: string;
+        facts: string[];
+        suggestions: Array<{ phrase: string }>;
+      };
+      assert.equal(explain.success, true);
+      assert.ok(explain.summary.length > 0);
+      assert.ok(explain.facts.length >= 3);
+      assert.ok(explain.suggestions.length > 0);
 
       ws.close();
     } catch (error) {

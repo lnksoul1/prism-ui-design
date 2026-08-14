@@ -1479,6 +1479,180 @@ Example:
   );
 }
 
+// ===== Tool: design_set_behavior =====
+
+export function registerDesignBehaviorTool(server: McpServer): void {
+  server.registerTool(
+    "design_set_behavior",
+    {
+      title: "Set Component Behavior",
+      description: `Bind an interaction behavior to a component (行为模型 P1). Triggered in play mode when the user clicks the element.
+
+Behavior types:
+  - navigate: jump to another page (page_id)
+  - link: open a URL (url, new_tab)
+  - toggle: show/hide another component (target_component_id)
+  - toast: show a transient message (message)
+  - submit: simulate a form submit (form_id)
+  - prompt: trigger a natural-language instruction for the built-in AI (prompt)
+
+Pass behavior=null to remove the current behavior.
+
+Example:
+  - design_set_behavior(component_id="comp_123", behavior={"type":"navigate","page_id":"page_2"})
+  - design_set_behavior(component_id="comp_123", behavior={"type":"toast","message":"已加入购物车"})
+  - design_set_behavior(component_id="comp_123", behavior=null)`,
+      inputSchema: {
+        component_id: z.string().describe("Component ID"),
+        behavior: z
+          .object({
+            type: z.enum(["navigate", "link", "toggle", "toast", "submit", "prompt"]).describe("Behavior type"),
+            page_id: z.string().optional().describe("navigate: target page id"),
+            url: z.string().optional().describe("link: URL to open"),
+            new_tab: z.boolean().optional().describe("link: open in a new tab (default true)"),
+            target_component_id: z.string().optional().describe("toggle: component to show/hide"),
+            message: z.string().optional().describe("toast: message text"),
+            form_id: z.string().optional().describe("submit: form component id"),
+            prompt: z.string().optional().describe("prompt: instruction for the built-in AI"),
+          })
+          .nullable()
+          .describe("Behavior spec, or null to remove"),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (params) => {
+      try {
+        const success = stateStore.setBehavior(params.component_id, params.behavior, "ai");
+        if (!success) {
+          return {
+            content: [{ type: "text", text: `Error: Component "${params.component_id}" not found.` }],
+            structuredContent: { success: false, component_id: params.component_id },
+          };
+        }
+        const label = params.behavior ? params.behavior.type : "none";
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Behavior "${label}" set on component ${params.component_id}. It triggers in play mode.`,
+            },
+          ],
+          structuredContent: { success: true, component_id: params.component_id, behavior: params.behavior },
+        };
+      } catch (error) {
+        return {
+          content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        };
+      }
+    }
+  );
+}
+
+// ===== Tool: design_align_components =====
+
+export function registerDesignAlignTool(server: McpServer): void {
+  server.registerTool(
+    "design_align_components",
+    {
+      title: "Align Components",
+      description: `Align or distribute multiple components in freeform space (精确编辑 P0). Single undo step.
+
+Modes: left, center_x, right, top, center_y, bottom, distribute_x, distribute_y
+
+Example:
+  - design_align_components(ids=["comp_1","comp_2","comp_3"], mode="center_x")
+  - design_align_components(ids=["comp_1","comp_2"], mode="distribute_y")`,
+      inputSchema: {
+        ids: z.array(z.string()).min(2).describe("Component ids to align (2+)"),
+        mode: z
+          .enum(["left", "center_x", "right", "top", "center_y", "bottom", "distribute_x", "distribute_y"])
+          .describe("Alignment mode"),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (params) => {
+      try {
+        const success = stateStore.alignComponents(params.ids, params.mode, "ai");
+        if (!success) {
+          return {
+            content: [{ type: "text", text: "Error: need at least 2 valid components with layouts." }],
+            structuredContent: { success: false, mode: params.mode },
+          };
+        }
+        return {
+          content: [{ type: "text", text: `Aligned ${params.ids.length} components (${params.mode}).` }],
+          structuredContent: { success: true, ids: params.ids, mode: params.mode },
+        };
+      } catch (error) {
+        return {
+          content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        };
+      }
+    }
+  );
+}
+
+// ===== Tool: design_z_order_component =====
+
+export function registerDesignZOrderTool(server: McpServer): void {
+  server.registerTool(
+    "design_z_order_component",
+    {
+      title: "Reorder Component Stacking",
+      description: `Change a component's stacking order (精确编辑 P0).
+
+Modes: front (置顶), back (置底), forward (上移一层), backward (下移一层)
+
+Example:
+  - design_z_order_component(component_id="comp_5", mode="front")`,
+      inputSchema: {
+        component_id: z.string().describe("Component ID"),
+        mode: z.enum(["front", "back", "forward", "backward"]).describe("Stacking operation"),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (params) => {
+      try {
+        const success = stateStore.zOrderComponent(params.component_id, params.mode, "ai");
+        if (!success) {
+          return {
+            content: [{ type: "text", text: `Error: Component "${params.component_id}" not found.` }],
+            structuredContent: { success: false, component_id: params.component_id },
+          };
+        }
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Component ${params.component_id} moved ${params.mode}.`,
+            },
+          ],
+          structuredContent: { success: true, component_id: params.component_id, mode: params.mode },
+        };
+      } catch (error) {
+        return {
+          content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        };
+      }
+    }
+  );
+}
+
 // ===== Tool: design_get_state =====
 
 export function registerDesignGetStateTool(server: McpServer): void {
@@ -2226,6 +2400,9 @@ export function registerAllDesignTools(server: McpServer): void {
   registerDesignAddComponentTool(server);
   registerDesignUpdateComponentTool(server);
   registerDesignAnimationTool(server);
+  registerDesignBehaviorTool(server);
+  registerDesignAlignTool(server);
+  registerDesignZOrderTool(server);
   registerDesignGetStateTool(server);
   registerDesignSetTokenTool(server);
   registerDesignRemoveComponentTool(server);

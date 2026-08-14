@@ -28,6 +28,94 @@ export interface ComponentNode {
   locked?: boolean;
   children: ComponentNode[];
   animation?: AnimationDef;
+  /** Product definition v2 — 行为模型: any component can carry an interaction. */
+  behavior?: ComponentBehavior;
+}
+
+/**
+ * 行为模型 (P1): an interaction bound to any component/shape/image.
+ * Triggered in play mode by clicking the element.
+ */
+export interface ComponentBehavior {
+  type: "navigate" | "link" | "toggle" | "toast" | "submit" | "prompt";
+  /** navigate: jump to a page */
+  page_id?: string;
+  /** link: open a URL (new tab by default) */
+  url?: string;
+  new_tab?: boolean;
+  /** toggle: show/hide a target component */
+  target_component_id?: string;
+  /** toast: show a transient message */
+  message?: string;
+  /** submit: simulate a form submit */
+  form_id?: string;
+  /** prompt: trigger a natural-language instruction (built-in AI channel) */
+  prompt?: string;
+}
+
+export const BEHAVIOR_TYPES = [
+  "navigate",
+  "link",
+  "toggle",
+  "toast",
+  "submit",
+  "prompt",
+] as const;
+
+export function isBehaviorType(value: string): value is ComponentBehavior["type"] {
+  return (BEHAVIOR_TYPES as readonly string[]).includes(value);
+}
+
+/** Alignment / distribution modes for freeform multi-select (精确编辑 P0). */
+export type AlignMode =
+  | "left"
+  | "center_x"
+  | "right"
+  | "top"
+  | "center_y"
+  | "bottom"
+  | "distribute_x"
+  | "distribute_y";
+
+export const ALIGN_MODES: AlignMode[] = [
+  "left",
+  "center_x",
+  "right",
+  "top",
+  "center_y",
+  "bottom",
+  "distribute_x",
+  "distribute_y",
+];
+
+export function isAlignMode(value: string): value is AlignMode {
+  return (ALIGN_MODES as string[]).includes(value);
+}
+
+/** Stacking order operations (精确编辑 P0). */
+export type ZOrderMode = "front" | "back" | "forward" | "backward";
+
+export const Z_ORDER_MODES: ZOrderMode[] = ["front", "back", "forward", "backward"];
+
+export function isZOrderMode(value: string): value is ZOrderMode {
+  return (Z_ORDER_MODES as string[]).includes(value);
+}
+
+/**
+ * 导入记录 (product definition v3.1): provenance for the
+ * "导入自己的产品 → 调整 → 一键应用" pipeline. Keyed by page id; the original
+ * HTML is persisted next to the project store so apply/rollback can rebuild
+ * artifacts without bloating the autosave.
+ */
+export interface ImportRecord {
+  kind: "url" | "html" | "file";
+  /** Display name: hostname / "Pasted HTML" / file name. */
+  source: string;
+  url?: string;
+  /** Saved original HTML under the project dir (imports/<pageId>.html). */
+  html_file: string;
+  imported_at: string;
+  component_count: number;
 }
 
 export interface AnimationDef {
@@ -87,11 +175,14 @@ export interface DesignState {
   activePlatform: string;
   platforms: Record<string, PlatformSnapshot>;
   comments: DesignComment[];
+  pageLinks: PageLink[];
   revision: number;
   /** tldraw canvas snapshots keyed by page id (方案A canvas-first editing). */
   canvasDocs: Record<string, unknown>;
   /** AI draw commands waiting to be applied to each page's canvas. */
   canvasDraws: Record<string, CanvasDraw[]>;
+  /** 导入记录: pageId → provenance of the "导入 → 调整 → 一键应用" pipeline. */
+  imports: Record<string, ImportRecord>;
   /** Upgrade plan U1: smooth scroll configuration (Lenis). */
   scroll?: ScrollConfig;
   /** Upgrade plan U2: Vanta 3D backgrounds keyed by component/section id. */
@@ -150,6 +241,16 @@ export interface DesignComment {
   createdAt: string;
 }
 
+/** Play-mode navigation: clicking a component on one page jumps to another. */
+export interface PageLink {
+  id: string;
+  from_page_id: string;
+  to_page_id: string;
+  label?: string;
+  /** Optional component whose click triggers the navigation. */
+  source_component_id?: string;
+}
+
 /** A simple drawing command queued by the AI (`design_draw_canvas`). */
 export interface CanvasDraw {
   id: string;
@@ -167,12 +268,51 @@ export interface CanvasDraw {
 
 // ===== State Store (Singleton) =====
 
+/**
+ * Internal stored state — the source of truth. Unlike the public `DesignState`
+ * snapshot, it does NOT carry a `components` mirror field: components are always
+ * derived from `pages[currentPageId].components` on read (see `getState()`).
+ * This eliminates the historical `fixComponentsReference` sync compensation.
+ *
+ * Declared explicitly (rather than `Omit<DesignState, "components">`) because
+ * `DesignState` carries a string index signature that absorbs literal keys
+ * through `Omit`, degrading every field to `unknown`.
+ */
+type StoredState = {
+  projectName: string;
+  style: string;
+  tokens: DesignTokens;
+  activityLog: ActivityLogEntry[];
+  pages: PageDef[];
+  currentPageId: string | null;
+  themeMode: "light" | "dark";
+  activePlatform: string;
+  platforms: Record<string, PlatformSnapshot>;
+  comments: DesignComment[];
+  pageLinks: PageLink[];
+  revision: number;
+  /** tldraw canvas snapshots keyed by page id (方案A canvas-first editing). */
+  canvasDocs: Record<string, unknown>;
+  /** AI draw commands waiting to be applied to each page's canvas. */
+  canvasDraws: Record<string, CanvasDraw[]>;
+  /** 导入记录: pageId → provenance of the "导入 → 调整 → 一键应用" pipeline. */
+  imports: Record<string, ImportRecord>;
+  /** Upgrade plan U1: smooth scroll configuration (Lenis). */
+  scroll?: ScrollConfig;
+  /** Upgrade plan U2: Vanta 3D backgrounds keyed by component/section id. */
+  vantaBackgrounds?: Record<string, VantaBackgroundConfig>;
+  /** Upgrade plan U3: React Bits component registry (component_id → meta). */
+  reactBits?: Record<string, { name: string; variant: string; props?: Record<string, unknown> }>;
+  /** Upgrade plan U4: export runtime level (minimal | standard | full). */
+  exportRuntime?: "minimal" | "standard" | "full";
+};
+
 class DesignStateStore extends EventEmitter {
-  private state: DesignState;
+  private state: StoredState;
   private static instance: DesignStateStore;
 
   // Undo/Redo history (post-mutation snapshots)
-  private history: DesignState[];
+  private history: StoredState[];
   private historyIndex: number;
   private maxHistory: number = 50;
 
@@ -197,7 +337,6 @@ class DesignStateStore extends EventEmitter {
         radii: {},
         transitions: {},
       },
-      components: defaultPage.components,
       activityLog: [],
       pages: [defaultPage],
       currentPageId: defaultPage.id,
@@ -205,9 +344,11 @@ class DesignStateStore extends EventEmitter {
       activePlatform: "web-desktop",
       platforms: {},
       comments: [],
+      pageLinks: [],
       revision: 0,
       canvasDocs: {},
       canvasDraws: {},
+      imports: {},
     };
     // Initialize history with the initial state
     this.history = [JSON.parse(JSON.stringify(this.state))];
@@ -250,7 +391,6 @@ class DesignStateStore extends EventEmitter {
     this.historyIndex--;
     const snapshot = JSON.parse(JSON.stringify(this.history[this.historyIndex]));
     this.state = snapshot;
-    this.fixComponentsReference();
     this.logActivity("undo", "system", "Undo", "user");
     this.emit("change", { type: "undo" });
     return true;
@@ -261,7 +401,6 @@ class DesignStateStore extends EventEmitter {
     this.historyIndex++;
     const snapshot = JSON.parse(JSON.stringify(this.history[this.historyIndex]));
     this.state = snapshot;
-    this.fixComponentsReference();
     this.logActivity("redo", "system", "Redo", "user");
     this.emit("change", { type: "redo" });
     return true;
@@ -275,26 +414,32 @@ class DesignStateStore extends EventEmitter {
     return this.historyIndex < this.history.length - 1;
   }
 
-  // After restoring from history, fix components to point to current page's array
-  private fixComponentsReference(): void {
-    const page = this.state.pages.find((p) => p.id === this.state.currentPageId);
-    if (page) {
-      this.state.components = page.components;
-    } else if (this.state.pages.length > 0) {
-      this.state.currentPageId = this.state.pages[0].id;
-      this.state.components = this.state.pages[0].components;
-    }
-  }
-
   // ===== State Access =====
 
   getState(): DesignState {
     const copy = JSON.parse(JSON.stringify(this.state)) as DesignState;
+    // Derive `components` from the current page (source of truth). The stored
+    // state intentionally has no components mirror field, so callers reading
+    // `state.components` always see the current page's tree.
+    copy.components = JSON.parse(JSON.stringify(this.currentComponents()));
     // Expose undo/redo capability so the client dashboard can enable/disable
     // the undo/redo buttons (see improvement plan A4 / defect C1).
     copy.canUndo = this.canUndo();
     copy.canRedo = this.canRedo();
     return copy;
+  }
+
+  // ===== Current Page Access (replaces former state.components mirror) =====
+
+  /** The current page object (source of truth for the component tree). */
+  private currentPage(): PageDef | null {
+    const page = this.state.pages.find((p) => p.id === this.state.currentPageId);
+    return page ?? this.state.pages[0] ?? null;
+  }
+
+  /** The current page's component tree (mutable reference). */
+  private currentComponents(): ComponentNode[] {
+    return this.currentPage()?.components ?? [];
   }
 
   // ===== Project / Style =====
@@ -488,7 +633,8 @@ class DesignStateStore extends EventEmitter {
         parent.children.push(node);
       }
     } else {
-      this.state.components.push(node);
+      const page = this.currentPage();
+      if (page) page.components.push(node);
     }
 
     this.logActivity("add_component", type, `Added ${type}${variant ? ` (${variant})` : ""}`, source);
@@ -524,11 +670,44 @@ class DesignStateStore extends EventEmitter {
   }
 
   removeComponent(id: string, source: "ai" | "user" = "ai"): boolean {
-    const removed = this.removeFromTree(this.state.components, id);
+    const removed = this.removeFromTree(this.currentComponents(), id);
     if (!removed) return false;
     this.logActivity("remove_component", "component", `Removed component (${id})`, source);
     this.commit({ type: "removeComponent", id });
     return true;
+  }
+
+  /**
+   * Duplicate a component (deep-copy, new ids) and insert it right after the
+   * original. Returns the new node, or null when the source id is unknown.
+   */
+  duplicateComponent(id: string, source: "ai" | "user" = "ai"): ComponentNode | null {
+    const locate = (nodes: ComponentNode[]): { arr: ComponentNode[]; idx: number } | null => {
+      for (let i = 0; i < nodes.length; i++) {
+        if (nodes[i].id === id) return { arr: nodes, idx: i };
+        const found = locate(nodes[i].children);
+        if (found) return found;
+      }
+      return null;
+    };
+    const loc = locate(this.currentComponents());
+    if (!loc) return null;
+
+    const copy = JSON.parse(JSON.stringify(loc.arr[loc.idx])) as ComponentNode;
+    const reid = (n: ComponentNode): void => {
+      n.id = `comp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      (n.children || []).forEach(reid);
+    };
+    reid(copy);
+    // Nudge the clone so it is visibly distinct in freeform mode.
+    if (copy.layout) {
+      copy.layout = { ...copy.layout, x: (copy.layout.x || 0) + 24, y: (copy.layout.y || 0) + 24 };
+    }
+
+    loc.arr.splice(loc.idx + 1, 0, copy);
+    this.logActivity("duplicate_component", copy.type, `Duplicated ${copy.type} (${id} → ${copy.id})`, source);
+    this.commit({ type: "duplicateComponent", id, newId: copy.id });
+    return copy;
   }
 
   setAnimation(
@@ -542,6 +721,32 @@ class DesignStateStore extends EventEmitter {
     const engineLabel = animation.engine ? ` [${animation.engine}]` : "";
     this.logActivity("set_animation", node.type, `Set animation for ${node.type} (${componentId})${engineLabel}`, source);
     this.commit({ type: "setAnimation", componentId, animation: node.animation });
+    return true;
+  }
+
+  /**
+   * Bind or clear an interaction behavior on a component (行为模型 P1).
+   * Pass `null` to remove the behavior. Undoable like any mutation.
+   */
+  setBehavior(
+    componentId: string,
+    behavior: ComponentBehavior | null,
+    source: "ai" | "user" = "user"
+  ): boolean {
+    const node = this.findComponent(componentId);
+    if (!node) return false;
+    if (behavior && isBehaviorType(behavior.type)) {
+      node.behavior = { ...behavior };
+    } else {
+      delete node.behavior;
+    }
+    this.logActivity(
+      "set_behavior",
+      node.type,
+      `${node.type} 行为 → ${behavior && isBehaviorType(behavior.type) ? behavior.type : "无"}`,
+      source
+    );
+    this.commit({ type: "setBehavior", componentId, behavior: node.behavior || null });
     return true;
   }
 
@@ -636,7 +841,7 @@ class DesignStateStore extends EventEmitter {
     position: "before" | "after",
     source: "ai" | "user" = "ai"
   ): boolean {
-    const components = this.state.components;
+    const components = this.currentComponents();
     const fromIdx = components.findIndex((c) => c.id === fromId);
     const toIdx = components.findIndex((c) => c.id === toId);
     if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return false;
@@ -652,25 +857,187 @@ class DesignStateStore extends EventEmitter {
   }
 
   /**
+   * Align or distribute a set of components in freeform space (精确编辑 P0).
+   * All targets must exist; layouts are nudged as needed and committed once,
+   * so the whole operation is a single undo step. Returns false when fewer
+   * than two targets exist.
+   */
+  alignComponents(
+    ids: string[],
+    mode: AlignMode,
+    source: "ai" | "user" = "user"
+  ): boolean {
+    const targets = ids
+      .map((id) => this.findComponent(id))
+      .filter((c): c is ComponentNode => !!c);
+    if (targets.length < 2) return false;
+
+    const boxes = targets.map((c) => ({
+      x: c.layout?.x ?? 0,
+      y: c.layout?.y ?? 0,
+      w: c.layout?.w ?? 0,
+      h: c.layout?.h ?? 0,
+    }));
+    const minX = Math.min(...boxes.map((b) => b.x));
+    const maxX = Math.max(...boxes.map((b) => b.x + b.w));
+    const minY = Math.min(...boxes.map((b) => b.y));
+    const maxY = Math.max(...boxes.map((b) => b.y + b.h));
+
+    const apply = (fn: (b: { x: number; y: number; w: number; h: number }, i: number) => { x?: number; y?: number }): void => {
+      targets.forEach((c, i) => {
+        const next = fn(boxes[i], i);
+        if (next.x !== undefined || next.y !== undefined) {
+          c.layout = {
+            x: next.x ?? boxes[i].x,
+            y: next.y ?? boxes[i].y,
+            w: boxes[i].w,
+            h: boxes[i].h,
+          };
+        }
+      });
+    };
+
+    switch (mode) {
+      case "left":
+        apply((b) => ({ x: minX }));
+        break;
+      case "center_x":
+        apply((b) => ({ x: (minX + maxX) / 2 - b.w / 2 }));
+        break;
+      case "right":
+        apply((b) => ({ x: maxX - b.w }));
+        break;
+      case "top":
+        apply((b) => ({ y: minY }));
+        break;
+      case "center_y":
+        apply((b) => ({ y: (minY + maxY) / 2 - b.h / 2 }));
+        break;
+      case "bottom":
+        apply((b) => ({ y: maxY - b.h }));
+        break;
+      case "distribute_x": {
+        const ordered = [...boxes].sort((a, b) => a.x - b.x);
+        const span = maxX - minX;
+        const totalW = ordered.reduce((s, b) => s + b.w, 0);
+        const gap = (span - totalW) / (ordered.length - 1);
+        let cursor = minX;
+        apply((_b, i) => {
+          const x = cursor;
+          cursor += ordered[i].w + gap;
+          return { x };
+        });
+        break;
+      }
+      case "distribute_y": {
+        const ordered = [...boxes].sort((a, b) => a.y - b.y);
+        const span = maxY - minY;
+        const totalH = ordered.reduce((s, b) => s + b.h, 0);
+        const gap = (span - totalH) / (ordered.length - 1);
+        let cursor = minY;
+        apply((_b, i) => {
+          const y = cursor;
+          cursor += ordered[i].h + gap;
+          return { y };
+        });
+        break;
+      }
+      default:
+        return false;
+    }
+
+    this.logActivity("align_components", "component", `${mode} on ${targets.length} components`, source);
+    this.commit({ type: "alignComponents", ids, mode });
+    return true;
+  }
+
+  /**
+   * Reorder a component's stacking order (精确编辑 P0): front / back /
+   * forward / backward, within its containing list (top-level or nested).
+   */
+  zOrderComponent(id: string, mode: ZOrderMode, source: "ai" | "user" = "user"): boolean {
+    const locate = (
+      nodes: ComponentNode[]
+    ): { arr: ComponentNode[]; idx: number } | null => {
+      for (let i = 0; i < nodes.length; i++) {
+        if (nodes[i].id === id) return { arr: nodes, idx: i };
+        const found = locate(nodes[i].children);
+        if (found) return found;
+      }
+      return null;
+    };
+    const loc = locate(this.currentComponents());
+    if (!loc) return false;
+
+    const [node] = loc.arr.splice(loc.idx, 1);
+    let target: number;
+    switch (mode) {
+      case "front":
+        target = loc.arr.length;
+        break;
+      case "back":
+        target = 0;
+        break;
+      case "forward":
+        target = Math.min(loc.arr.length, loc.idx + 1);
+        break;
+      case "backward":
+        target = Math.max(0, loc.idx - 1);
+        break;
+      default:
+        loc.arr.splice(loc.idx, 0, node);
+        return false;
+    }
+    loc.arr.splice(target, 0, node);
+
+    this.logActivity("z_order", node.type, `${mode} ${node.type} (${id})`, source);
+    this.commit({ type: "zOrderComponent", id, mode });
+    return true;
+  }
+
+  /**
+   * Record the provenance of an imported product page (导入 → 调整 → 一键应用).
+   */
+  setImport(pageId: string, record: ImportRecord, source: "ai" | "user" = "user"): void {
+    if (!this.state.imports) this.state.imports = {};
+    this.state.imports[pageId] = record;
+    this.logActivity(
+      "import_record",
+      "import",
+      `Imported "${record.source}" (${record.component_count} components)`,
+      source
+    );
+    this.commit({ type: "setImport", pageId, record });
+  }
+
+  getImport(pageId: string | null | undefined): ImportRecord | null {
+    if (!pageId || !this.state.imports) return null;
+    return this.state.imports[pageId] || null;
+  }
+
+  /**
    * Replace the current page's component order with the given ID sequence
    * (components not in the list keep their relative order at the end).
    * Used by the reflow tool; recorded in undo history like any mutation.
    */
   setComponentsOrder(orderedIds: string[], source: "ai" | "user" = "user"): boolean {
-    const byId = new Map(this.state.components.map((c) => [c.id, c]));
+    const page = this.currentPage();
+    if (!page) return false;
+    const current = page.components;
+    const byId = new Map(current.map((c) => [c.id, c]));
     const next: ComponentNode[] = [];
     for (const id of orderedIds) {
       const comp = byId.get(id);
       if (comp) next.push(comp);
     }
     const idSet = new Set(orderedIds);
-    const remaining = this.state.components.filter((c) => !idSet.has(c.id));
+    const remaining = current.filter((c) => !idSet.has(c.id));
     const newOrder = [...next, ...remaining];
     if (
-      newOrder.length !== this.state.components.length ||
-      newOrder.some((c, i) => c.id !== this.state.components[i].id)
+      newOrder.length !== current.length ||
+      newOrder.some((c, i) => c.id !== current[i].id)
     ) {
-      this.state.components = newOrder;
+      page.components = newOrder;
       this.logActivity("reorder_page", "page", "Reflowed page to canonical section order", source);
       this.commit({ type: "reorderPage", ids: newOrder.map((c) => c.id) });
       return true;
@@ -679,7 +1046,7 @@ class DesignStateStore extends EventEmitter {
   }
 
   private checkComponentDependency(type: string): { hasWarning: boolean; message: string } {
-    const components = this.state.components;
+    const components = this.currentComponents();
     const hasType = (t: string) => components.some((c) => c.type === t);
 
     if (type === "footer" && !hasType("navbar")) {
@@ -704,7 +1071,6 @@ class DesignStateStore extends EventEmitter {
     };
     this.state.pages.push(page);
     this.state.currentPageId = page.id;
-    this.state.components = page.components;
     this.logActivity("add_page", "page", `Added page "${name}"`, source);
     this.commit({ type: "addPage", page });
     return page;
@@ -716,7 +1082,6 @@ class DesignStateStore extends EventEmitter {
     if (this.state.currentPageId === pageId) return true;
 
     this.state.currentPageId = pageId;
-    this.state.components = page.components;
     this.logActivity("switch_page", "page", `Switched to page "${page.name}"`, source);
     this.commit({ type: "switchPage", pageId });
     return true;
@@ -733,7 +1098,6 @@ class DesignStateStore extends EventEmitter {
     if (this.state.currentPageId === pageId) {
       const newPage = this.state.pages[0];
       this.state.currentPageId = newPage.id;
-      this.state.components = newPage.components;
     }
 
     this.logActivity("remove_page", "page", `Removed page (${pageId})`, source);
@@ -776,7 +1140,6 @@ class DesignStateStore extends EventEmitter {
     this.state.currentPageId = pages.some((p) => p.id === snapshot.currentPageId)
       ? snapshot.currentPageId
       : pages[0]?.id ?? null;
-    this.fixComponentsReference();
     this.logActivity("load_platform", "platform", `Restored ${platform} platform design`, source);
     this.commit({ type: "loadPlatform", platform });
     return snapshot;
@@ -823,6 +1186,66 @@ class DesignStateStore extends EventEmitter {
     return true;
   }
 
+  // ===== Page Links (Play Mode) =====
+
+  addPageLink(
+    fromPageId: string,
+    toPageId: string,
+    label?: string,
+    sourceComponentId?: string,
+    source: "ai" | "user" = "user"
+  ): PageLink {
+    const fromPage = this.state.pages.find((p) => p.id === fromPageId);
+    if (!fromPage) throw new Error(`Source page must exist: ${fromPageId}`);
+    const toPage = this.state.pages.find((p) => p.id === toPageId);
+    if (!toPage) throw new Error(`Target page must exist: ${toPageId}`);
+
+    // One link per source component: re-linking replaces the old link.
+    if (sourceComponentId) {
+      const existing = this.state.pageLinks.findIndex(
+        (l) => l.source_component_id === sourceComponentId
+      );
+      if (existing !== -1) {
+        this.state.pageLinks.splice(existing, 1);
+        this.logActivity(
+          "replace_page_link",
+          "page_link",
+          `Replaced link for ${sourceComponentId}: ${fromPage.name} → ${toPage.name}`,
+          source
+        );
+      }
+    }
+
+    const link: PageLink = {
+      id: `link_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      from_page_id: fromPageId,
+      to_page_id: toPageId,
+    };
+    if (label) link.label = label;
+    if (sourceComponentId) link.source_component_id = sourceComponentId;
+    this.state.pageLinks.push(link);
+    if (this.state.pageLinks.length > 500) {
+      this.state.pageLinks = this.state.pageLinks.slice(-500);
+    }
+    this.logActivity(
+      "add_page_link",
+      "page_link",
+      `Linked ${fromPage.name} → ${toPage.name}`,
+      source
+    );
+    this.commit({ type: "addPageLink", link });
+    return link;
+  }
+
+  removePageLink(linkId: string, source: "ai" | "user" = "user"): boolean {
+    const idx = this.state.pageLinks.findIndex((l) => l.id === linkId);
+    if (idx === -1) return false;
+    this.state.pageLinks.splice(idx, 1);
+    this.logActivity("remove_page_link", "page_link", `Removed page link ${linkId}`, source);
+    this.commit({ type: "removePageLink", linkId });
+    return true;
+  }
+
   // ===== Clear All =====
 
   clearAll(source: "ai" | "user" = "ai"): void {
@@ -843,10 +1266,10 @@ class DesignStateStore extends EventEmitter {
     };
     this.state.pages = [defaultPage];
     this.state.currentPageId = defaultPage.id;
-    this.state.components = defaultPage.components;
     this.state.themeMode = "light";
     this.state.canvasDocs = {};
     this.state.canvasDraws = {};
+    this.state.imports = {};
     this.state.scroll = undefined;
     this.state.vantaBackgrounds = undefined;
     this.state.reactBits = undefined;
@@ -895,7 +1318,6 @@ class DesignStateStore extends EventEmitter {
         radii: tokens.radii || {},
         transitions: tokens.transitions || {},
       },
-      components: [],
       activityLog: Array.isArray(snapshot.activityLog)
         ? snapshot.activityLog.slice(0, 100)
         : [],
@@ -906,6 +1328,7 @@ class DesignStateStore extends EventEmitter {
         typeof snapshot.activePlatform === "string" ? snapshot.activePlatform : "web-desktop",
       platforms: snapshot.platforms && typeof snapshot.platforms === "object" ? snapshot.platforms : {},
       comments: Array.isArray(snapshot.comments) ? snapshot.comments.slice(0, 200) : [],
+      pageLinks: Array.isArray(snapshot.pageLinks) ? snapshot.pageLinks.slice(0, 500) : [],
       revision: typeof snapshot.revision === "number" ? snapshot.revision : 0,
       canvasDocs:
         snapshot.canvasDocs && typeof snapshot.canvasDocs === "object"
@@ -914,6 +1337,10 @@ class DesignStateStore extends EventEmitter {
       canvasDraws:
         snapshot.canvasDraws && typeof snapshot.canvasDraws === "object"
           ? JSON.parse(JSON.stringify(snapshot.canvasDraws))
+          : {},
+      imports:
+        snapshot.imports && typeof snapshot.imports === "object"
+          ? JSON.parse(JSON.stringify(snapshot.imports))
           : {},
       scroll: snapshot.scroll && typeof snapshot.scroll === "object"
         ? JSON.parse(JSON.stringify(snapshot.scroll))
@@ -929,7 +1356,6 @@ class DesignStateStore extends EventEmitter {
           ? snapshot.exportRuntime
           : "standard",
     };
-    this.fixComponentsReference();
 
     // Reset undo/redo history and pending prompt to the restored baseline.
     this.history = [JSON.parse(JSON.stringify(this.state))];
@@ -977,7 +1403,6 @@ class DesignStateStore extends EventEmitter {
         radii: {},
         transitions: {},
       },
-      components: defaultPage.components,
       activityLog: [],
       pages: [defaultPage],
       currentPageId: defaultPage.id,
@@ -985,9 +1410,11 @@ class DesignStateStore extends EventEmitter {
       activePlatform: "web-desktop",
       platforms: {},
       comments: [],
+      pageLinks: [],
       revision: 0,
       canvasDocs: {},
       canvasDraws: {},
+      imports: {},
       scroll: undefined,
       vantaBackgrounds: undefined,
       reactBits: undefined,
@@ -1073,9 +1500,6 @@ class DesignStateStore extends EventEmitter {
     const page = this.state.pages.find((p) => p.id === pageId);
     if (!page) return false;
     page.components = components;
-    if (this.state.currentPageId === pageId) {
-      this.state.components = components;
-    }
     this.logActivity(
       "replace_components",
       "canvas",
@@ -1149,7 +1573,7 @@ class DesignStateStore extends EventEmitter {
       }
       return null;
     };
-    return search(this.state.components);
+    return search(this.currentComponents());
   }
 
   private removeFromTree(nodes: ComponentNode[], id: string): boolean {

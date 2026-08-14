@@ -35,8 +35,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { WebSocketServer, WebSocket } from "ws";
 import { SERVER_NAME, SERVER_VERSION } from "./constants.js";
-import { stateStore, type ComponentNode } from "./state.js";
-import { applyStyleTokenSet } from "./tokens.js";
+import { stateStore } from "./state.js";
 
 // Shared mutation layer (used by both REST and WebSocket channels)
 import * as designService from "./service/design-service.js";
@@ -56,12 +55,11 @@ import { registerDesignTokensTool } from "./tools/design-tokens.js";
 import {
   registerAllDesignTools,
   exportDesign,
-  exportComponentCode,
   applyPageTemplate,
 } from "./tools/design-tools.js";
 
 // Project import module
-import { importClientUi, scanProject, type ExtractedPage } from "./import-project.js";
+import { scanProject } from "./import-project.js";
 
 // Project persistence (save / load / autosave)
 import { registerProjectTools } from "./tools/project-tools.js";
@@ -69,12 +67,9 @@ import {
   autosavePath,
   enableAutoSave,
   loadProject,
-  listProjects,
-  saveProject,
 } from "./project-store.js";
 import { listTemplates, loadTemplate, saveTemplate } from "./templates.js";
 import { createVersion, diffVersions, listVersions, restoreVersion } from "./versions.js";
-import { writebackAll, writebackPreview, writebackTokens, type WritebackMode } from "./writeback.js";
 
 // Phase B capabilities: token interop, a11y audit, render preview, resources, prompts
 import { registerTokenInteropTools } from "./tools/token-interop.js";
@@ -86,6 +81,7 @@ import { registerDesignMdTool } from "./tools/design-md.js";
 import { registerStyleGuideTools } from "./tools/style-guide-tools.js";
 import { applyStyleGuide, BRAND_DESIGN_SYSTEMS } from "./style-guides.js";
 import { registerSemanticStyleTool } from "./tools/semantic-tools.js";
+import { registerExplainTool, explainDesign } from "./tools/explain-tools.js";
 import { registerCapabilitiesTool } from "./tools/capabilities.js";
 import { registerWebpageImportTool } from "./tools/webpage-import.js";
 import { registerSpecTools } from "./tools/spec-tools.js";
@@ -93,7 +89,6 @@ import { registerPlatformTools } from "./tools/platform-tools.js";
 import { registerCollabTools } from "./tools/collab-tools.js";
 import { registerGeneratePageTool } from "./tools/generate-tools.js";
 import { registerCanvasTools } from "./tools/canvas-tools.js";
-import { canvasToHtml, shapesToComponents } from "./canvas-shapes.js";
 import {
   registerSuggestTool,
   registerBrandStyleTool,
@@ -113,6 +108,18 @@ import { registerReactBitsTools } from "./tools/react-bits-tools.js";
 // registry from ./animations/index.js, so the registry is initialized first.
 import "./animations/css-presets.js";
 import "./animations/gsap-presets.js";
+
+// Route modules (P2.2: routes split into dedicated files)
+import { registerCanvasRoutes } from "./routes/canvas.js";
+import { registerTokensRoutes } from "./routes/tokens.js";
+import { registerComponentsRoutes } from "./routes/components.js";
+import { registerProjectsRoutes } from "./routes/projects.js";
+import { errorHandler } from "./routes/shared.js";
+
+// Built-in LLM channel (product definition v2: BYO API key, no external agent)
+import { registerLlmRoutes } from "./llm/routes.js";
+import { hasLlm, loadLlmConfig } from "./llm/config.js";
+import { generatePageFromPrompt } from "./llm/agent.js";
 
 // ===== Server Initialization =====
 
@@ -158,6 +165,7 @@ registerDesignMdTool(server);
 registerWebpageImportTool(server);
 registerStyleGuideTools(server);
 registerSemanticStyleTool(server);
+registerExplainTool(server);
 
 // Self-describing capability manifest
 registerCapabilitiesTool(server);
@@ -204,150 +212,18 @@ app.use(express.json());
 app.use(express.static(clientDir));
 app.use("/previews", express.static(previewsDir()));
 
+// Mount extracted route modules (P2.2)
+app.use(registerCanvasRoutes());
+app.use(registerTokensRoutes());
+app.use(registerComponentsRoutes());
+app.use(registerProjectsRoutes());
+
+// Built-in LLM channel routes (AI settings + generation)
+registerLlmRoutes(app);
+
 // API: Get current state
 app.get("/api/state", (_req, res) => {
   res.json(stateStore.getState());
-});
-
-// API: Update token (from client slider adjustment)
-app.post("/api/token", (req, res) => {
-  const { category, key, value } = req.body;
-  if (!category || !key || !value) {
-    res.status(400).json({ error: "Missing category, key, or value" });
-    return;
-  }
-  try {
-    designService.setToken(category, key, value, "user");
-    res.json({ success: true });
-  } catch (error) {
-    res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
-  }
-});
-
-// API: Reorder component (from client drag-and-drop)
-// NOTE: Must be defined before /api/component/:id to avoid route conflict
-app.post("/api/component/reorder", (req, res) => {
-  const { from_id, to_id, position } = req.body;
-  if (!from_id || !to_id || !position) {
-    res.status(400).json({ error: "Missing from_id, to_id, or position" });
-    return;
-  }
-  const success = designService.reorderComponent(from_id, to_id, position, "user");
-  res.json({ success });
-});
-
-// API: Inspect — export a single component as code (HTML / React / CSS)
-function findComponentInState(id: string): ComponentNode | null {
-  const state = stateStore.getState();
-  const search = (list: ComponentNode[]): ComponentNode | null => {
-    for (const c of list) {
-      if (c.id === id) return c;
-      const found = search(c.children || []);
-      if (found) return found;
-    }
-    return null;
-  };
-  for (const page of state.pages) {
-    const found = search(page.components);
-    if (found) return found;
-  }
-  return null;
-}
-
-app.get("/api/component/:id/code", (req, res) => {
-  const format = typeof req.query.format === "string" ? req.query.format : "html";
-  if (!["html", "react", "css"].includes(format)) {
-    res.status(400).json({ error: "Invalid format. Must be 'html', 'react', or 'css'" });
-    return;
-  }
-  const comp = findComponentInState(req.params.id);
-  if (!comp) {
-    res.status(404).json({ error: `Component ${req.params.id} not found` });
-    return;
-  }
-  const code = exportComponentCode(comp, format, stateStore.getState().tokens);
-  res.json({ success: true, id: comp.id, type: comp.type, format, code });
-});
-
-// API: Update component (from client inline edit)
-app.post("/api/component/:id", (req, res) => {
-  const { id } = req.params;
-  const { props } = req.body;
-  const success = designService.updateComponent(id, props, "user");
-  res.json({ success });
-});
-
-// API: Remove component (from client)
-app.delete("/api/component/:id", (req, res) => {
-  const { id } = req.params;
-  const success = designService.removeComponent(id, "user");
-  res.json({ success });
-});
-
-// API: Undo
-app.post("/api/undo", (_req, res) => {
-  const success = designService.undo();
-  res.json({ success, canUndo: stateStore.canUndo(), canRedo: stateStore.canRedo() });
-});
-
-// API: Redo
-app.post("/api/redo", (_req, res) => {
-  const success = designService.redo();
-  res.json({ success, canUndo: stateStore.canUndo(), canRedo: stateStore.canRedo() });
-});
-
-// API: Add page
-app.post("/api/page", (req, res) => {
-  const { name } = req.body;
-  if (!name) {
-    res.status(400).json({ error: "Missing page name" });
-    return;
-  }
-  const page = designService.addPage(name, "user");
-  res.json({ success: true, page_id: page.id, name: page.name });
-});
-
-// API: Switch page
-app.post("/api/page/:id/switch", (req, res) => {
-  const { id } = req.params;
-  const success = designService.switchPage(id, "user");
-  res.json({ success });
-});
-
-// API: Remove page
-app.delete("/api/page/:id", (req, res) => {
-  const { id } = req.params;
-  const success = designService.removePage(id, "user");
-  res.json({ success });
-});
-
-// API: Rename page
-app.post("/api/page/:id/rename", (req, res) => {
-  const { id } = req.params;
-  const { name } = req.body;
-  if (!name) {
-    res.status(400).json({ error: "Missing page name" });
-    return;
-  }
-  const success = designService.renamePage(id, name, "user");
-  res.json({ success });
-});
-
-// API: Set theme mode
-app.post("/api/theme", (req, res) => {
-  const { mode } = req.body;
-  if (mode !== "light" && mode !== "dark") {
-    res.status(400).json({ error: "Mode must be 'light' or 'dark'" });
-    return;
-  }
-  designService.setTheme(mode, "user");
-  res.json({ success: true, mode });
-});
-
-// API: Get token conflicts
-app.get("/api/conflicts", (_req, res) => {
-  const conflicts = stateStore.getTokenConflicts();
-  res.json({ conflicts, count: conflicts.length });
 });
 
 // API: Export design as code
@@ -372,289 +248,59 @@ app.post("/api/prompt", (req, res) => {
     res.status(400).json({ error: "Missing prompt string" });
     return;
   }
-  designService.setPendingPrompt(prompt);
-  broadcastPromptQueued(prompt);
-  res.json({ success: true });
-});
-
-// API: Import project from folder path — scans for HTML/JSX/Vue files and extracts pages
-app.post("/api/import", async (req, res) => {
-  const { path: folderPath, clear_existing } = req.body;
-  if (!folderPath || typeof folderPath !== "string") {
-    res.status(400).json({ error: "Missing 'path' field (project folder path)" });
-    return;
-  }
-
-  try {
-    // Validate path exists
-    const fs = await import("fs");
-    if (!fs.existsSync(folderPath)) {
-      res.status(404).json({ error: `Path not found: ${folderPath}` });
-      return;
-    }
-
-    const stat = fs.statSync(folderPath);
-    if (!stat.isDirectory()) {
-      res.status(400).json({ error: `Path is not a directory: ${folderPath}` });
-      return;
-    }
-
-    // Scan and parse the project
-    const result = scanProject(folderPath);
-
-    if (result.pages.length === 0) {
+  const result = designService.submitPrompt(prompt);
+  if (!result.executed) {
+    if (hasLlm()) {
+      // The built-in LLM channel takes over asynchronously.
+      broadcastPromptQueued(prompt);
+      runLlmPromptAsync(prompt);
       res.json({
-        success: false,
-        message: "No supported files found (HTML, JSX, TSX, Vue)",
-        scannedFiles: result.scannedFiles,
+        success: true,
+        executed: false,
+        action: result.action || null,
+        summary: result.summary,
+        suggestions: result.suggestions || [],
+        llm: "generating",
       });
       return;
     }
+    // Handed to the external agent queue; tell dashboards it was queued.
+    broadcastPromptQueued(prompt);
+  }
+  res.json({
+    success: true,
+    executed: result.executed,
+    action: result.action || null,
+    summary: result.summary,
+    suggestions: result.suggestions || [],
+  });
+});
 
-    // Optionally clear existing state
-    if (clear_existing) {
-      stateStore.clearAll("ai");
+/**
+ * Run the built-in LLM channel on a prompt the local engine could not match.
+ * Success broadcasts through the normal `prompt_executed` pipeline; failures
+ * broadcast a dedicated `llm_error` so the dashboard can show the reason.
+ */
+async function runLlmPromptAsync(prompt: string): Promise<void> {
+  const cfg = loadLlmConfig();
+  if (!cfg) return;
+  const result = await generatePageFromPrompt(prompt, cfg);
+  if (result.ok) {
+    stateStore.clearPendingPrompt();
+    stateStore.recordPromptExecuted(result.summary, "llm_generate");
+  } else {
+    broadcastLlmError(result.error || "AI 生成失败");
+  }
+}
+
+function broadcastLlmError(summary: string): void {
+  const message = JSON.stringify({ type: "llm_error", summary });
+  wss.clients.forEach((client: WebSocket) => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(message);
     }
-
-    // Get the current project name or use the folder name
-    const projectName = path.basename(folderPath);
-    stateStore.setProjectName(projectName, "ai");
-
-    // Create pages from extracted content
-    const createdPages: Array<{ id: string; name: string; componentCount: number }> = [];
-
-    for (const page of result.pages) {
-      // Create a new page
-      const newPage = stateStore.addPage(page.name, "ai");
-
-      // Add each extracted component to the page
-      for (const comp of page.components) {
-        stateStore.addComponent(
-          comp.type,
-          comp.variant,
-          comp.props,
-          null,
-          "ai"
-        );
-      }
-
-      createdPages.push({
-        id: newPage.id,
-        name: page.name,
-        componentCount: page.components.length,
-      });
-    }
-
-    // Switch to the first imported page
-    if (createdPages.length > 0) {
-      stateStore.switchPage(createdPages[0].id, "ai");
-    }
-
-    res.json({
-      success: true,
-      project_name: projectName,
-      scanned_files: result.scannedFiles,
-      pages_imported: createdPages.length,
-      total_components: result.totalComponents,
-      pages: createdPages,
-    });
-  } catch (error) {
-    res.status(500).json({
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
-});
-
-// API: Import the Prism client dashboard shell so the service can open and
-// adjust the project's own UI on the canvas.
-app.post("/api/import-client", (req, res) => {
-  const { clear_existing } = req.body || {};
-  try {
-    const result = importClientUi(clear_existing === true);
-    stateStore.setProjectName("Prism 客户端", "ai");
-    stateStore.setStyle("minimal", "ai");
-    applyStyleTokenSet(stateStore, "minimal", "#7C3AED", "ai");
-    stateStore.switchPage(result.pageId, "ai");
-    res.json({ success: true, ...result });
-  } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
-  }
-});
-
-// API: Capture the live dashboard itself with Playwright and drop the
-// screenshot into the canvas as a reference image.
-app.post("/api/capture-client", async (_req, res) => {
-  try {
-    const { captureUrlPng } = await import("./tools/design-render.js");
-    const url = `http://127.0.0.1:${PORT}/`;
-    const png = await captureUrlPng(url, "desktop");
-    const file = `capture-${Date.now()}.png`;
-    const { writeFileSync } = await import("fs");
-    writeFileSync(path.join(previewsDir(), file), png);
-    const node = stateStore.addComponent(
-      "image",
-      undefined,
-      { src: `/previews/${file}`, alt: "Prism 实际界面" },
-      null,
-      "user"
-    );
-    res.json({ success: true, file, url, component_id: node.id, bytes: png.length });
-  } catch (error) {
-    res.status(501).json({ error: error instanceof Error ? error.message : String(error) });
-  }
-});
-
-// API: One-click write-back — design tokens into client/style.css (with backup)
-// and the full design into client/design-writeback.html.
-app.post("/api/writeback", (req, res) => {
-  const bodyMode = (req.body || {}).mode;
-  const mode: WritebackMode = bodyMode === "preview" || bodyMode === "all" ? bodyMode : "tokens";
-  try {
-    const clientDir = process.env.PRISM_CLIENT_DIR || path.resolve(__dirname, "..", "client");
-    const result =
-      mode === "all"
-        ? writebackAll(clientDir)
-        : mode === "preview"
-          ? writebackPreview(clientDir)
-          : writebackTokens(clientDir);
-    res.json({ success: true, ...result });
-  } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
-  }
-});
-
-// API: Get the tldraw canvas document for a page (defaults to current page)
-app.get("/api/canvas", (req, res) => {
-  const state = stateStore.getState();
-  const pageId =
-    typeof req.query.pageId === "string" ? req.query.pageId : state.currentPageId;
-  if (!pageId) {
-    res.status(400).json({ error: "No page id" });
-    return;
-  }
-  const doc = stateStore.getCanvasDoc(pageId);
-  res.json({ success: true, page_id: pageId, doc });
-});
-
-// API: Save the tldraw canvas document for a page
-app.post("/api/canvas", (req, res) => {
-  const state = stateStore.getState();
-  const pageId =
-    typeof (req.body || {}).pageId === "string"
-      ? (req.body as { pageId: string }).pageId
-      : state.currentPageId;
-  const doc = (req.body || {}).doc;
-  if (!pageId || !doc || typeof doc !== "object") {
-    res.status(400).json({ error: "Missing pageId or canvas doc" });
-    return;
-  }
-  try {
-    stateStore.saveCanvasDoc(pageId, doc, "user");
-    res.json({ success: true, page_id: pageId, revision: stateStore.getState().revision });
-  } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
-  }
-});
-
-// API: Apply the current page's canvas drawing to the component model
-app.post("/api/canvas/apply", (_req, res) => {
-  const state = stateStore.getState();
-  const pageId = state.currentPageId;
-  const doc = stateStore.getCanvasDoc(pageId);
-  if (!pageId || !doc) {
-    res.status(400).json({ error: "No canvas document for the current page" });
-    return;
-  }
-  try {
-    const components = shapesToComponents(doc);
-    stateStore.replacePageComponents(pageId, components, "user");
-    res.json({
-      success: true,
-      page_id: pageId,
-      component_count: components.length,
-      components,
-    });
-  } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
-  }
-});
-
-// API: Write the canvas drawing back to a real HTML file in the client folder
-app.post("/api/canvas/export", async (_req, res) => {
-  const state = stateStore.getState();
-  const doc = stateStore.getCanvasDoc(state.currentPageId);
-  if (!doc) {
-    res.status(400).json({ error: "No canvas document for the current page" });
-    return;
-  }
-  try {
-    const html = canvasToHtml(doc, state.tokens);
-    const fs = await import("fs");
-    const targetClientDir = process.env.PRISM_CLIENT_DIR || clientDir;
-    const out = path.join(targetClientDir, "canvas-page.html");
-    fs.writeFileSync(out, html, "utf-8");
-    res.json({ success: true, file: out, size: html.length, component_count: shapesToComponents(doc).length });
-  } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
-  }
-});
-
-// API: Queue AI drawing commands for the current page's canvas
-app.post("/api/canvas/draw", (req, res) => {
-  const state = stateStore.getState();
-  const shapes = (req.body || {}).shapes;
-  if (!Array.isArray(shapes) || shapes.length === 0) {
-    res.status(400).json({ error: "Missing shapes array" });
-    return;
-  }
-  try {
-    const queued = stateStore.addCanvasDraws(shapes, state.currentPageId, "ai");
-    res.json({ success: true, page_id: state.currentPageId, queued: queued.length });
-  } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
-  }
-});
-
-// API: Clear the applied draw queue for a page
-app.post("/api/canvas/draws/clear", (req, res) => {
-  const state = stateStore.getState();
-  const pageId =
-    typeof (req.body || {}).pageId === "string"
-      ? (req.body as { pageId: string }).pageId
-      : state.currentPageId;
-  const cleared = stateStore.clearCanvasDraws(pageId, "user");
-  res.json({ success: true, cleared });
-});
-
-// API: Initialize design project (mirrors design_init MCP tool)
-app.post("/api/init", (req, res) => {
-  const { project_name, style, base_color } = req.body;
-  if (!project_name || !style) {
-    res.status(400).json({ error: "Missing project_name or style" });
-    return;
-  }
-  try {
-    const result = designService.initProject(project_name, style, base_color);
-    res.json(result);
-  } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
-  }
-});
-
-// API: Add component to canvas (mirrors design_add_component MCP tool)
-app.post("/api/component", (req, res) => {
-  const { type, variant, props, parent_id } = req.body;
-  if (!type) {
-    res.status(400).json({ error: "Missing component type" });
-    return;
-  }
-  try {
-    const node = designService.addComponent(type, variant, props || {}, parent_id || null, "ai");
-    res.json({ success: true, id: node.id, type: node.type });
-  } catch (error) {
-    res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
-  }
-});
+  });
+}
 
 // API: Apply a page template (used by the canvas empty-state "start from template")
 app.post("/api/template", (req, res) => {
@@ -797,73 +443,10 @@ app.post("/api/version/:id/restore", (req, res) => {
   }
 });
 
-// API: Add a review comment
-app.post("/api/comment", (req, res) => {
-  const { component_id, text, author } = req.body || {};
-  if (!component_id || !text) {
-    res.status(400).json({ error: "Missing component_id or text" });
-    return;
-  }
-  try {
-    const comment = stateStore.addComment(component_id, String(text), typeof author === "string" ? author : "user", "user");
-    res.json({ success: true, comment });
-  } catch (error) {
-    res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
-  }
-});
-
-// API: List comments (optionally filtered by component)
-app.get("/api/comments", (req, res) => {
-  const componentId = typeof req.query.component_id === "string" ? req.query.component_id : undefined;
-  const all = stateStore.getState().comments;
-  const comments = componentId ? all.filter((c) => c.component_id === componentId) : all;
-  res.json({ success: true, count: comments.length, comments });
-});
-
-// API: Remove a comment
-app.delete("/api/comment/:id", (req, res) => {
-  const ok = stateStore.removeComment(req.params.id, "user");
-  if (!ok) {
-    res.status(404).json({ success: false, error: `Comment ${req.params.id} not found` });
-    return;
-  }
-  res.json({ success: true, comment_id: req.params.id });
-});
-
-// API: Save project to disk
-app.post("/api/project/save", (req, res) => {
-  const { name, file } = req.body || {};
-  try {
-    const result = saveProject(typeof name === "string" ? name : undefined, typeof file === "string" ? file : undefined);
-    res.json({ success: true, ...result });
-  } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
-  }
-});
-
-// API: Load project from disk
-app.post("/api/project/load", (req, res) => {
-  const { file } = req.body || {};
-  if (!file || typeof file !== "string") {
-    res.status(400).json({ error: "Missing 'file' field (path to .prism.json)" });
-    return;
-  }
-  try {
-    const result = loadProject(file);
-    res.json({ success: true, ...result });
-  } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
-  }
-});
-
-// API: List saved projects
-app.get("/api/projects", (_req, res) => {
-  try {
-    const projects = listProjects();
-    res.json({ success: true, count: projects.length, projects });
-  } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
-  }
+// API: Explain the current design in plain language (read-only)
+app.get("/api/explain", (req, res) => {
+  const lang = req.query.lang === "en" ? "en" : "zh";
+  res.json({ success: true, ...explainDesign(lang) });
 });
 
 // API: Render the current design as HTML, or as a real PNG screenshot
@@ -906,6 +489,9 @@ app.get("/health", (_req, res) => {
     clients: wss.clients.size,
   });
 });
+
+// Unified error-handling middleware (must be registered after all routes)
+app.use(errorHandler);
 
 // ===== WebSocket: Real-time sync =====
 
@@ -956,11 +542,42 @@ wss.on("connection", (ws: WebSocket) => {
         ws.send(JSON.stringify({ type: "error", message: `Invalid client message — ${issues}` }));
         return;
       }
+      // Prompts run through the built-in executor first; the client gets an
+      // immediate acknowledgment with the outcome (executed / queued +
+      // suggestions) instead of a silent queue. When the local engine cannot
+      // match and an LLM channel is configured, the built-in AI takes over.
+      if (parsed.data.type === "prompt") {
+        const result = designService.submitPrompt(parsed.data.prompt);
+        if (!result.executed && hasLlm()) {
+          broadcastPromptQueued(parsed.data.prompt);
+          ws.send(
+            JSON.stringify({
+              type: "prompt_result",
+              executed: false,
+              action: null,
+              summary: "",
+              suggestions: result.suggestions || [],
+              llm: "generating",
+            })
+          );
+          runLlmPromptAsync(parsed.data.prompt);
+          return;
+        }
+        if (!result.executed) broadcastPromptQueued(parsed.data.prompt);
+        ws.send(
+          JSON.stringify({
+            type: "prompt_result",
+            executed: result.executed,
+            action: result.action || null,
+            summary: result.summary,
+            suggestions: result.suggestions || [],
+          })
+        );
+        return;
+      }
       const result = designService.applyClientMessage(parsed.data);
       if (!result.ok) {
         ws.send(JSON.stringify({ type: "error", message: result.detail }));
-      } else if (parsed.data.type === "prompt") {
-        broadcastPromptQueued(parsed.data.prompt);
       }
     } catch (error) {
       ws.send(JSON.stringify({ type: "error", message: `Malformed message: ${error instanceof Error ? error.message : String(error)}` }));
@@ -1036,9 +653,23 @@ function broadcastPromptExecuted(summary: string, action: string): void {
 // ===== Broadcast state changes to all WebSocket clients =====
 
 stateStore.on("change", (change: unknown) => {
+  const c = change as {
+    type?: string;
+    category?: string;
+    key?: string;
+    value?: string;
+    tokens?: Record<string, string>;
+  };
+  let patch: Record<string, unknown> | undefined;
+  if (c && c.type === "token") {
+    patch = { category: c.category, key: c.key, value: c.value };
+  } else if (c && c.type === "tokenBatch") {
+    patch = { category: c.category, tokens: c.tokens };
+  }
   const message = JSON.stringify({
     type: "change",
     change,
+    patch,
     state: stateStore.getState(),
   });
   wss.clients.forEach((client: WebSocket) => {

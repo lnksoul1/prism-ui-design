@@ -92,6 +92,11 @@ const TOOL_MANIFEST: Array<{ name: string; group: string; summary: string; examp
   // C6 one-shot generation
   { name: "design_generate_page", group: "semantics", summary: "Generate a page from a brief (template + semantic style)", example: 'design_generate_page(brief="电商促销首页", adjectives=["温暖","简约"])' },
   { name: "design_review_and_improve", group: "review", summary: "One-call review loop: score, fix, re-score + a11y audit", example: "design_review_and_improve()" },
+  // Non-professional UX
+  { name: "design_explain_design", group: "semantics", summary: "Explain the current design in plain language + suggest follow-up instructions", example: 'design_explain_design(lang="zh")' },
+  { name: "design_set_behavior", group: "interaction", summary: "Bind an interaction behavior to a component (navigate/link/toggle/toast/submit/prompt)", example: 'design_set_behavior(component_id="comp_x", behavior={"type":"navigate","page_id":"page_2"})' },
+  { name: "design_align_components", group: "design", summary: "Align/distribute multiple components (freeform, single undo step)", example: 'design_align_components(ids=["comp_1","comp_2"], mode="center_x")' },
+  { name: "design_z_order_component", group: "design", summary: "Reorder component stacking (front/back/forward/backward)", example: 'design_z_order_component(component_id="comp_x", mode="front")' },
   // Upgrade plan U1: Lenis smooth scroll + GSAP animation engine
   { name: "design_set_scroll", group: "upgrade", summary: "Configure scroll mode (native/smooth/lenis-gsap)", example: 'design_set_scroll(mode="lenis-gsap")' },
   { name: "design_get_scroll", group: "upgrade", summary: "Read current scroll config", example: "design_get_scroll()" },

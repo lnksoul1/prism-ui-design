@@ -68,10 +68,17 @@ test("clears the design", () => {
   assert.equal(stateStore.getState().components.length, 0);
 });
 
-test("leaves unmatched instructions queued for the agent", () => {
+test("leaves unmatched instructions queued for the agent, with example suggestions", () => {
   const result = executeUserPrompt("帮我把配色优化得更高级一点");
   assert.equal(result.executed, false);
-  assert.equal(result.summary, "");
+  assert.ok(Array.isArray(result.suggestions) && result.suggestions.length > 0);
+  assert.ok(result.suggestions!.some((s) => s.includes("主色")));
+});
+
+test("unmatched English instructions also get English suggestions", () => {
+  const result = executeUserPrompt("please make the whole thing feel more premium");
+  assert.equal(result.executed, false);
+  assert.ok(result.suggestions!.some((s) => s.includes("primary color")));
 });
 
 test("component styling: color targets the button, not the global token", () => {
@@ -131,4 +138,123 @@ test("component styling: '添加一个按钮' still adds instead of styling", ()
   const result = executeUserPrompt("添加一个按钮");
   assert.equal(result.executed, true);
   assert.equal(stateStore.getState().components[0].type, "button");
+});
+
+// ===== v2: everyday vocabulary for non-professionals =====
+
+test("text edit: quoted title change updates component copy", () => {
+  stateStore.addComponent("hero", undefined, { title: "旧标题" }, null, "ai");
+  const result = executeUserPrompt("把标题改成「我们的新产品来了」");
+  assert.equal(result.executed, true);
+  assert.equal(result.action, "edit_text");
+  assert.equal(stateStore.getState().components[0].props.title, "我们的新产品来了");
+});
+
+test("text edit: targets only the named component type", () => {
+  stateStore.addComponent("hero", undefined, { title: "Hero" }, null, "ai");
+  stateStore.addComponent("button", undefined, { text: "点击" }, null, "ai");
+  const result = executeUserPrompt('把按钮文字改成 "立即购买"');
+  assert.equal(result.executed, true);
+  const components = stateStore.getState().components;
+  const hero = components.find((c) => c.type === "hero");
+  const button = components.find((c) => c.type === "button");
+  assert.equal(hero!.props.title, "Hero", "hero must be untouched");
+  assert.equal(button!.props.text, "立即购买");
+});
+
+test("text color: '把文字改成蓝色' sets the color-text token, not copy", () => {
+  stateStore.addComponent("hero", undefined, { title: "Hero" }, null, "ai");
+  const result = executeUserPrompt("把文字改成蓝色");
+  assert.equal(result.executed, true);
+  assert.equal(result.action, "set_text_color");
+  assert.equal(stateStore.getState().tokens.colors["color-text"].value, "#3B82F6");
+  assert.equal(stateStore.getState().components[0].props.title, "Hero");
+});
+
+test("font scale: '字太小了' increases the type tokens", () => {
+  const before = parseFloat(stateStore.getState().tokens.typography["text-base"].value);
+  const result = executeUserPrompt("字太小了，大一点");
+  assert.equal(result.executed, true);
+  const after = parseFloat(stateStore.getState().tokens.typography["text-base"].value);
+  assert.ok(after > before, `expected ${after} > ${before}`);
+});
+
+test("absolute font size: '字号改成 20' rescales the type tokens", () => {
+  const result = executeUserPrompt("字号改成 20");
+  assert.equal(result.executed, true);
+  const base = parseFloat(stateStore.getState().tokens.typography["text-base"].value);
+  assert.ok(Math.abs(base - 1.25) < 0.06, `expected ~1.25rem, got ${base}`);
+});
+
+test("spacing: '间距更紧凑' tightens the spacing tokens", () => {
+  const before = parseFloat(stateStore.getState().tokens.spacing["space-md"].value);
+  const result = executeUserPrompt("间距更紧凑一点");
+  assert.equal(result.executed, true);
+  const after = parseFloat(stateStore.getState().tokens.spacing["space-md"].value);
+  assert.ok(after < before, `expected ${after} < ${before}`);
+});
+
+test("radius: '改成直角' shrinks radii, '圆角大一点' grows them", () => {
+  const before = parseFloat(stateStore.getState().tokens.radii["radius-md"].value);
+  const sharp = executeUserPrompt("把圆角改成直角");
+  assert.equal(sharp.executed, true);
+  const sharpMid = parseFloat(stateStore.getState().tokens.radii["radius-md"].value);
+  assert.ok(sharpMid < before, `expected ${sharpMid} < ${before}`);
+
+  const round = executeUserPrompt("圆角大一点");
+  assert.equal(round.executed, true);
+  const roundMid = parseFloat(stateStore.getState().tokens.radii["radius-md"].value);
+  assert.ok(roundMid > sharpMid, `expected ${roundMid} > ${sharpMid}`);
+});
+
+test("brightness: '整体调亮一点' lightens the background", () => {
+  stateStore.setToken("colors", "color-bg", "#808080", "ai");
+  const result = executeUserPrompt("整体调亮一点");
+  assert.equal(result.executed, true);
+  const after = stateStore.getState().tokens.colors["color-bg"].value;
+  assert.notEqual(after, "#808080");
+  assert.ok(parseInt(after.slice(1, 3), 16) > 0x80, `expected lighter than #808080, got ${after}`);
+});
+
+test("font switch: '换成衬线字体' moves to a serif pairing", () => {
+  const result = executeUserPrompt("换成衬线字体");
+  assert.equal(result.executed, true);
+  assert.equal(result.action, "switch_font");
+  assert.match(stateStore.getState().tokens.typography["font-display"].value, /serif/i);
+});
+
+test("contrast report: '检查一下对比度' reports without mutating", () => {
+  const result = executeUserPrompt("检查一下对比度");
+  assert.equal(result.executed, true);
+  assert.equal(result.action, "check_contrast");
+});
+
+test("template on a non-empty page opens a fresh page instead of erroring", () => {
+  executeUserPrompt("添加一个按钮");
+  assert.equal(stateStore.getState().components.length, 1);
+  const result = executeUserPrompt("生成一个电商模板");
+  assert.equal(result.executed, true);
+  assert.equal(result.action, "apply_template");
+  const state = stateStore.getState();
+  assert.equal(state.pages.length, 2);
+  assert.ok(state.components.length >= 5, "template components land on the new page");
+});
+
+test("redo: '重做' restores an undone change", () => {
+  executeUserPrompt("添加一个按钮");
+  executeUserPrompt("撤销");
+  assert.equal(stateStore.getState().components.length, 0);
+  const result = executeUserPrompt("重做");
+  assert.equal(result.executed, true);
+  assert.equal(stateStore.getState().components.length, 1);
+});
+
+test("generic '大一点' scales both type and spacing", () => {
+  const fontBefore = parseFloat(stateStore.getState().tokens.typography["text-base"].value);
+  const spaceBefore = parseFloat(stateStore.getState().tokens.spacing["space-md"].value);
+  const result = executeUserPrompt("整体大一点");
+  assert.equal(result.executed, true);
+  const fontAfter = parseFloat(stateStore.getState().tokens.typography["text-base"].value);
+  const spaceAfter = parseFloat(stateStore.getState().tokens.spacing["space-md"].value);
+  assert.ok(fontAfter > fontBefore && spaceAfter > spaceBefore);
 });

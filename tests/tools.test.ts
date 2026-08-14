@@ -39,6 +39,7 @@ import {
 import { registerPlatformTools } from "../src/tools/platform-tools.js";
 import { registerCollabTools } from "../src/tools/collab-tools.js";
 import { registerGeneratePageTool } from "../src/tools/generate-tools.js";
+import { registerExplainTool } from "../src/tools/explain-tools.js";
 
 interface CapturedTool {
   name: string;
@@ -88,6 +89,7 @@ registerReviewAndImproveTool(fakeServer as never);
 registerPlatformTools(fakeServer as never);
 registerCollabTools(fakeServer as never);
 registerGeneratePageTool(fakeServer as never);
+registerExplainTool(fakeServer as never);
 
 stateStore.resetForTests();
 
@@ -181,6 +183,13 @@ const VALID_PARAMS: Record<string, Record<string, unknown>> = {
   design_remove_comment: { comment_id: "missing" },
   design_generate_page: { brief: "电商促销首页", adjectives: ["温暖", "简约"] },
   design_review_and_improve: {},
+  design_explain_design: {},
+  design_set_behavior: {
+    component_id: "comp_1",
+    behavior: { type: "navigate", page_id: "page_2" },
+  },
+  design_align_components: { ids: ["comp_1", "comp_2"], mode: "center_x" },
+  design_z_order_component: { component_id: "comp_1", mode: "front" },
 };
 
 const EXPECT_STRUCTURED = new Set([
@@ -240,6 +249,10 @@ const EXPECT_STRUCTURED = new Set([
   "design_remove_comment",
   "design_generate_page",
   "design_review_and_improve",
+  "design_explain_design",
+  "design_set_behavior",
+  "design_align_components",
+  "design_z_order_component",
 ]);
 
 const INVALID_PARAMS: Record<string, Record<string, unknown>> = {
@@ -275,11 +288,15 @@ const INVALID_PARAMS: Record<string, Record<string, unknown>> = {
   design_add_comment: { text: "x" },
   design_remove_comment: {},
   design_generate_page: { brief: "" },
+  design_explain_design: { lang: "fr" },
+  design_set_behavior: { component_id: "comp_1" },
+  design_align_components: { ids: ["a"], mode: "center_x" },
+  design_z_order_component: { component_id: "comp_1", mode: "diagonal" },
 };
 
-test("registers all 68 tools with unique names", () => {
-  assert.equal(captured.length, 68);
-  assert.equal(new Set(captured.map((t) => t.name)).size, 68);
+test("registers all 72 tools with unique names", () => {
+  assert.equal(captured.length, 72);
+  assert.equal(new Set(captured.map((t) => t.name)).size, 72);
   for (const tool of captured) {
     assert.equal(typeof tool.handler, "function");
   }

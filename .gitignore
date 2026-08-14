@@ -26,6 +26,10 @@ client/canvas-page.html
 client/design-writeback.html
 .prism-previews/
 
+# Scratch / local experiment copies
+.tmp-shot/
+prism-ui-design-mcp/
+
 # Environment
 .env
 .env.local

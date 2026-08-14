@@ -55,4 +55,14 @@ export default [
       globals: { ...globals.node, ...globals.browser },
     },
   },
+  {
+    files: ["electron/**/*.{js,cjs}"],
+    languageOptions: {
+      globals: globals.node,
+    },
+    rules: {
+      "no-unused-vars": ["warn", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
+      "@typescript-eslint/no-require-imports": "off",
+    },
+  },
 ];

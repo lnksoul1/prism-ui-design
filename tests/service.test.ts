@@ -49,6 +49,7 @@ test("ws schema accepts valid client messages", () => {
     { type: "update_component", id: "comp_1", props: { title: "x" } },
     { type: "update_component", id: "comp_1", props: {}, layout: { x: 10, y: 20, w: 300, h: 160 } },
     { type: "remove_component", id: "comp_1" },
+    { type: "duplicate_component", id: "comp_1" },
     { type: "undo" },
     { type: "redo" },
     { type: "add_page", name: "About" },
@@ -61,6 +62,10 @@ test("ws schema accepts valid client messages", () => {
     { type: "prompt", prompt: "make it blue" },
     { type: "add_component", component_type: "hero", variant: "centered", props: { title: "Hi" } },
     { type: "set_animation", component_id: "comp_1", entry: "fadeUp", duration: 0.4 },
+    { type: "set_behavior", component_id: "comp_1", behavior: { type: "navigate", page_id: "page_2" } },
+    { type: "set_behavior", component_id: "comp_1", behavior: null },
+    { type: "align_components", ids: ["a", "b"], mode: "center_x" },
+    { type: "z_order_component", id: "comp_1", mode: "front" },
     { type: "apply_style", style: "minimal" },
   ];
   for (const msg of cases) {
@@ -80,6 +85,10 @@ test("ws schema rejects malformed client messages", () => {
     { type: "add_component", component_type: "" },
     { type: "add_component" }, // missing component_type
     { type: "prompt", prompt: "" },
+    { type: "set_behavior", component_id: "comp_1", behavior: { type: "teleport" } },
+    { type: "align_components", ids: ["a"], mode: "center_x" },
+    { type: "align_components", ids: ["a", "b"], mode: "sideways" },
+    { type: "z_order_component", id: "comp_1", mode: "diagonal" },
     { type: "undo", extra: "no extras allowed in discriminated union" },
   ];
   for (const msg of bad) {
@@ -135,4 +144,41 @@ test("applyClientMessage mutates state and reports failures", () => {
   const platform = applyClientMessage({ type: "set_platform", platform: "web-mobile" });
   assert.equal(platform.ok, true);
   assert.equal(stateStore.getState().activePlatform, "web-mobile");
+
+  const dup = applyClientMessage({ type: "duplicate_component", id: node.id });
+  assert.equal(dup.ok, true);
+  assert.ok(dup.detail.includes("component "));
+  assert.equal(stateStore.getState().components.filter((c) => c.type === "button").length, 2);
+  const missing = applyClientMessage({ type: "duplicate_component", id: "comp_nope" });
+  assert.equal(missing.ok, false);
+
+  const beh = applyClientMessage({
+    type: "set_behavior",
+    component_id: node.id,
+    behavior: { type: "toast", message: "已加入购物车" },
+  });
+  assert.equal(beh.ok, true);
+  const behState = stateStore.getState().components.find((c) => c.id === node.id);
+  assert.deepEqual(behState?.behavior, { type: "toast", message: "已加入购物车" });
+
+  const clearBeh = applyClientMessage({ type: "set_behavior", component_id: node.id, behavior: null });
+  assert.equal(clearBeh.ok, true);
+  assert.equal(stateStore.getState().components.find((c) => c.id === node.id)?.behavior, undefined);
+
+  const behMissing = applyClientMessage({
+    type: "set_behavior",
+    component_id: "comp_nope",
+    behavior: { type: "prompt", prompt: "x" },
+  });
+  assert.equal(behMissing.ok, false);
+
+  const align = applyClientMessage({
+    type: "align_components",
+    ids: [node.id, "comp_nope"],
+    mode: "left",
+  });
+  assert.equal(align.ok, false, "align needs 2 valid components");
+
+  const zOrder = applyClientMessage({ type: "z_order_component", id: node.id, mode: "back" });
+  assert.equal(zOrder.ok, true);
 });

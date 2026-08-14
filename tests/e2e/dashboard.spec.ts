@@ -53,6 +53,7 @@ test.beforeEach(async () => {
       PRISM_AUTOIMPORT: "off",
       PRISM_AUTOLOAD: "off",
       PRISM_PROJECT_DIR: path.join(os.tmpdir(), `prism-e2e-${Date.now()}`),
+      PRISM_PRODUCT_DIR: path.join(os.tmpdir(), `prism-e2e-products-${Date.now()}`),
     },
     stdio: "ignore",
   });
@@ -75,7 +76,12 @@ test("dashboard loads with the premium empty state", async ({ page }: { page: Pa
   await expect(page.locator(".topbar")).toBeVisible();
   await expect(page.locator(".placeholder-guide")).toBeVisible();
   await expect(page.locator("#prompt-input")).toBeVisible();
+  // Primary topbar actions stay visible; secondary utilities live in the "…" menu.
+  await expect(page.locator("#export-btn")).toBeVisible();
+  await expect(page.locator("#more-btn")).toBeVisible();
+  await page.locator("#more-btn").click();
   await expect(page.locator("#project-btn")).toBeVisible();
+  await page.locator("#more-btn").click();
 
   // Sending a matchable instruction executes locally and shows a receipt
   await page.fill("#prompt-input", "把主色改成蓝色");
@@ -162,7 +168,7 @@ test("quick actions: prompt chips, ? help, Ctrl+K palette, template thumbnails",
   await expect(page.locator(".topbar")).toBeVisible();
 
   // Prompt chips render and one-click instructions execute via the built-in engine
-  await expect(page.locator(".prompt-chip")).toHaveCount(5);
+  await expect(page.locator(".prompt-chip")).toHaveCount(9);
   await page.locator(".prompt-chip").first().click();
   await expect(page.locator("#prompt-status")).toContainText("已执行", { timeout: 5000 });
 
@@ -228,6 +234,163 @@ test("inspect code tab and brand design systems work from the dashboard", async 
     null,
     { timeout: 10000 }
   );
+
+  expect(errors).toEqual([]);
+});
+
+test("import product → banner → one-click apply pipeline", async ({ page }: { page: Page }) => {
+  const errors: string[] = [];
+  page.on("console", (msg) => {
+    if (msg.type() === "error") errors.push(msg.text());
+  });
+  page.on("pageerror", (err) => errors.push(String(err)));
+
+  await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "domcontentloaded", timeout: 60000 });
+  await expect(page.locator(".topbar")).toBeVisible();
+
+  // Open the import dialog from the "…" menu and switch to the HTML tab
+  await page.locator("#more-btn").click();
+  await page.locator("#import-btn").click();
+  await page.locator('.import-tab[data-import-tab="html"]').click();
+  await page.fill(
+    "#import-html",
+    "<html><body><nav><a>我的品牌</a></nav><main><h1>欢迎来到我的产品</h1><button>开始</button></main><footer>© 2026</footer></body></html>"
+  );
+  await page.click("#import-go");
+
+  // The imported page lands on the canvas and the apply banner appears
+  await expect(page.locator("#import-banner")).toBeVisible({ timeout: 10000 });
+  await expect(page.locator(".comp-wrapper").first()).toBeVisible({ timeout: 10000 });
+
+  // One-click apply writes the adjusted artifacts and shows a receipt
+  await page.click("#apply-btn");
+  await expect(page.locator("#prism-toast")).toContainText("已应用", { timeout: 5000 });
+
+  expect(errors).toEqual([]);
+});
+
+test("multi-select and alignment adjust freeform layouts", async ({ page }: { page: Page }) => {
+  const errors: string[] = [];
+  page.on("console", (msg) => {
+    if (msg.type() === "error") errors.push(msg.text());
+  });
+  page.on("pageerror", (err) => errors.push(String(err)));
+
+  await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "domcontentloaded", timeout: 60000 });
+  await expect(page.locator(".topbar")).toBeVisible();
+
+  // Start from a template so there are multiple components
+  await page.fill("#prompt-input", "应用 SaaS 模板");
+  await page.click("#prompt-send");
+  await expect(page.locator("#prompt-status")).toContainText("已执行", { timeout: 5000 });
+  await expect(page.locator(".comp-wrapper").first()).toBeVisible({ timeout: 10000 });
+
+  // Switch to freeform so components get editable layouts
+  await page.locator("#layout-mode-btn").click();
+  await page.waitForTimeout(500);
+
+  // Give the first two components distinct positions via REST
+  await page.evaluate(async () => {
+    const s = (await (await fetch("/api/state")).json()) as {
+      components: Array<{ id: string }>;
+    };
+    const ids = s.components.slice(0, 2).map((c) => c.id);
+    for (let i = 0; i < ids.length; i++) {
+      await fetch(`/api/component/${ids[i]}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ props: {}, layout: { x: 40 + i * 200, y: 20 + i * 40, w: 200, h: 100 } }),
+      });
+    }
+  });
+  await page.waitForTimeout(600);
+
+  // Select the first two components via the layer panel (deterministic —
+  // clicking overlapping freeform wrappers would hit the topmost element)
+  const layerCount = await page.locator("#layer-tree .layer-item").count();
+  await page.locator("#layer-tree .layer-item").nth(layerCount - 1).click();
+  await page.locator("#layer-tree .layer-item").nth(layerCount - 2).click({ modifiers: ["Shift"] });
+  await expect(page.locator(".selection-toolbar")).toBeVisible();
+
+  // Align left via the contextual toolbar
+  await page.locator('.sel-tool-btn[title="左对齐"]').click();
+  await page.waitForTimeout(600);
+  const xs = await page.evaluate(async () => {
+    const s = (await (await fetch("/api/state")).json()) as {
+      components: Array<{ layout: { x: number } }>;
+    };
+    return s.components.slice(0, 2).map((c) => c.layout.x);
+  });
+  expect(xs[0]).toBe(40);
+  expect(xs[1]).toBe(40);
+
+  expect(errors).toEqual([]);
+});
+
+test("play mode: a linked component navigates to the target page", async ({ page }: { page: Page }) => {
+  const errors: string[] = [];
+  page.on("console", (msg) => {
+    if (msg.type() === "error") errors.push(msg.text());
+  });
+  page.on("pageerror", (err) => errors.push(String(err)));
+
+  await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "domcontentloaded", timeout: 60000 });
+  await expect(page.locator(".topbar")).toBeVisible();
+
+  // Start from the SaaS template so there is a component to click
+  await page.fill("#prompt-input", "应用 SaaS 模板");
+  await page.click("#prompt-send");
+  await expect(page.locator("#prompt-status")).toContainText("已执行", { timeout: 5000 });
+  await expect(page.locator(".comp-wrapper").first()).toBeVisible({ timeout: 10000 });
+
+  // Remember the current page, then create the target page through the REST API
+  const homePageId = await page.evaluate(async () => {
+    const s = (await (await fetch("/api/state")).json()) as { currentPageId: string };
+    return s.currentPageId;
+  });
+  const detailPageId = await page.evaluate(async () => {
+    const res = await fetch("/api/page", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Detail" }),
+    });
+    const data = (await res.json()) as { page_id: string };
+    return data.page_id;
+  });
+  // addPage switches to the new page; switch back to Home so the template is visible
+  await page.evaluate(async (homeId) => {
+    await fetch(`/api/page/${homeId}/switch`, { method: "POST" });
+  }, homePageId);
+  await expect(page.locator(".comp-wrapper").first()).toBeVisible({ timeout: 10000 });
+
+  // Select the first component and bind a "navigate" behavior to the Detail page
+  await page.locator(".comp-wrapper").first().click();
+  await expect(page.locator(".inspector-tabs")).toBeVisible();
+  const typeSelect = page.locator("select.prop-select").filter({
+    has: page.locator("option", { hasText: "跳转页面" }),
+  });
+  await typeSelect.selectOption("navigate");
+  const pageSelect = page.locator("select.prop-select").filter({
+    has: page.locator("option", { hasText: "选择目标页" }),
+  });
+  await pageSelect.selectOption(detailPageId);
+  await expect(page.locator(".inspector-link-info")).toBeVisible();
+
+  // Play mode: clicking the component dispatches the behavior (navigate)
+  await page.locator("#play-btn").click();
+  await page.locator(".comp-wrapper").first().click();
+  await page.waitForFunction(
+    (id) =>
+      fetch("/api/state")
+        .then((r) => r.json())
+        .then((s) => (s as { currentPageId?: string }).currentPageId === id),
+    detailPageId,
+    { timeout: 10000 }
+  );
+
+  // Esc exits play mode
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#play-btn")).toContainText("播放");
 
   expect(errors).toEqual([]);
 });

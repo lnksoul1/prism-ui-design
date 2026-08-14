@@ -44,7 +44,9 @@ test("writebackTokens rewrites :root vars and keeps a backup", () => {
   const updated = readFileSync(path.join(clientDir, "style.css"), "utf-8");
   assert.ok(updated.includes(`--accent: ${expectedAccent};`), "accent token written");
   const backup = readFileSync(result.backup!, "utf-8");
-  assert.ok(backup.includes("--accent: #6366F1;"), "backup preserves the original dashboard value");
+  // The backup must preserve the dashboard's own (pre-writeback) values —
+  // currently the modern-minimal glass palette.
+  assert.ok(backup.includes("--bg: #F5F6F8;"), "backup preserves the original dashboard value");
   assert.ok(!backup.includes(`--accent: ${expectedAccent};`), "backup is the untouched original");
   // Unrelated variables survive the rewrite
   assert.match(updated, /--ease:/);

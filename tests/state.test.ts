@@ -196,6 +196,131 @@ test("updateComponent accepts layout and visibility/locked flags", () => {
   assert.equal(node.locked, true);
 });
 
+test("duplicateComponent deep-copies and inserts after the original", () => {
+  const original = stateStore.addComponent("card", "elevated", { title: "A", items: [{ label: "x" }] }, null, "ai");
+  original.layout = { x: 0, y: 0, w: 300, h: 160 };
+  const copy = stateStore.duplicateComponent(original.id, "user");
+  assert.ok(copy, "duplicate should return the new node");
+  assert.notEqual(copy!.id, original.id);
+
+  const components = stateStore.getState().components;
+  assert.equal(components.length, 2);
+  assert.equal(components[1].id, copy!.id, "clone inserted immediately after the original");
+  assert.deepEqual(copy!.props, original.props, "props are deep-copied");
+  assert.equal(copy!.variant, "elevated");
+  assert.notDeepEqual(copy!.layout, original.layout, "clone is nudged so it is distinct");
+
+  // The clone is independent: mutating it must not touch the original.
+  copy!.props.title = "B";
+  assert.equal(original.props.title, "A");
+});
+
+test("duplicateComponent returns null for unknown ids", () => {
+  assert.equal(stateStore.duplicateComponent("nope", "user"), null);
+});
+
+test("setBehavior binds and clears an interaction, unknown ids fail", () => {
+  const comp = stateStore.addComponent("button", undefined, { text: "Go" }, null, "ai");
+  const ok = stateStore.setBehavior(comp.id, { type: "navigate", page_id: "page_2" }, "user");
+  assert.equal(ok, true);
+  const node = stateStore.getState().components[0];
+  assert.deepEqual(node.behavior, { type: "navigate", page_id: "page_2" });
+
+  // null removes the behavior
+  assert.equal(stateStore.setBehavior(comp.id, null, "user"), true);
+  assert.equal(stateStore.getState().components[0].behavior, undefined);
+
+  // invalid behavior type falls back to clearing
+  stateStore.setBehavior(comp.id, { type: "teleport", page_id: "x" } as never, "user");
+  assert.equal(stateStore.getState().components[0].behavior, undefined);
+
+  assert.equal(stateStore.setBehavior("comp_nope", { type: "toast", message: "hi" }, "user"), false);
+});
+
+test("alignComponents aligns and distributes freeform layouts", () => {
+  const a = stateStore.addComponent("button", undefined, {}, null, "ai");
+  const b = stateStore.addComponent("card", undefined, {}, null, "ai");
+  const c = stateStore.addComponent("image", undefined, {}, null, "ai");
+  const set = (id: string, x: number, y: number, w: number, h: number) =>
+    stateStore.updateComponent(id, {}, "user", { x, y, w, h });
+  set(a.id, 10, 10, 100, 40);
+  set(b.id, 200, 60, 120, 60);
+  set(c.id, 400, 20, 80, 30);
+
+  // Align left: all x = min x
+  assert.equal(stateStore.alignComponents([a.id, b.id, c.id], "left", "user"), true);
+  const after = stateStore.getState().components;
+  assert.equal(after[0].layout!.x, 10);
+  assert.equal(after[1].layout!.x, 10);
+  assert.equal(after[2].layout!.x, 10);
+
+  // Align center_x keeps original x positions distinct after right-alignment check
+  set(a.id, 10, 10, 100, 40);
+  set(b.id, 200, 60, 120, 60);
+  set(c.id, 400, 20, 80, 30);
+  stateStore.alignComponents([a.id, b.id, c.id], "center_x", "user");
+  const centered = stateStore.getState().components;
+  const cx = (b0: { layout?: { x: number; w: number } }) => b0.layout!.x + b0.layout!.w / 2;
+  assert.ok(Math.abs(cx(centered[0]) - cx(centered[1])) < 0.001);
+  assert.ok(Math.abs(cx(centered[1]) - cx(centered[2])) < 0.001);
+
+  // Distribute_y: equal spaces between element edges
+  set(a.id, 0, 0, 100, 40);
+  set(b.id, 0, 100, 120, 60);
+  set(c.id, 0, 300, 80, 30);
+  stateStore.alignComponents([a.id, b.id, c.id], "distribute_y", "user");
+  const dist = stateStore.getState().components;
+  const byId = new Map(dist.map((n) => [n.id, n.layout!]));
+  const gap1 = byId.get(b.id)!.y - (byId.get(a.id)!.y + byId.get(a.id)!.h);
+  const gap2 = byId.get(c.id)!.y - (byId.get(b.id)!.y + byId.get(b.id)!.h);
+  assert.ok(Math.abs(gap1 - gap2) < 0.001, `equal spaces between elements (${gap1} vs ${gap2})`);
+  assert.ok(gap1 > 0, "spaces are non-negative");
+
+  // Fewer than 2 valid targets fails
+  assert.equal(stateStore.alignComponents([a.id], "left", "user"), false);
+  assert.equal(stateStore.alignComponents([a.id, "comp_nope"], "left", "user"), false);
+});
+
+test("zOrderComponent reorders stacking within the page list", () => {
+  const a = stateStore.addComponent("button", undefined, {}, null, "ai");
+  const b = stateStore.addComponent("card", undefined, {}, null, "ai");
+  const c = stateStore.addComponent("image", undefined, {}, null, "ai");
+  const ids = () => stateStore.getState().components.map((n) => n.id);
+
+  assert.equal(stateStore.zOrderComponent(a.id, "front", "user"), true);
+  assert.deepEqual(ids(), [b.id, c.id, a.id]);
+
+  assert.equal(stateStore.zOrderComponent(a.id, "back", "user"), true);
+  assert.deepEqual(ids(), [a.id, b.id, c.id]);
+
+  assert.equal(stateStore.zOrderComponent(c.id, "backward", "user"), true);
+  assert.deepEqual(ids(), [a.id, c.id, b.id]);
+
+  assert.equal(stateStore.zOrderComponent(a.id, "forward", "user"), true);
+  assert.deepEqual(ids(), [c.id, a.id, b.id]);
+
+  assert.equal(stateStore.zOrderComponent("comp_nope", "front", "user"), false);
+});
+
+test("setImport records product provenance and clearAll resets it", () => {
+  const page = stateStore.addPage("我的产品", "user");
+  stateStore.setImport(page.id, {
+    kind: "html",
+    source: "Pasted HTML",
+    html_file: "/tmp/x.html",
+    imported_at: new Date().toISOString(),
+    component_count: 3,
+  }, "user");
+  const record = stateStore.getImport(page.id);
+  assert.ok(record);
+  assert.equal(record!.source, "Pasted HTML");
+  assert.equal(record!.component_count, 3);
+  assert.equal(stateStore.getImport("page_nope"), null);
+
+  stateStore.clearAll("user");
+  assert.equal(stateStore.getImport(page.id), null, "clearAll wipes import records");
+});
+
 describe("tokens and conflicts", () => {
   test("setToken stores value with source", () => {
     stateStore.setToken("colors", "color-primary", "#FF5733", "user");
@@ -322,5 +447,30 @@ describe("events, clearAll, and pending prompt", () => {
     assert.equal(stateStore.getPendingPrompt(), "Make it warmer");
     stateStore.clearPendingPrompt();
     assert.equal(stateStore.getPendingPrompt(), null);
+  });
+
+  test("page links: add, dedupe by source component, and remove", () => {
+    const p1 = stateStore.getState().currentPageId as string;
+    const p2 = stateStore.addPage("About", "user").id;
+    const link = stateStore.addPageLink(p1, p2, "Go to About", "comp_x", "user");
+    assert.ok(link.id.startsWith("link_"));
+    assert.equal(stateStore.getState().pageLinks.length, 1);
+
+    // Same source component replaces the old link instead of duplicating
+    stateStore.addPageLink(p1, p2, "Updated", "comp_x", "user");
+    assert.equal(stateStore.getState().pageLinks.length, 1);
+    assert.equal(stateStore.getState().pageLinks[0].label, "Updated");
+
+    // Unknown pages are rejected
+    assert.throws(
+      () => stateStore.addPageLink(p1, "page_nope", undefined, undefined, "user"),
+      /page must exist/
+    );
+
+    // Removal works against the current link id
+    const current = stateStore.getState().pageLinks[0];
+    assert.equal(stateStore.removePageLink(current.id, "user"), true);
+    assert.equal(stateStore.getState().pageLinks.length, 0);
+    assert.equal(stateStore.removePageLink(current.id, "user"), false);
   });
 });

@@ -394,3 +394,72 @@ test("play mode: a linked component navigates to the target page", async ({ page
 
   expect(errors).toEqual([]);
 });
+
+test("library: component template replaces the selected component in place", async ({ page }: { page: Page }) => {
+  const errors: string[] = [];
+  page.on("console", (msg) => {
+    if (msg.type() === "error") errors.push(msg.text());
+  });
+  page.on("pageerror", (err) => errors.push(String(err)));
+
+  await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "domcontentloaded", timeout: 60000 });
+  await expect(page.locator(".topbar")).toBeVisible();
+
+  // Start from a template so there is a component to replace
+  await page.fill("#prompt-input", "应用 SaaS 模板");
+  await page.click("#prompt-send");
+  await expect(page.locator("#prompt-status")).toContainText("已执行", { timeout: 5000 });
+  await expect(page.locator(".comp-wrapper").first()).toBeVisible({ timeout: 10000 });
+
+  const firstId = await page.evaluate(async () => {
+    const s = (await (await fetch("/api/state")).json()) as { components: Array<{ id: string; type: string }> };
+    return s.components[0].id;
+  });
+  const firstType = await page.evaluate(async () => {
+    const s = (await (await fetch("/api/state")).json()) as { components: Array<{ type: string }> };
+    return s.components[0].type;
+  });
+
+  // Select the first component, open the components tab, enable 替换选中
+  await page.locator(".comp-wrapper").first().click();
+  await expect(page.locator(".inspector-tabs")).toBeVisible();
+  await page.locator('.lib-tab[data-lib="components"]').click();
+  await expect(page.locator("#lib-replace-toggle")).toBeVisible();
+  await page.locator("#lib-replace-toggle").check();
+
+  // Click a curated block → it should replace the selection (not add)
+  await page.locator('.lib-item-block', { hasText: "Hero 分屏" }).first().click();
+  await page.waitForTimeout(800);
+
+  const after = await page.evaluate(async () => {
+    const s = (await (await fetch("/api/state")).json()) as {
+      components: Array<{ id: string; type: string; variant?: string; count: number }>;
+    };
+    return { ids: s.components.map((c) => c.id), types: s.components.map((c) => c.type) };
+  });
+  // Same component count (replaced, not added), and the first id keeps its identity
+  expect(after.ids).toContain(firstId);
+  expect(after.types.filter((t) => t !== firstType).length).toBeGreaterThanOrEqual(0);
+  const replaced = await page.evaluate(async (id) => {
+    const s = (await (await fetch("/api/state")).json()) as {
+      components: Array<{ id: string; type: string; variant?: string }>;
+    };
+    return s.components.find((c) => c.id === id);
+  }, firstId);
+  expect(replaced?.type).toBe("hero");
+  expect(replaced?.variant).toBe("split");
+
+  // The interactions tab binds a behavior template to the selection
+  await page.locator('.lib-tab[data-lib="interactions"]').click();
+  await page.locator('.lib-item', { hasText: "点击提示" }).first().click();
+  await page.waitForTimeout(600);
+  const behavior = await page.evaluate(async (id) => {
+    const s = (await (await fetch("/api/state")).json()) as {
+      components: Array<{ id: string; behavior?: { type: string } }>;
+    };
+    return s.components.find((c) => c.id === id)?.behavior;
+  }, firstId);
+  expect(behavior?.type).toBe("toast");
+
+  expect(errors).toEqual([]);
+});

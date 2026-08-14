@@ -2200,6 +2200,40 @@ body::after {
   white-space: nowrap;
 }
 
+/* 模板快速变更 (v3.2 支柱⑦ P0): replace toggle + block group + interaction hint */
+.lib-replace-row {
+  padding: 6px 10px 2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.lib-replace-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+}
+.lib-replace-toggle input {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.lib-group-header {
+  padding: 8px 10px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+  margin: 4px 0 2px;
+}
+.lib-item-block {
+  border-left: 2px solid var(--accent);
+}
+
 /* Hover Preview Popup */
 .lib-preview-popup {
   position: fixed;

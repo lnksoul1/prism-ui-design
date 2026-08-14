@@ -1279,6 +1279,147 @@ test(
 );
 
 test(
+  "template REST endpoints: catalog, component blocks add/replace, behavior templates",
+  { timeout: 60000 },
+  async () => {
+    const port = await getFreePort();
+    const child = spawn(process.execPath, [SERVER_ENTRY], {
+      cwd: path.resolve(__dirname, "..", ".."),
+      env: {
+        ...process.env,
+        DASHBOARD_PORT: String(port),
+        PRISM_PROJECT_DIR: path.join(os.tmpdir(), `prism-templates-server-${Date.now()}`),
+        PRISM_AUTOIMPORT: "off",
+        PRISM_AUTOLOAD: "off",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let logs = "";
+    child.stderr?.on("data", (d) => (logs += d.toString()));
+    const base = `http://127.0.0.1:${port}`;
+    const headers = { "Content-Type": "application/json" };
+
+    try {
+      await waitForHealth(`${base}/health`, 20000);
+
+      // Catalog listing
+      const catRes = await fetch(`${base}/api/template-catalog`);
+      assert.equal(catRes.status, 200);
+      const cat = (await catRes.json()) as {
+        component_templates: Array<{ id: string; type: string }>;
+        behavior_templates: Array<{ id: string }>;
+      };
+      assert.ok(cat.component_templates.length >= 8);
+      assert.ok(cat.behavior_templates.length >= 6);
+      assert.ok(cat.component_templates.some((t) => t.id === "hero_split_cta"));
+      assert.ok(cat.behavior_templates.some((t) => t.id === "toast_feedback"));
+
+      // Add a component template (no target) -> new block
+      const addRes = await fetch(`${base}/api/templates/component`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ template_id: "hero_split_cta" }),
+      });
+      assert.equal(addRes.status, 200);
+      const added = (await addRes.json()) as { mode: string; component_id: string };
+      assert.equal(added.mode, "added");
+      assert.ok(added.component_id);
+      let state = (await (await fetch(`${base}/api/state`)).json()) as {
+        components: Array<{ id: string; type: string; variant?: string; layout?: { x: number }; behavior?: { type: string } }>;
+      };
+      assert.equal(state.components[0].type, "hero");
+
+      // Replace an existing component in place (keeps layout position)
+      const layoutRes = await fetch(`${base}/api/component/${added.component_id}`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ props: {}, layout: { x: 5, y: 6, w: 300, h: 200 } }),
+      });
+      assert.equal(layoutRes.status, 200);
+      const repRes = await fetch(`${base}/api/templates/component`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ template_id: "signup_form", target_id: added.component_id }),
+      });
+      assert.equal(repRes.status, 200);
+      const replaced = (await repRes.json()) as { mode: string };
+      assert.equal(replaced.mode, "replaced");
+      state = (await (await fetch(`${base}/api/state`)).json()) as {
+        components: Array<{ id: string; type: string; layout?: { x: number }; behavior?: { type: string } }>;
+      };
+      const comp = state.components[0];
+      assert.equal(comp.id, added.component_id);
+      assert.equal(comp.type, "form");
+      assert.deepEqual(comp.layout, { x: 5, y: 6, w: 300, h: 200 }, "layout preserved across replace");
+      assert.equal(comp.behavior?.type, "submit", "preset behavior bound");
+
+      // Raw palette replace endpoint
+      const rawRes = await fetch(`${base}/api/component/${added.component_id}/replace`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ type: "stats", variant: "3col", props: { items: [{ value: "1", label: "a" }] } }),
+      });
+      assert.equal(rawRes.status, 200);
+      state = (await (await fetch(`${base}/api/state`)).json()) as {
+        components: Array<{ id: string; type: string; variant?: string; layout?: { x: number }; behavior?: { type: string } }>;
+      };
+      assert.equal(state.components[0].type, "stats");
+
+      // Behavior template binds a preset interaction
+      const behRes = await fetch(`${base}/api/templates/behavior`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ component_id: added.component_id, template_id: "toast_feedback" }),
+      });
+      assert.equal(behRes.status, 200);
+      const beh = (await behRes.json()) as { behavior: { type: string; message: string } };
+      assert.deepEqual(beh.behavior, { type: "toast", message: "操作成功！" });
+      state = (await (await fetch(`${base}/api/state`)).json()) as {
+        components: Array<{ id: string; type: string; variant?: string; layout?: { x: number }; behavior?: { type: string } }>;
+      };
+      assert.equal(state.components[0].behavior?.type, "toast");
+
+      // Unknown template ids are rejected
+      const badTpl = await fetch(`${base}/api/templates/component`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ template_id: "nope" }),
+      });
+      assert.equal(badTpl.status, 400);
+      const badBeh = await fetch(`${base}/api/templates/behavior`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ component_id: added.component_id, template_id: "nope" }),
+      });
+      assert.equal(badBeh.status, 400);
+      const missingComp = await fetch(`${base}/api/templates/behavior`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ component_id: "comp_nope", template_id: "toast_feedback" }),
+      });
+      assert.equal(missingComp.status, 400);
+    } catch (error) {
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}\n--- server logs ---\n${logs}`,
+        { cause: error }
+      );
+    } finally {
+      child.kill();
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(() => {
+          child.kill("SIGKILL");
+          resolve();
+        }, 3000);
+        child.once("exit", () => {
+          clearTimeout(timer);
+          resolve();
+        });
+      });
+    }
+  }
+);
+
+test(
   "align and z-order REST endpoints adjust freeform layouts",
   { timeout: 60000 },
   async () => {

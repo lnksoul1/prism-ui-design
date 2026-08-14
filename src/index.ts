@@ -114,6 +114,7 @@ import { registerCanvasRoutes } from "./routes/canvas.js";
 import { registerTokensRoutes } from "./routes/tokens.js";
 import { registerComponentsRoutes } from "./routes/components.js";
 import { registerProjectsRoutes } from "./routes/projects.js";
+import { registerTemplatesRoutes } from "./routes/templates.js";
 import { errorHandler } from "./routes/shared.js";
 
 // Built-in LLM channel (product definition v2: BYO API key, no external agent)
@@ -217,6 +218,7 @@ app.use(registerCanvasRoutes());
 app.use(registerTokensRoutes());
 app.use(registerComponentsRoutes());
 app.use(registerProjectsRoutes());
+app.use(registerTemplatesRoutes());
 
 // Built-in LLM channel routes (AI settings + generation)
 registerLlmRoutes(app);

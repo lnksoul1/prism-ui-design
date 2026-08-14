@@ -12,7 +12,7 @@ An MCP (Model Context Protocol) server that provides comprehensive UI design ass
 
 ## Features
 
-- **75 MCP tools** covering the full spectrum of UI design needs- **Built-in LLM channel** (product definition v2): fill in your own API key
+- **77 MCP tools** covering the full spectrum of UI design needs- **Built-in LLM channel** (product definition v2): fill in your own API key
   (OpenAI-compatible / Anthropic / Gemini) in the AI settings dialog and the
   dashboard itself can generate pages from natural language — no external
   agent required. Unmatched prompts automatically fall through to it.
@@ -115,6 +115,25 @@ prototype generator:
 The dashboard shows an apply banner whenever the current page came from an
 imported product.
 
+## Template quick change (想快就套模板，想细就自己微调)
+
+Product definition v3.2 pillar ⑦ — one-click changes applied to the **current**
+product (never a fresh page):
+
+- **组件模板 (Component blocks)**: the library's components tab leads with 10
+  ready-made blocks (Hero 分屏+CTA, 定价三档, 注册表单, FAQ, CTA 横幅 …). With
+  the **替换选中** toggle on, clicking a block **replaces the selected
+  component in place — same id, same layout position, undoable**
+  (`state.replaceComponent`); dragging a block onto the canvas adds it.
+- **交互模板 (Behavior templates)**: a new **交互** library tab binds preset
+  interactions to the selected component in one click (打开链接新标签页 / 点击
+  提示 / 跳转首页 / 显隐切换 / 表单提交反馈 / AI 联动指令), triggered in play mode.
+- **风格换装 (Style presets)**: clicking a style in the library restyles the
+  current product in place (existing `apply_style` path).
+- Every path is undoable and broadcast; agents get the same power via
+  `design_apply_component_template` / `design_apply_behavior_template`, and
+  `GET /api/template-catalog` lists both catalogs.
+
 ## Built-in AI (BYO API key)
 
 The dashboard can generate pages itself — no external agent needed:
@@ -211,6 +230,8 @@ connected client.
 | `design_review_and_improve` | One-call review loop: score, fix, re-score + a11y audit |
 | `design_explain_design` | Explain the current design in plain language + suggest follow-up instructions (read-only) |
 | `design_set_behavior` | Bind an interaction to a component — navigate / link / toggle / toast / submit / prompt (play mode) |
+| `design_apply_component_template` | Apply a ready-made component block — add, or replace the selected component in place |
+| `design_apply_behavior_template` | Bind a preset interaction template to a component in one click |
 | `design_align_components` | Align/distribute multiple components in freeform space (single undo step) |
 | `design_z_order_component` | Reorder component stacking — front / back / forward / backward |
 
@@ -223,9 +244,10 @@ npm test
 The test suite covers the state store (undo/redo, pages, tokens, conflicts),
 style-preset token generation, all MCP tool schemas, the shared service layer,
 project persistence, DTCG token interop, accessibility audit, render preview,
-the prompt executor v1/v2 intents, plain-language design explanation, and an
-HTTP + WebSocket integration chain (**392 tests passing**), plus an optional
-Playwright browser smoke (`npm run test:e2e`).
+the prompt executor v1/v2 intents, plain-language design explanation, component
+and behavior templates, and an HTTP + WebSocket integration chain
+(**446 tests passing**), plus an optional Playwright browser smoke
+(`npm run test:e2e`).
 
 ## Templates, versions, semantics & style guides
 

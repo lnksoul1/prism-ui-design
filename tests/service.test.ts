@@ -3,13 +3,23 @@ import assert from "node:assert/strict";
 import { stateStore } from "../src/state.js";
 import {
   COMPONENT_TYPES,
+  applyBehaviorTemplate,
   applyClientMessage,
+  applyComponentTemplate,
   applyStyle,
   initProject,
   isKnownComponentType,
   setToken,
   wsMessageSchema,
 } from "../src/service/design-service.js";
+import {
+  BEHAVIOR_TEMPLATES,
+  COMPONENT_TEMPLATES,
+  getBehaviorTemplate,
+  getComponentTemplate,
+  listBehaviorTemplates,
+  listComponentTemplates,
+} from "../src/template-catalog.js";
 
 beforeEach(() => {
   stateStore.resetForTests();
@@ -67,6 +77,9 @@ test("ws schema accepts valid client messages", () => {
     { type: "align_components", ids: ["a", "b"], mode: "center_x" },
     { type: "z_order_component", id: "comp_1", mode: "front" },
     { type: "apply_style", style: "minimal" },
+    { type: "apply_component_template", template_id: "hero_split_cta" },
+    { type: "apply_component_template", template_id: "pricing_3col", target_id: "comp_1" },
+    { type: "apply_behavior_template", component_id: "comp_1", template_id: "toast_feedback" },
   ];
   for (const msg of cases) {
     assert.equal(wsMessageSchema.safeParse(msg).success, true, `expected valid: ${JSON.stringify(msg)}`);
@@ -89,6 +102,9 @@ test("ws schema rejects malformed client messages", () => {
     { type: "align_components", ids: ["a"], mode: "center_x" },
     { type: "align_components", ids: ["a", "b"], mode: "sideways" },
     { type: "z_order_component", id: "comp_1", mode: "diagonal" },
+    { type: "apply_component_template", template_id: "" },
+    { type: "apply_behavior_template", component_id: "comp_1", template_id: "" },
+    { type: "apply_behavior_template", template_id: "toast_feedback" },
     { type: "undo", extra: "no extras allowed in discriminated union" },
   ];
   for (const msg of bad) {
@@ -181,4 +197,132 @@ test("applyClientMessage mutates state and reports failures", () => {
 
   const zOrder = applyClientMessage({ type: "z_order_component", id: node.id, mode: "back" });
   assert.equal(zOrder.ok, true);
+});
+
+// ===== 模板快速变更 (v3.2 支柱⑦ P0) =====
+
+test("template catalog exposes curated component and behavior templates", () => {
+  assert.ok(COMPONENT_TEMPLATES.length >= 8, "component templates catalog non-trivial");
+  assert.ok(BEHAVIOR_TEMPLATES.length >= 6, "behavior templates catalog non-trivial");
+
+  const blocks = listComponentTemplates();
+  const behaviors = listBehaviorTemplates();
+  assert.equal(blocks.length, COMPONENT_TEMPLATES.length);
+  assert.equal(behaviors.length, BEHAVIOR_TEMPLATES.length);
+
+  const hero = getComponentTemplate("hero_split_cta");
+  assert.ok(hero);
+  assert.equal(hero.type, "hero");
+  assert.ok(hero.props.title);
+  assert.equal(getComponentTemplate("nope"), undefined);
+
+  const toast = getBehaviorTemplate("toast_feedback");
+  assert.ok(toast);
+  assert.deepEqual(toast.build({ currentPageId: null, pageIds: [] }), { type: "toast", message: "操作成功！" });
+  assert.equal(getBehaviorTemplate("nope"), undefined);
+});
+
+test("applyComponentTemplate adds a block when no target is given", () => {
+  const result = applyComponentTemplate("hero_split_cta", null, "user");
+  assert.equal(result.ok, true);
+  assert.equal(result.mode, "added");
+  assert.ok(result.component_id);
+  const state = stateStore.getState();
+  const node = state.components.find((c) => c.id === result.component_id);
+  assert.ok(node);
+  assert.equal(node.type, "hero");
+  assert.equal(node.variant, "split");
+  assert.equal(node.props.title, "你的产品标题");
+});
+
+test("applyComponentTemplate replaces a component in place and keeps layout", () => {
+  const original = stateStore.addComponent("button", undefined, { text: "Go" }, null, "user");
+  stateStore.updateComponent(original.id, {}, "user", { x: 10, y: 20, w: 200, h: 48 });
+
+  const result = applyComponentTemplate("signup_form", original.id, "user");
+  assert.equal(result.ok, true);
+  assert.equal(result.mode, "replaced");
+  assert.equal(result.component_id, original.id);
+
+  const state = stateStore.getState();
+  const node = state.components.find((c) => c.id === original.id);
+  assert.ok(node);
+  assert.equal(node.type, "form");
+  assert.equal(node.variant, "signup");
+  assert.deepEqual(node.layout, { x: 10, y: 20, w: 200, h: 48 }, "layout position preserved");
+  assert.deepEqual(node.behavior, { type: "submit", form_id: "signup" }, "preset behavior bound");
+});
+
+test("applyComponentTemplate falls back to adding when the target is missing", () => {
+  const result = applyComponentTemplate("cta_banner", "comp_nope", "user");
+  assert.equal(result.ok, true);
+  assert.equal(result.mode, "added");
+  assert.ok(result.component_id);
+});
+
+test("applyComponentTemplate rejects unknown template ids", () => {
+  const result = applyComponentTemplate("nope", null, "user");
+  assert.equal(result.ok, false);
+  assert.match(result.detail || "", /Unknown component template/);
+});
+
+test("applyBehaviorTemplate binds a preset interaction", () => {
+  const node = stateStore.addComponent("button", undefined, { text: "Go" }, null, "user");
+  const result = applyBehaviorTemplate(node.id, "toast_feedback", node.id, "user");
+  assert.equal(result.ok, true);
+  assert.equal(result.component_id, node.id);
+  assert.deepEqual(result.behavior, { type: "toast", message: "操作成功！" });
+
+  const state = stateStore.getState();
+  const updated = state.components.find((c) => c.id === node.id);
+  assert.deepEqual(updated?.behavior, { type: "toast", message: "操作成功！" });
+});
+
+test("applyBehaviorTemplate navigate_home resolves the first page", () => {
+  const firstPage = stateStore.getState().pages[0];
+  const node = stateStore.addComponent("button", undefined, { text: "Go" }, null, "user");
+  const result = applyBehaviorTemplate(node.id, "navigate_home", node.id, "user");
+  assert.equal(result.ok, true);
+  assert.equal(result.behavior?.type, "navigate");
+  assert.equal(result.behavior?.page_id, firstPage.id);
+});
+
+test("applyBehaviorTemplate rejects unknown templates and missing components", () => {
+  const node = stateStore.addComponent("button", undefined, { text: "Go" }, null, "user");
+  const unknown = applyBehaviorTemplate(node.id, "nope", node.id, "user");
+  assert.equal(unknown.ok, false);
+  assert.match(unknown.detail || "", /Unknown behavior template/);
+
+  const missing = applyBehaviorTemplate("comp_nope", "toast_feedback", null, "user");
+  assert.equal(missing.ok, false);
+});
+
+test("ws apply_component_template and apply_behavior_template work end to end", () => {
+  const node = stateStore.addComponent("button", undefined, { text: "Go" }, null, "user");
+
+  const replaced = applyClientMessage({
+    type: "apply_component_template",
+    template_id: "pricing_3col",
+    target_id: node.id,
+  });
+  assert.equal(replaced.ok, true);
+  const state = stateStore.getState();
+  const updated = state.components.find((c) => c.id === node.id);
+  assert.equal(updated?.type, "pricing");
+
+  const behaved = applyClientMessage({
+    type: "apply_behavior_template",
+    component_id: node.id,
+    template_id: "open_link_new_tab",
+  });
+  assert.equal(behaved.ok, true);
+  const withBehavior = stateStore.getState().components.find((c) => c.id === node.id);
+  assert.equal(withBehavior?.behavior?.type, "link");
+  assert.equal(withBehavior?.behavior?.new_tab, true);
+
+  const badTemplate = applyClientMessage({
+    type: "apply_component_template",
+    template_id: "nope",
+  });
+  assert.equal(badTemplate.ok, false);
 });

@@ -119,6 +119,13 @@ type Behavior =
   - 测试：apply 单元 4 项 + state 导入记录 + server 管线链路（导入→调整→应用→备份→回滚）+ e2e 浏览器全流程（**总数 423 → 429，e2e 7 → 8**）。
 
 - ✅ **模板资产（支柱⑦的已有基础）**：14 风格预设（`STYLE_PRESETS`）+ 每风格动效（`STYLE_MOTION_PROFILES`）+ 5 页面模板 + 41 组件类型（组件库拖拽上画布）；风格预设升级方案见 [`prism-style-preset-upgrade-plan.md`](./prism-style-preset-upgrade-plan.md)（14→30、完整设计系统字段）。
+- ✅ **模板快速变更（P0，支柱⑦）**：
+  - 组件模板（`src/template-catalog.ts` `COMPONENT_TEMPLATES`，10 个成品块）：Hero 分屏+CTA / 导航+按钮 / 定价三档 / 注册表单（自带提交行为）/ 评价墙 / 统计条 / FAQ / CTA 横幅（自带链接行为）/ Cookie 横幅 / 便当盒网格。
+  - **就地替换**（`state.replaceComponent`）：同 id 同布局位置换装，可撤销；组件库新增「替换选中」开关，点块即替换、拖到画布即添加。
+  - 交互模板（`BEHAVIOR_TEMPLATES`，6 个）：打开链接（新标签页）/ 点击提示 / 跳转首页 / 显隐切换 / 表单提交反馈 / AI 联动指令；组件库新增「交互」tab，点选即绑定到选中组件（播放模式触发）。
+  - 风格换装本就就地在当前产品上生效（`apply_style` / 风格库点击）。
+  - 全通道：WS `apply_component_template`/`apply_behavior_template` + REST `GET /api/template-catalog`、`POST /api/templates/component`、`POST /api/templates/behavior`、`PUT /api/component/:id/replace` + MCP `design_apply_component_template`/`design_apply_behavior_template`（工具总数 72 → 74）。
+  - 测试：state 替换 3 项 + service 模板 8 项 + server 全链路 + e2e"组件模板替换选中 + 交互模板绑定"（**总数 429 → 446，e2e 8 → 9**）。
 
 ## 7. 不变的东西
 

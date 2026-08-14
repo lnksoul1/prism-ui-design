@@ -188,6 +188,8 @@ const VALID_PARAMS: Record<string, Record<string, unknown>> = {
     component_id: "comp_1",
     behavior: { type: "navigate", page_id: "page_2" },
   },
+  design_apply_component_template: { template_id: "hero_split_cta" },
+  design_apply_behavior_template: { component_id: "comp_1", template_id: "toast_feedback" },
   design_align_components: { ids: ["comp_1", "comp_2"], mode: "center_x" },
   design_z_order_component: { component_id: "comp_1", mode: "front" },
 };
@@ -251,6 +253,8 @@ const EXPECT_STRUCTURED = new Set([
   "design_review_and_improve",
   "design_explain_design",
   "design_set_behavior",
+  "design_apply_component_template",
+  "design_apply_behavior_template",
   "design_align_components",
   "design_z_order_component",
 ]);
@@ -290,13 +294,15 @@ const INVALID_PARAMS: Record<string, Record<string, unknown>> = {
   design_generate_page: { brief: "" },
   design_explain_design: { lang: "fr" },
   design_set_behavior: { component_id: "comp_1" },
+  design_apply_component_template: {},
+  design_apply_behavior_template: { component_id: "comp_1" },
   design_align_components: { ids: ["a"], mode: "center_x" },
   design_z_order_component: { component_id: "comp_1", mode: "diagonal" },
 };
 
-test("registers all 72 tools with unique names", () => {
-  assert.equal(captured.length, 72);
-  assert.equal(new Set(captured.map((t) => t.name)).size, 72);
+test("registers all 74 tools with unique names", () => {
+  assert.equal(captured.length, 74);
+  assert.equal(new Set(captured.map((t) => t.name)).size, 74);
   for (const tool of captured) {
     assert.equal(typeof tool.handler, "function");
   }

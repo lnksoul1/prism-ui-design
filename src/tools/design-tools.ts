@@ -9,6 +9,7 @@ import {
 } from "../state.js";
 import { applyStyleTokenSet } from "../tokens.js";
 import { getMotionProfile } from "../constants.js";
+import { applyBehaviorTemplate, applyComponentTemplate } from "../service/design-service.js";
 import {
   CDN_URLS,
   cdnScriptsForDeps,
@@ -1653,6 +1654,133 @@ Example:
   );
 }
 
+// ===== Tool: design_apply_component_template =====
+
+export function registerDesignComponentTemplateTool(server: McpServer): void {
+  server.registerTool(
+    "design_apply_component_template",
+    {
+      title: "Apply Component Template",
+      description: `Apply a ready-made component block to the canvas (模板快速变更 v3.2 支柱⑦ P0: 组件模板).
+When target_id is given the selected component is REPLACED in place (keeping its
+layout position); otherwise the block is added as a new component. Undoable.
+
+Component templates:
+  - hero_split_cta: Hero 分屏 + CTA
+  - navbar_cta: 导航栏 + 行动按钮
+  - pricing_3col: 定价三档
+  - signup_form: 注册表单（提交弹出成功提示）
+  - testimonial_grid: 用户评价墙
+  - stats_bar: 数据统计条
+  - faq_accordion: FAQ 手风琴
+  - cta_banner: CTA 转化横幅（点击打开链接）
+  - cookie_consent: Cookie 同意横幅
+  - bento_features: 便当盒功能网格
+
+Example:
+  - design_apply_component_template(template_id="hero_split_cta")
+  - design_apply_component_template(template_id="pricing_3col", target_id="comp_5")`,
+      inputSchema: {
+        template_id: z.string().describe("Component template id (see list above)"),
+        target_id: z.string().optional().describe("Replace this component in place (keeps its layout)"),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (params) => {
+      try {
+        const result = applyComponentTemplate(params.template_id, params.target_id || null, "ai");
+        if (!result.ok) {
+          return {
+            content: [{ type: "text", text: `Error: ${result.detail || "unknown template"}` }],
+            structuredContent: { success: false, template_id: params.template_id },
+          };
+        }
+        return {
+          content: [{ type: "text", text: `${result.detail}. Client dashboard updated.` }],
+          structuredContent: {
+            success: true,
+            template_id: params.template_id,
+            component_id: result.component_id,
+            mode: result.mode,
+          },
+        };
+      } catch (error) {
+        return {
+          content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        };
+      }
+    }
+  );
+}
+
+// ===== Tool: design_apply_behavior_template =====
+
+export function registerDesignBehaviorTemplateTool(server: McpServer): void {
+  server.registerTool(
+    "design_apply_behavior_template",
+    {
+      title: "Apply Behavior Template",
+      description: `Bind a preset interaction to a component in one click (模板快速变更 v3.2 支柱⑦ P0: 交互模板).
+Triggered in play mode when the user clicks the element. Undoable.
+
+Behavior templates:
+  - open_link_new_tab: 打开链接（新标签页）
+  - toast_feedback: 点击提示
+  - navigate_home: 跳转首页
+  - toggle_self: 显隐切换（自身）
+  - submit_feedback: 表单提交反馈
+  - ai_enhance: AI 联动指令
+
+Example:
+  - design_apply_behavior_template(component_id="comp_5", template_id="toast_feedback")`,
+      inputSchema: {
+        component_id: z.string().describe("Component ID to bind the interaction to"),
+        template_id: z.string().describe("Behavior template id (see list above)"),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (params) => {
+      try {
+        const result = applyBehaviorTemplate(params.component_id, params.template_id, params.component_id, "ai");
+        if (!result.ok) {
+          return {
+            content: [{ type: "text", text: `Error: ${result.detail || "unknown template"}` }],
+            structuredContent: { success: false, template_id: params.template_id },
+          };
+        }
+        return {
+          content: [
+            {
+              type: "text",
+              text: `${result.detail}. It triggers in play mode. Client dashboard updated.`,
+            },
+          ],
+          structuredContent: {
+            success: true,
+            component_id: params.component_id,
+            template_id: params.template_id,
+            behavior: result.behavior,
+          },
+        };
+      } catch (error) {
+        return {
+          content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        };
+      }
+    }
+  );
+}
+
 // ===== Tool: design_get_state =====
 
 export function registerDesignGetStateTool(server: McpServer): void {
@@ -2403,6 +2531,8 @@ export function registerAllDesignTools(server: McpServer): void {
   registerDesignBehaviorTool(server);
   registerDesignAlignTool(server);
   registerDesignZOrderTool(server);
+  registerDesignComponentTemplateTool(server);
+  registerDesignBehaviorTemplateTool(server);
   registerDesignGetStateTool(server);
   registerDesignSetTokenTool(server);
   registerDesignRemoveComponentTool(server);

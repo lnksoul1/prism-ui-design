@@ -219,6 +219,59 @@ test("duplicateComponent returns null for unknown ids", () => {
   assert.equal(stateStore.duplicateComponent("nope", "user"), null);
 });
 
+test("replaceComponent swaps the definition in place, keeping id and layout", () => {
+  const comp = stateStore.addComponent("button", undefined, { text: "Go" }, null, "ai");
+  stateStore.updateComponent(comp.id, {}, "user", { x: 12, y: 34, w: 200, h: 48 });
+  stateStore.setBehavior(comp.id, { type: "toast", message: "old" }, "user");
+
+  const ok = stateStore.replaceComponent(
+    comp.id,
+    { type: "pricing", variant: "3col", props: { plans: [{ name: "A" }] }, behavior: null },
+    "user"
+  );
+  assert.equal(ok, true);
+
+  const node = stateStore.getState().components.find((c) => c.id === comp.id);
+  assert.ok(node);
+  assert.equal(node.id, comp.id, "id preserved");
+  assert.equal(node.type, "pricing");
+  assert.equal(node.variant, "3col");
+  assert.deepEqual(node.props, { plans: [{ name: "A" }] });
+  assert.deepEqual(node.layout, { x: 12, y: 34, w: 200, h: 48 }, "layout preserved");
+  assert.equal(node.behavior, undefined, "behavior cleared when null");
+});
+
+test("replaceComponent drops children, binds new behavior, and is undoable", () => {
+  const parent = stateStore.addComponent("card", undefined, {}, null, "ai");
+  stateStore.addComponent("button", undefined, { text: "child" }, parent.id, "ai");
+
+  stateStore.replaceComponent(
+    parent.id,
+    {
+      type: "form",
+      props: { fields: [{ label: "x" }] },
+      behavior: { type: "submit", form_id: "f1" },
+    },
+    "user"
+  );
+  const replaced = stateStore.getState().components.find((c) => c.id === parent.id);
+  assert.equal(replaced?.type, "form");
+  assert.equal(replaced?.children.length, 0, "children dropped");
+  assert.deepEqual(replaced?.behavior, { type: "submit", form_id: "f1" });
+
+  assert.equal(stateStore.undo(), true);
+  const restored = stateStore.getState().components.find((c) => c.id === parent.id);
+  assert.equal(restored?.type, "card");
+  assert.equal(restored?.children.length, 1);
+});
+
+test("replaceComponent returns false for unknown ids", () => {
+  assert.equal(
+    stateStore.replaceComponent("comp_nope", { type: "hero", props: {} }, "user"),
+    false
+  );
+});
+
 test("setBehavior binds and clears an interaction, unknown ids fail", () => {
   const comp = stateStore.addComponent("button", undefined, { text: "Go" }, null, "ai");
   const ok = stateStore.setBehavior(comp.id, { type: "navigate", page_id: "page_2" }, "user");

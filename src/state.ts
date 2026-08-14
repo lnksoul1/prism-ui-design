@@ -725,6 +725,54 @@ class DesignStateStore extends EventEmitter {
   }
 
   /**
+   * Replace a component's definition in place (模板快速变更 P0: 组件模板).
+   * Swaps type/variant/props and optionally behavior/animation while keeping
+   * the same id and layout position, so a block can be swapped without moving
+   * the canvas arrangement. Children are dropped (the template defines the
+   * full block). Undoable like any mutation.
+   */
+  replaceComponent(
+    id: string,
+    patch: {
+      type: string;
+      variant?: string;
+      props: Record<string, unknown>;
+      behavior?: ComponentBehavior | null;
+      animation?: AnimationDef | null;
+    },
+    source: "ai" | "user" = "user"
+  ): boolean {
+    const node = this.findComponent(id);
+    if (!node) return false;
+    node.type = patch.type;
+    node.variant = patch.variant;
+    node.props = JSON.parse(JSON.stringify(patch.props)) as Record<string, unknown>;
+    node.children = [];
+    if (patch.behavior !== undefined) {
+      if (patch.behavior && isBehaviorType(patch.behavior.type)) {
+        node.behavior = { ...patch.behavior };
+      } else {
+        delete node.behavior;
+      }
+    }
+    if (patch.animation !== undefined) {
+      if (patch.animation) {
+        node.animation = JSON.parse(JSON.stringify(patch.animation)) as AnimationDef;
+      } else {
+        delete node.animation;
+      }
+    }
+    this.logActivity(
+      "replace_component",
+      node.type,
+      `Replaced ${id} with ${node.type}${node.variant ? ` (${node.variant})` : ""}`,
+      source
+    );
+    this.commit({ type: "replaceComponent", id, newType: node.type });
+    return true;
+  }
+
+  /**
    * Bind or clear an interaction behavior on a component (行为模型 P1).
    * Pass `null` to remove the behavior. Undoable like any mutation.
    */

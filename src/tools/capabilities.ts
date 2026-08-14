@@ -95,6 +95,8 @@ const TOOL_MANIFEST: Array<{ name: string; group: string; summary: string; examp
   // Non-professional UX
   { name: "design_explain_design", group: "semantics", summary: "Explain the current design in plain language + suggest follow-up instructions", example: 'design_explain_design(lang="zh")' },
   { name: "design_set_behavior", group: "interaction", summary: "Bind an interaction behavior to a component (navigate/link/toggle/toast/submit/prompt)", example: 'design_set_behavior(component_id="comp_x", behavior={"type":"navigate","page_id":"page_2"})' },
+  { name: "design_apply_component_template", group: "interaction", summary: "Apply a ready-made component block (add, or replace the selected component in place)", example: 'design_apply_component_template(template_id="hero_split_cta", target_id="comp_5")' },
+  { name: "design_apply_behavior_template", group: "interaction", summary: "Bind a preset interaction template to a component in one click", example: 'design_apply_behavior_template(component_id="comp_5", template_id="toast_feedback")' },
   { name: "design_align_components", group: "design", summary: "Align/distribute multiple components (freeform, single undo step)", example: 'design_align_components(ids=["comp_1","comp_2"], mode="center_x")' },
   { name: "design_z_order_component", group: "design", summary: "Reorder component stacking (front/back/forward/backward)", example: 'design_z_order_component(component_id="comp_x", mode="front")' },
   // Upgrade plan U1: Lenis smooth scroll + GSAP animation engine

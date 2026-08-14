@@ -13,6 +13,7 @@ import { stateStore, type AlignMode, type AnimationDef, type ComponentBehavior, 
 import { applyStyleTokenSet } from "../tokens.js";
 import { STYLE_PRESETS } from "../constants.js";
 import { executeUserPrompt, type PromptExecutionResult } from "../prompt-executor.js";
+import { getBehaviorTemplate, getComponentTemplate } from "../template-catalog.js";
 
 export type MutationSource = "ai" | "user";
 
@@ -226,6 +227,100 @@ export function zOrderComponent(id: string, mode: ZOrderMode, source: MutationSo
   return stateStore.zOrderComponent(id, mode, source);
 }
 
+// ===== 模板快速变更 (v3.2 支柱⑦ P0) =====
+
+export interface ApplyComponentTemplateResult {
+  ok: boolean;
+  /** "added" (new block) or "replaced" (swapped an existing component). */
+  mode?: "added" | "replaced";
+  component_id?: string;
+  template_id?: string;
+  detail?: string;
+}
+
+/**
+ * Apply a component template (组件模板): adds the block to the canvas, or —
+ * when `targetId` is given — replaces that component in place (keeping its
+ * layout position). Falls back to adding when the target no longer exists.
+ */
+export function applyComponentTemplate(
+  templateId: string,
+  targetId: string | null,
+  source: MutationSource = "user"
+): ApplyComponentTemplateResult {
+  const template = getComponentTemplate(templateId);
+  if (!template) {
+    return { ok: false, template_id: templateId, detail: `Unknown component template "${templateId}"` };
+  }
+  const props = JSON.parse(JSON.stringify(template.props)) as Record<string, unknown>;
+
+  if (targetId) {
+    const replaced = stateStore.replaceComponent(
+      targetId,
+      { type: template.type, variant: template.variant, props, behavior: template.behavior ?? null },
+      source
+    );
+    if (replaced) {
+      return {
+        ok: true,
+        mode: "replaced",
+        component_id: targetId,
+        template_id: templateId,
+        detail: `Replaced component ${targetId} with ${template.name}`,
+      };
+    }
+    // Target missing — fall through and add a fresh block.
+  }
+
+  const node = stateStore.addComponent(template.type, template.variant, props, null, source);
+  if (template.behavior) {
+    stateStore.setBehavior(node.id, template.behavior, source);
+  }
+  return {
+    ok: true,
+    mode: "added",
+    component_id: node.id,
+    template_id: templateId,
+    detail: `Added ${template.name} (${node.id})`,
+  };
+}
+
+export interface ApplyBehaviorTemplateResult {
+  ok: boolean;
+  component_id?: string;
+  template_id?: string;
+  behavior?: ComponentBehavior;
+  detail?: string;
+}
+
+/**
+ * Apply a behavior template (交互模板): builds the preset interaction with
+ * sensible defaults and binds it to the selected component. Undoable.
+ */
+export function applyBehaviorTemplate(
+  componentId: string,
+  templateId: string,
+  selectedComponentId: string | null,
+  source: MutationSource = "user"
+): ApplyBehaviorTemplateResult {
+  const template = getBehaviorTemplate(templateId);
+  if (!template) {
+    return { ok: false, template_id: templateId, detail: `Unknown behavior template "${templateId}"` };
+  }
+  const state = stateStore.getState();
+  const pageIds = state.pages.map((p) => p.id);
+  const behavior = template.build({
+    currentPageId: state.currentPageId ?? pageIds[0] ?? null,
+    pageIds,
+    selectedComponentId,
+  });
+  const ok = stateStore.setBehavior(componentId, behavior, source);
+  if (!ok) {
+    return { ok: false, component_id: componentId, template_id: templateId, detail: `Component ${componentId} not found` };
+  }
+  return { ok: true, component_id: componentId, template_id: templateId, behavior, detail: `Bound ${template.name} to ${componentId}` };
+}
+
 // ===== Pages =====
 
 export function addPage(name: string, source: MutationSource = "user") {
@@ -401,6 +496,16 @@ export const wsMessageSchema = z.discriminatedUnion("type", [
     type: z.literal("apply_style"),
     style: z.string().min(1),
   }),
+  z.strictObject({
+    type: z.literal("apply_component_template"),
+    template_id: z.string().min(1),
+    target_id: z.string().optional(),
+  }),
+  z.strictObject({
+    type: z.literal("apply_behavior_template"),
+    component_id: z.string().min(1),
+    template_id: z.string().min(1),
+  }),
 ]);
 
 export type WsClientMessage = z.infer<typeof wsMessageSchema>;
@@ -500,6 +605,14 @@ export function applyClientMessage(msg: WsClientMessage): { ok: boolean; detail:
     case "apply_style": {
       const ok = applyStyle(msg.style, "user");
       return { ok, detail: ok ? `style ${msg.style}` : `unknown style ${msg.style}` };
+    }
+    case "apply_component_template": {
+      const result = applyComponentTemplate(msg.template_id, msg.target_id || null, "user");
+      return { ok: result.ok, detail: result.detail || result.template_id || "apply component template failed" };
+    }
+    case "apply_behavior_template": {
+      const result = applyBehaviorTemplate(msg.component_id, msg.template_id, msg.component_id, "user");
+      return { ok: result.ok, detail: result.detail || result.template_id || "apply behavior template failed" };
     }
     default:
       return { ok: false, detail: `unsupported message type` };

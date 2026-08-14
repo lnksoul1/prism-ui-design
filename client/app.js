@@ -82,6 +82,11 @@ const I18N = {
     libStyles: "风格",
     libAnimations: "动效",
     libComponents: "组件",
+    libInteractions: "交互",
+    libInteractionsHint: "选中组件后点击，一键绑定交互",
+    replaceSelected: "替换选中",
+    replaceSelectedHint: "开启后点击组件块将替换画布中选中的组件（保持位置）",
+    noSelectionForInteraction: "请先在画布中选中一个组件，再点击交互模板",
     activityLog: "活动日志",
     canvasLabel: "实时预览画布",
     flow: "流式",
@@ -342,6 +347,11 @@ const I18N = {
     libStyles: "Styles",
     libAnimations: "Motion",
     libComponents: "Components",
+    libInteractions: "Interactions",
+    libInteractionsHint: "Select a component, then click to bind an interaction",
+    replaceSelected: "Replace selected",
+    replaceSelectedHint: "When on, clicking a block replaces the selected component (keeps position)",
+    noSelectionForInteraction: "Select a component on the canvas first, then click an interaction template",
     activityLog: "Activity",
     canvasLabel: "Live Canvas",
     flow: "Flow",
@@ -5492,6 +5502,37 @@ const LIBRARY_COMPONENTS = [
   { id: "toggle", name: "开关", desc: "切换开关", icon: "◉", variant: "", defaultProps: { label: "通知", checked: true } },
 ];
 
+// ===== 模板快速变更 (v3.2 支柱⑦ P0) =====
+// 组件模板 (COMPONENT_TEMPLATES, mirrors src/template-catalog.ts): ready-made
+// blocks — click to add, or with 替换选中 on + a selection, replace in place.
+const LIBRARY_BLOCKS = [
+  { id: "hero_split_cta", name: "Hero 分屏 + CTA", desc: "左右分栏：标题 + 说明 + 行动按钮", icon: "◈", isBlock: true },
+  { id: "navbar_cta", name: "导航栏 + 行动按钮", desc: "Logo + 菜单 + 右上角 CTA", icon: "☰", isBlock: true },
+  { id: "pricing_3col", name: "定价三档", desc: "基础 / 专业 / 企业三列定价卡", icon: "$", isBlock: true },
+  { id: "signup_form", name: "注册表单", desc: "姓名 + 邮箱 + 密码，提交弹出成功提示", icon: "✎", isBlock: true },
+  { id: "testimonial_grid", name: "用户评价墙", desc: "3 条客户见证 + 头像", icon: '"', isBlock: true },
+  { id: "stats_bar", name: "数据统计条", desc: "3 个核心指标数字", icon: "#", isBlock: true },
+  { id: "faq_accordion", name: "FAQ 手风琴", desc: "常见问题折叠面板", icon: "≡", isBlock: true },
+  { id: "cta_banner", name: "CTA 转化横幅", desc: "大标题 + 副标题 + 双按钮，点击打开链接", icon: "➤", isBlock: true },
+  { id: "cookie_consent", name: "Cookie 同意横幅", desc: "隐私提示 + 接受/拒绝", icon: "◉", isBlock: true },
+  { id: "bento_features", name: "便当盒功能网格", desc: "非对称大小卡片展示功能", icon: "▤", isBlock: true },
+];
+
+// 交互模板 (BEHAVIOR_TEMPLATES, mirrors src/template-catalog.ts): one-click
+// interaction presets applied to the selected component.
+const LIBRARY_INTERACTIONS = [
+  { id: "open_link_new_tab", name: "打开链接（新标签页）", desc: "点击后在新标签页打开网址", icon: "↗" },
+  { id: "toast_feedback", name: "点击提示", desc: "点击后弹出提示气泡", icon: "◌" },
+  { id: "navigate_home", name: "跳转首页", desc: "点击后跳转到项目首页", icon: "⌂" },
+  { id: "toggle_self", name: "显隐切换（自身）", desc: "点击显示/隐藏自身", icon: "◐" },
+  { id: "submit_feedback", name: "表单提交反馈", desc: "提交表单并提示成功", icon: "✔" },
+  { id: "ai_enhance", name: "AI 联动指令", desc: "点击触发一条 AI 优化指令", icon: "✦" },
+];
+
+// 替换选中 mode (components tab): when on and a component is selected,
+// clicking a library item replaces it in place instead of adding.
+let libraryReplaceMode = false;
+
 // Built-in page templates (mirror server-side applyPageTemplate)
 const LIBRARY_TEMPLATES = [
   { id: "saas_landing", name: "SaaS 落地页", desc: "导航 + Hero + 功能 + 定价 + CTA", icon: "◈", builtin: true },
@@ -5527,6 +5568,7 @@ function renderLibraryList() {
   if (currentLibraryTab === "styles") items = LIBRARY_STYLES;
   else if (currentLibraryTab === "animations") items = LIBRARY_ANIMATIONS;
   else if (currentLibraryTab === "components") items = LIBRARY_COMPONENTS;
+  else if (currentLibraryTab === "interactions") items = LIBRARY_INTERACTIONS;
   else if (currentLibraryTab === "templates") items = LIBRARY_TEMPLATES;
   else if (currentLibraryTab === "designSystems") {
     renderDesignSystems();
@@ -5536,6 +5578,64 @@ function renderLibraryList() {
   if (items.length === 0) {
     list.innerHTML = `<div class="library-empty">${t("libraryLoading")}</div>`;
     return;
+  }
+
+  // 模板快速变更: components tab gets a 替换选中 toggle + curated block group.
+  if (currentLibraryTab === "components") {
+    const replaceRow = el("div", "lib-replace-row");
+    const label = el("label", "lib-replace-toggle");
+    const checkbox = el("input", "");
+    checkbox.type = "checkbox";
+    checkbox.id = "lib-replace-toggle";
+    checkbox.checked = libraryReplaceMode;
+    checkbox.addEventListener("change", () => {
+      libraryReplaceMode = checkbox.checked;
+    });
+    label.appendChild(checkbox);
+    label.appendChild(document.createTextNode(t("replaceSelected")));
+    label.title = t("replaceSelectedHint");
+    replaceRow.appendChild(label);
+    list.appendChild(replaceRow);
+
+    // Curated component blocks (组件模板) — replace or add via /api/templates/component
+    const blockHeader = el("div", "lib-group-header", "组件模板");
+    blockHeader.title = t("replaceSelectedHint");
+    list.appendChild(blockHeader);
+    LIBRARY_BLOCKS.forEach((block) => {
+      const elBlock = el("div", "lib-item lib-item-block");
+      elBlock.draggable = true;
+      elBlock.dataset.libType = "blocks";
+      elBlock.dataset.itemId = block.id;
+      const iconEl = el("span", "lib-item-icon", block.icon);
+      iconEl.style.color = "var(--accent)";
+      elBlock.appendChild(iconEl);
+      const textEl = el("div", "lib-item-text");
+      textEl.appendChild(el("div", "lib-item-name", block.name));
+      textEl.appendChild(el("div", "lib-item-desc", block.desc));
+      elBlock.appendChild(textEl);
+      elBlock.addEventListener("dragstart", (e) => {
+        e.stopPropagation();
+        e.dataTransfer.effectAllowed = "copy";
+        try { e.dataTransfer.setData("text/plain", JSON.stringify({ libType: "blocks", item: block })); } catch (err) {}
+        elBlock.classList.add("dragging");
+      });
+      elBlock.addEventListener("dragend", () => {
+        elBlock.classList.remove("dragging");
+        const hint = $("canvas-drop-hint");
+        if (hint) hint.style.display = "none";
+      });
+      elBlock.addEventListener("click", () => handleLibraryItemClick(block));
+      list.appendChild(elBlock);
+    });
+    const paletteHeader = el("div", "lib-group-header", t("libComponents"));
+    list.appendChild(paletteHeader);
+  }
+
+  // 交互模板 hint
+  if (currentLibraryTab === "interactions") {
+    const hintRow = el("div", "lib-group-header");
+    hintRow.textContent = t("libInteractionsHint");
+    list.appendChild(hintRow);
   }
 
   if (currentLibraryTab === "templates") {
@@ -5723,8 +5823,22 @@ function handleLibraryItemClick(item) {
   if (currentLibraryTab === "styles") {
     send({ type: "apply_style", style: item.id });
   } else if (currentLibraryTab === "components") {
-    // Use HTTP API for reliability (WebSocket may have timing issues)
-    addComponentViaAPI(item);
+    if (item.isBlock) {
+      // 组件模板 (curated block): replace selected in place, or add.
+      applyComponentTemplateViaAPI(item, libraryReplaceMode && selectedComponentId ? selectedComponentId : null);
+    } else if (libraryReplaceMode && selectedComponentId) {
+      replaceComponentViaAPI(selectedComponentId, item);
+    } else {
+      // Use HTTP API for reliability (WebSocket may have timing issues)
+      addComponentViaAPI(item);
+    }
+  } else if (currentLibraryTab === "interactions") {
+    // 交互模板: bind the preset interaction to the selected component.
+    if (!selectedComponentId) {
+      showToastMsg(t("noSelectionForInteraction"), true);
+      return;
+    }
+    applyBehaviorTemplateViaAPI(selectedComponentId, item.id);
   } else if (currentLibraryTab === "templates") {
     applyTemplateViaAPI(item);
   } else if (currentLibraryTab === "animations") {
@@ -5747,6 +5861,75 @@ function handleLibraryItemClick(item) {
       hover: item.hover,
       duration: item.duration,
     });
+  }
+}
+
+// Apply a component template (组件模板): replace target_id in place, or add.
+async function applyComponentTemplateViaAPI(item, targetId) {
+  try {
+    const response = await fetch("/api/templates/component", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        template_id: item.id,
+        ...(targetId ? { target_id: targetId } : {}),
+      }),
+    });
+    if (!response.ok) {
+      console.error("Failed to apply component template:", response.status);
+      showToastMsg("模板应用失败", true);
+      return;
+    }
+    const data = await response.json();
+    if (data.mode === "replaced") showToastMsg("已替换选中组件（位置保持不变）");
+    else showToastMsg("已添加组件模板");
+  } catch (err) {
+    console.error("Failed to apply component template:", err);
+    showToastMsg("模板应用失败", true);
+  }
+}
+
+// Replace a component's definition in place (raw palette path).
+async function replaceComponentViaAPI(id, item) {
+  try {
+    const response = await fetch(`/api/component/${encodeURIComponent(id)}/replace`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: item.id,
+        variant: item.variant || undefined,
+        props: item.defaultProps || {},
+      }),
+    });
+    if (!response.ok) {
+      console.error("Failed to replace component:", response.status);
+      showToastMsg("替换失败", true);
+    } else {
+      showToastMsg("已替换选中组件");
+    }
+  } catch (err) {
+    console.error("Failed to replace component:", err);
+    showToastMsg("替换失败", true);
+  }
+}
+
+// Apply a behavior template (交互模板) to a component.
+async function applyBehaviorTemplateViaAPI(componentId, templateId) {
+  try {
+    const response = await fetch("/api/templates/behavior", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ component_id: componentId, template_id: templateId }),
+    });
+    if (!response.ok) {
+      console.error("Failed to apply behavior template:", response.status);
+      showToastMsg("交互模板应用失败", true);
+      return;
+    }
+    showToastMsg("交互已绑定（播放模式点击触发）");
+  } catch (err) {
+    console.error("Failed to apply behavior template:", err);
+    showToastMsg("交互模板应用失败", true);
   }
 }
 
@@ -5958,6 +6141,9 @@ function setupCanvasDropZone() {
 function handleLibraryDrop(item, libType) {
   if (libType === "styles") {
     send({ type: "apply_style", style: item.id });
+  } else if (libType === "blocks") {
+    // 组件模板 dropped on the canvas: add the block (drop never replaces)
+    applyComponentTemplateViaAPI(item, null);
   } else if (libType === "components") {
     addComponentViaAPI(item);
   } else if (libType === "animations") {

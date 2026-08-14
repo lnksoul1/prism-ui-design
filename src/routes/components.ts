@@ -83,6 +83,31 @@ export function registerComponentsRoutes(): express.Router {
     res.json({ success });
   }));
 
+  // API: Replace a component's definition in place (模板快速变更 P0 组件模板,
+  // raw palette path): swaps type/variant/props, keeps id + layout position.
+  router.put("/api/component/:id/replace", asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { type, variant, props, behavior, animation } = req.body || {};
+    if (typeof type !== "string" || !type || !designService.isKnownComponentType(type)) {
+      throw new HttpError(400, "A known component type is required");
+    }
+    const ok = stateStore.replaceComponent(
+      id,
+      {
+        type,
+        variant: typeof variant === "string" && variant ? variant : undefined,
+        props: props && typeof props === "object" ? props : {},
+        behavior: behavior === undefined ? null : (behavior as never),
+        animation: animation === undefined ? null : (animation as never),
+      },
+      "user"
+    );
+    if (!ok) {
+      throw new HttpError(404, `Component ${id} not found`);
+    }
+    res.json({ success: true, id, type });
+  }));
+
   // API: Remove component (from client)
   router.delete("/api/component/:id", asyncHandler(async (req, res) => {
     const { id } = req.params;

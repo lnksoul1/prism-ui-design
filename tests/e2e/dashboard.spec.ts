@@ -266,6 +266,47 @@ test("import product → banner → one-click apply pipeline", async ({ page }: 
   await page.click("#apply-btn");
   await expect(page.locator("#prism-toast")).toContainText("已应用", { timeout: 5000 });
 
+  // The apply-result modal lists the artifact paths + the CSS link hint
+  await expect(page.locator("#apply-result-modal")).toBeVisible({ timeout: 5000 });
+  await expect(page.locator(".apply-result-item").first()).toBeVisible();
+  await expect(page.locator("#apply-result-list")).toContainText("prism-adjustments.css");
+  await page.click("#apply-result-done");
+  await expect(page.locator("#apply-result-modal")).not.toBeVisible();
+
+  expect(errors).toEqual([]);
+});
+
+test("import wizard: client-UI source lands on canvas with apply banner", async ({ page }: { page: Page }) => {
+  const errors: string[] = [];
+  page.on("console", (msg) => {
+    if (msg.type() === "error") errors.push(msg.text());
+  });
+  page.on("pageerror", (err) => errors.push(String(err)));
+
+  await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "domcontentloaded", timeout: 60000 });
+  await expect(page.locator(".topbar")).toBeVisible();
+
+  // Open the import dialog and pick the 客户端界面 source
+  await page.locator("#more-btn").click();
+  await page.locator("#import-btn").click();
+  await page.locator('.import-tab[data-import-tab="client"]').click();
+  await page.click("#import-go");
+
+  // The client-UI page lands on the canvas and the apply banner appears
+  // (provenance recorded → same 导入→调整→一键应用 journey)
+  await expect(page.locator("#import-banner")).toBeVisible({ timeout: 15000 });
+  await expect(page.locator(".comp-wrapper").first()).toBeVisible({ timeout: 15000 });
+
+  // Apply → result modal with paths, then rollback restores the receipt flow
+  await page.click("#apply-btn");
+  await expect(page.locator("#apply-result-modal")).toBeVisible({ timeout: 5000 });
+  await page.click("#apply-result-done");
+  // Apply again so a backup exists, then rollback from the banner
+  await page.click("#apply-btn");
+  await expect(page.locator("#apply-result-modal")).toBeVisible({ timeout: 5000 });
+  await page.click("#apply-result-rollback");
+  await expect(page.locator("#prism-toast")).toContainText("已回滚", { timeout: 5000 });
+
   expect(errors).toEqual([]);
 });
 

@@ -108,7 +108,7 @@ export function isZOrderMode(value: string): value is ZOrderMode {
  * artifacts without bloating the autosave.
  */
 export interface ImportRecord {
-  kind: "url" | "html" | "file";
+  kind: "url" | "html" | "file" | "client" | "capture";
   /** Display name: hostname / "Pasted HTML" / file name. */
   source: string;
   url?: string;

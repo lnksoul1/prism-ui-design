@@ -356,6 +356,8 @@
         <button class="import-tab active" data-import-tab="folder" data-i18n="importTabFolder">项目文件夹</button>
         <button class="import-tab" data-import-tab="url" data-i18n="importTabUrl">网页 URL</button>
         <button class="import-tab" data-import-tab="html" data-i18n="importTabHtml">HTML 代码</button>
+        <button class="import-tab" data-import-tab="client" data-i18n="importTabClient">客户端界面</button>
+        <button class="import-tab" data-import-tab="capture" data-i18n="importTabCapture">实际界面截图</button>
       </div>
       <div class="import-pane" id="import-pane-folder">
         <p class="import-desc">输入项目文件夹路径，系统将自动扫描 HTML / JSX / Vue 文件并提取页面组件。</p>
@@ -376,6 +378,15 @@
           <button type="button" class="btn-copy" id="import-file-btn" data-i18n="importFile">选择 HTML 文件</button>
         </label>
       </div>
+      <div class="import-pane" id="import-pane-client" style="display:none">
+        <p class="import-desc" data-i18n="importClientDesc">把 Prism 客户端界面本身导入画布，你可以调整自己的产品 UI，再一键应用回产物。</p>
+        <label class="import-checkbox">
+          <input type="checkbox" id="import-clear-client"> 清除现有设计
+        </label>
+      </div>
+      <div class="import-pane" id="import-pane-capture" style="display:none">
+        <p class="import-desc" data-i18n="importCaptureDesc">截取真实运行的 Dashboard 界面作为参考图放入画布，边看边改。</p>
+      </div>
       <div class="import-result" id="import-result" style="display:none"></div>
       <button class="btn-import-go" id="import-go" data-i18n="importStart">开始导入</button>
     </div>
@@ -388,6 +399,24 @@
   <button class="btn-copy import-banner-btn" id="apply-btn" data-i18n="applyAdjustments">✍ 一键应用</button>
   <button class="btn-copy import-banner-btn" id="apply-rollback-btn" data-i18n="applyRollback">↺ 回滚</button>
   <button class="import-banner-close" id="import-banner-close" title="关闭">×</button>
+</div>
+
+<!-- Apply Result Modal: where the adjusted artifacts landed -->
+<div class="modal-overlay" id="apply-result-modal" style="display:none">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 data-i18n="applyResultTitle">✍ 已一键应用</h3>
+      <button class="modal-close" id="apply-result-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="import-desc" data-i18n="applyResultDesc">调整已写回产物目录，随时可以回滚。把 CSS 文件链接到你的产品 HTML 中即生效。</p>
+      <div class="apply-result-list" id="apply-result-list"></div>
+      <div class="apply-result-actions">
+        <button class="btn-copy import-banner-btn" id="apply-result-rollback" data-i18n="applyRollback">↺ 回滚</button>
+        <button class="btn-import-go" id="apply-result-done" data-i18n="applyResultDone">完成</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- Canvas Template Picker -->

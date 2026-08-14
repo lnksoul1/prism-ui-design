@@ -326,11 +326,18 @@ const I18N = {
     importTabFolder: "项目文件夹",
     importTabUrl: "网页 URL",
     importTabHtml: "HTML 代码",
+    importTabClient: "客户端界面",
+    importTabCapture: "实际界面截图",
+    importClientDesc: "把 Prism 客户端界面本身导入画布，你可以调整自己的产品 UI，再一键应用回产物。",
+    importCaptureDesc: "截取真实运行的 Dashboard 界面作为参考图放入画布，边看边改。",
     importFile: "选择 HTML 文件",
     importStart: "开始导入",
     importDone: "导入完成",
     importFailed: "导入失败",
     importedBanner: "已导入：{source}（{n} 个组件）· 调整后点击「一键应用」写回产物",
+    applyResultTitle: "✍ 已一键应用",
+    applyResultDesc: "调整已写回产物目录，随时可以回滚。把 CSS 文件链接到你的产品 HTML 中即生效。",
+    applyResultDone: "完成",
     applyAdjustments: "✍ 一键应用",
     applyRollback: "↺ 回滚上次应用",
     appliedResult: "已应用 {n} 个文件到产品目录（备份：{backup}）",
@@ -591,11 +598,18 @@ const I18N = {
     importTabFolder: "Project folder",
     importTabUrl: "Webpage URL",
     importTabHtml: "HTML code",
+    importTabClient: "Client UI",
+    importTabCapture: "Capture actual UI",
+    importClientDesc: "Import the Prism client UI itself into the canvas so you can adjust your own product UI, then apply it back with one click.",
+    importCaptureDesc: "Capture a screenshot of the running dashboard as a reference image on the canvas.",
     importFile: "Choose HTML file",
     importStart: "Start import",
     importDone: "Imported",
     importFailed: "Import failed",
     importedBanner: "Imported: {source} ({n} components) · adjust, then click Apply to write back",
+    applyResultTitle: "✍ Applied",
+    applyResultDesc: "Changes were written back to the product directory; you can roll back anytime. Link the CSS file into your product HTML to take effect.",
+    applyResultDone: "Done",
     applyAdjustments: "✍ Apply",
     applyRollback: "↺ Roll back",
     appliedResult: "Applied {n} files to the product directory (backup: {backup})",
@@ -4878,14 +4892,14 @@ function setupImportModal() {
     }
   };
 
-  // Tabs: folder / url / html
+  // Tabs: folder / url / html / client / capture
   const tabs = document.querySelectorAll(".import-tab");
   tabs.forEach((tab) => {
     tab.addEventListener("click", () => {
       tabs.forEach((t) => t.classList.remove("active"));
       tab.classList.add("active");
       const which = tab.dataset.importTab;
-      ["folder", "url", "html"].forEach((pane) => {
+      ["folder", "url", "html", "client", "capture"].forEach((pane) => {
         const el = $("import-pane-" + pane);
         if (el) el.style.display = pane === which ? "" : "none";
       });
@@ -4903,7 +4917,7 @@ function setupImportModal() {
         if (htmlTextarea) htmlTextarea.value = String(reader.result || "");
         // Switch to the HTML pane so the user can review before importing
         tabs.forEach((t) => t.classList.toggle("active", t.dataset.importTab === "html"));
-        ["folder", "url", "html"].forEach((pane) => {
+        ["folder", "url", "html", "client", "capture"].forEach((pane) => {
           const el = $("import-pane-" + pane);
           if (el) el.style.display = pane === "html" ? "" : "none";
         });
@@ -4974,6 +4988,70 @@ function setupImportModal() {
             fetchInitialState();
           } else {
             setResult(data.message || data.error || t("importFailed"), "import-error");
+            done();
+          }
+        } catch (err) {
+          setResult(`请求失败: ${err.message || err}`, "import-error");
+          done();
+        }
+        return;
+      }
+
+      // 打开客户端界面：把 Prism 自身 UI 导入画布（产品管线 ④ 来源二）
+      if (which === "client") {
+        setLoading("正在导入客户端界面");
+        try {
+          const response = await fetch("/api/import-client", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ clear_existing: clearExisting }),
+          });
+          const data = await response.json();
+          if (data.success) {
+            setResult(
+              `<div class="import-success-icon">✓</div>
+               <div class="import-success-summary">已导入客户端界面（${data.imported || 0} 个组件），调整后可以一键应用回产物</div>`,
+              "import-success"
+            );
+            goBtn.textContent = t("importDone");
+            setTimeout(() => {
+              modal.style.display = "none";
+              done();
+            }, 1500);
+            await fetchInitialState();
+            renderImportBanner();
+          } else {
+            setResult(data.error || data.message || t("importFailed"), "import-error");
+            done();
+          }
+        } catch (err) {
+          setResult(`请求失败: ${err.message || err}`, "import-error");
+          done();
+        }
+        return;
+      }
+
+      // 截取实际界面：把真实运行的 Dashboard 截图放入画布（产品管线 ④ 来源三）
+      if (which === "capture") {
+        setLoading("正在截取实际界面");
+        try {
+          const response = await fetch("/api/capture-client", { method: "POST" });
+          const data = await response.json();
+          if (data.success) {
+            setResult(
+              `<div class="import-success-icon">✓</div>
+               <div class="import-success-summary">已截取实际界面作为参考图（${data.file || ""}），调整后可以一键应用</div>`,
+              "import-success"
+            );
+            goBtn.textContent = t("importDone");
+            setTimeout(() => {
+              modal.style.display = "none";
+              done();
+            }, 1500);
+            await fetchInitialState();
+            renderImportBanner();
+          } else {
+            setResult(data.error || data.message || t("importFailed"), "import-error");
             done();
           }
         } catch (err) {
@@ -5055,6 +5133,36 @@ function setupApplyBanner() {
   const rollbackBtn = $("apply-rollback-btn");
   const closeBtn = $("import-banner-close");
   const banner = $("import-banner");
+  const resultModal = $("apply-result-modal");
+  const resultClose = $("apply-result-close");
+  const resultRollback = $("apply-result-rollback");
+  const resultDone = $("apply-result-done");
+  const resultList = $("apply-result-list");
+
+  const closeResult = () => {
+    if (resultModal) resultModal.style.display = "none";
+  };
+  if (resultClose) resultClose.addEventListener("click", closeResult);
+  if (resultDone) resultDone.addEventListener("click", closeResult);
+  if (resultModal) {
+    resultModal.addEventListener("click", (e) => {
+      if (e.target === resultModal) closeResult();
+    });
+  }
+
+  const doRollback = async (btn) => {
+    if (btn) btn.disabled = true;
+    try {
+      const res = await fetch("/api/apply/rollback", { method: "POST" });
+      const data = await res.json();
+      showToastMsg(data.success ? t("rolledBack", { file: data.restored ? data.restored.split(/[\\/]/).pop() : "" }) : (data.message || t("rollbackNone")));
+      if (data.success) closeResult();
+    } catch (err) {
+      showToastMsg(t("appliedError") + ": " + err.message, true);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  };
 
   if (applyBtn) {
     applyBtn.addEventListener("click", async () => {
@@ -5064,6 +5172,20 @@ function setupApplyBanner() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || String(res.status));
         showToastMsg(t("appliedResult", { n: data.files.length, backup: data.backup ? data.backup.split(/[\\/]/).pop() : "—" }));
+        // 展示产物路径：调整写到哪里 + 如何引入 CSS
+        if (resultModal && resultList) {
+          const html = data.files
+            .map((f) => {
+              const name = f.file.split(/[\\/]/).pop();
+              const cssHint = name && name.endsWith(".css")
+                ? `<div class="apply-result-hint">在你的产品 HTML 中加入：<code>&lt;link rel="stylesheet" href="${name}"&gt;</code></div>`
+                : "";
+              return `<div class="apply-result-item"><span class="apply-result-name">${name}</span><code class="apply-result-path">${f.file}</code>${cssHint}</div>`;
+            })
+            .join("");
+          resultList.innerHTML = html;
+          resultModal.style.display = "flex";
+        }
       } catch (err) {
         showToastMsg(t("appliedError") + ": " + err.message, true);
       } finally {
@@ -5072,18 +5194,10 @@ function setupApplyBanner() {
     });
   }
   if (rollbackBtn) {
-    rollbackBtn.addEventListener("click", async () => {
-      rollbackBtn.disabled = true;
-      try {
-        const res = await fetch("/api/apply/rollback", { method: "POST" });
-        const data = await res.json();
-        showToastMsg(data.success ? t("rolledBack", { file: data.restored ? data.restored.split(/[\\/]/).pop() : "" }) : (data.message || t("rollbackNone")));
-      } catch (err) {
-        showToastMsg(t("appliedError") + ": " + err.message, true);
-      } finally {
-        rollbackBtn.disabled = false;
-      }
-    });
+    rollbackBtn.addEventListener("click", () => doRollback(rollbackBtn));
+  }
+  if (resultRollback) {
+    resultRollback.addEventListener("click", () => doRollback(resultRollback));
   }
   if (closeBtn && banner) {
     closeBtn.addEventListener("click", () => {

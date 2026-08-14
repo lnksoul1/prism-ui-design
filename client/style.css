@@ -4591,3 +4591,48 @@ body[data-theme="dark"] .canvas-editor-wrap {
   padding: 2px 4px;
 }
 .import-banner-close:hover { color: var(--text); }
+
+/* Apply Result Modal (导入 → 调整 → 一键应用 收尾): artifact paths + CSS hint */
+.apply-result-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 10px 0 14px;
+}
+.apply-result-item {
+  background: var(--surface-glass);
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 12px);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.apply-result-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+.apply-result-path {
+  font-size: 11px;
+  color: var(--text-dim);
+  word-break: break-all;
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+.apply-result-hint {
+  font-size: 11px;
+  color: var(--accent-bright, var(--accent));
+  line-height: 1.5;
+}
+.apply-result-hint code {
+  background: rgba(139, 92, 246, 0.12);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 10.5px;
+}
+.apply-result-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  align-items: center;
+}

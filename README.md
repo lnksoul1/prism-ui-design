@@ -100,17 +100,21 @@ npm run app
 Prism is an **adjustment surface for your own product**, not a first-time
 prototype generator:
 
-1. **导入 (Import)**: `⋯ → 导入` and pick **项目文件夹 / 网页 URL / HTML 代码**
-   (or upload an HTML file). Your page is fetched/parsed into editable
-   components on a fresh page (`POST /api/import/product`), and the source is
-   recorded (`GET /api/imports`).
+1. **导入 (Import)**: `⋯ → 导入` and pick a source — **项目文件夹 / 网页 URL /
+   HTML 代码** (or upload an HTML file) / **客户端界面** (Prism's own UI) /
+   **实际界面截图** (a live screenshot as a reference image). Your page is
+   fetched/parsed into editable components on a fresh page
+   (`POST /api/import/product`, `/api/import-client`, `/api/capture-client`),
+   and the source is recorded (`GET /api/imports`) for every kind — the apply
+   banner covers all of them.
 2. **调整 (Adjust)**: precisely and freely — freeform move/resize,
    multi-select + align/distribute, z-order, layers, behaviors, tokens.
 3. **一键应用 (Apply)**: `POST /api/apply` writes `prism-adjusted-<page>.html`
    (exactly what you see) and `prism-adjustments.css` (design-token overrides
    you can link into your own product) into `PRISM_PRODUCT_DIR` (default
-   `~/.prism/products`), keeping timestamped backups. `POST /api/apply/rollback`
-   restores the latest backup.
+   `~/.prism/products`), keeping timestamped backups. A result dialog shows the
+   exact artifact paths plus the `<link rel="stylesheet" href="prism-adjustments.css">`
+   hint; `POST /api/apply/rollback` restores the latest backup.
 
 The dashboard shows an apply banner whenever the current page came from an
 imported product.

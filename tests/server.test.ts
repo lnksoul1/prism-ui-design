@@ -257,11 +257,18 @@ test(
         success: boolean;
         imported: number;
         pageName: string;
+        page_id: string;
         components: Array<{ type: string }>;
       };
       assert.equal(clientImport.success, true);
       assert.ok(clientImport.imported >= 5);
       assert.equal(clientImport.pageName, "Prism 客户端 UI");
+      // Provenance is recorded so the apply banner covers client-UI imports too
+      const clientImports = (await (await fetch(`${base}/api/imports`)).json()) as {
+        imports: Record<string, { kind: string; source: string }>;
+      };
+      assert.equal(clientImports.imports[clientImport.page_id]?.kind, "client");
+      assert.equal(clientImports.imports[clientImport.page_id]?.source, "Prism 客户端界面");
       const clientState = (await (await fetch(`${base}/api/state`)).json()) as {
         projectName: string;
         tokens: { colors: Record<string, unknown> };
@@ -293,6 +300,14 @@ test(
           components: Array<{ type: string }>;
         };
         assert.ok(capturedState.components.some((c) => c.type === "image"), "capture adds an image component");
+        // Capture also records provenance → apply banner appears for it
+        const captureImports = (await (await fetch(`${base}/api/imports`)).json()) as {
+          imports: Record<string, { kind: string; source: string }>;
+        };
+        assert.ok(
+          Object.values(captureImports.imports).some((r) => r.kind === "capture"),
+          "capture import records provenance"
+        );
       } else {
         assert.equal(captureRes.status, 501);
       }

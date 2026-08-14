@@ -8,6 +8,7 @@ import { applyStyleTokenSet } from "../tokens.js";
 import { saveProject, loadProject, listProjects, getProjectDir } from "../project-store.js";
 import { writebackAll, writebackPreview, writebackTokens, type WritebackMode } from "../writeback.js";
 import { applyDesign, rollbackApply } from "../apply.js";
+import { exportDesign } from "../tools/design-tools.js";
 import { previewsDir } from "../tools/design-render.js";
 import { asyncHandler, HttpError } from "./shared.js";
 
@@ -75,6 +76,10 @@ export function registerProjectsRoutes(): express.Router {
         );
       }
 
+      // Record provenance so the apply banner / one-click apply cover this
+      // page too (导入 → 调整 → 一键应用 一等旅程).
+      await recordProductImport(newPage.id, "file", page.name || projectName, page.components.length);
+
       createdPages.push({
         id: newPage.id,
         name: page.name,
@@ -98,7 +103,8 @@ export function registerProjectsRoutes(): express.Router {
   }));
 
   // API: Import the Prism client dashboard shell so the service can open and
-  // adjust the project's own UI on the canvas.
+  // adjust the project's own UI on the canvas. Records provenance so the
+  // apply banner / one-click apply work for this source too.
   router.post("/api/import-client", asyncHandler(async (req, res) => {
     const { clear_existing } = req.body || {};
     const result = importClientUi(clear_existing === true);
@@ -106,11 +112,13 @@ export function registerProjectsRoutes(): express.Router {
     stateStore.setStyle("minimal", "ai");
     applyStyleTokenSet(stateStore, "minimal", "#7C3AED", "ai");
     stateStore.switchPage(result.pageId, "ai");
-    res.json({ success: true, ...result });
+    await recordProductImport(result.pageId, "client", "Prism 客户端界面", result.imported);
+    res.json({ success: true, ...result, page_id: result.pageId, imported: result.imported });
   }));
 
   // API: Capture the live dashboard itself with Playwright and drop the
-  // screenshot into the canvas as a reference image.
+  // screenshot into the canvas as a reference image. Records provenance so
+  // the apply pipeline treats it like any other imported product page.
   router.post("/api/capture-client", asyncHandler(async (_req, res) => {
     const { captureUrlPng } = await import("../tools/design-render.js");
     const url = `http://127.0.0.1:${port}/`;
@@ -125,7 +133,11 @@ export function registerProjectsRoutes(): express.Router {
       null,
       "user"
     );
-    res.json({ success: true, file, url, component_id: node.id, bytes: png.length });
+    const pageId = stateStore.getState().currentPageId || stateStore.getState().pages[0]?.id || "";
+    if (pageId) {
+      await recordProductImport(pageId, "capture", "实际界面截图", 1);
+    }
+    res.json({ success: true, file, url, component_id: node.id, bytes: png.length, page_id: pageId });
   }));
 
   // API: One-click write-back — design tokens into client/style.css (with backup)
@@ -176,7 +188,41 @@ export function registerProjectsRoutes(): express.Router {
     res.json({ success: true, count: projects.length, projects });
   }));
 
-  // ===== 导入 → 调整 → 一键应用 管线 (product definition v3.1) =====
+  // ===== 导入 → 调整 → 一键应用 管线 (product definition v3.2 支柱④) =====
+
+  /**
+   * Record product provenance for an imported page so the apply banner and
+   * one-click apply work for every import source (URL/HTML/client UI/capture).
+   * Persists the original HTML snapshot for future apply steps.
+   */
+  async function recordProductImport(
+    pageId: string,
+    kind: ImportRecord["kind"],
+    source: string,
+    componentCount: number,
+    url?: string
+  ): Promise<void> {
+    const fs = await import("fs");
+    const importsDir = path.join(getProjectDir(), "imports");
+    fs.mkdirSync(importsDir, { recursive: true });
+    const htmlFile = path.join(importsDir, `${pageId}.html`);
+    if (!fs.existsSync(htmlFile)) {
+      // Snapshot the current rendered page so apply has an original to diff.
+      fs.writeFileSync(htmlFile, exportDesign("html"), "utf-8");
+    }
+    stateStore.setImport(
+      pageId,
+      {
+        kind,
+        source,
+        url,
+        html_file: htmlFile,
+        imported_at: new Date().toISOString(),
+        component_count: componentCount,
+      },
+      "user"
+    );
+  }
 
   // API: Import the user's own product (URL or pasted HTML) as an editable page
   router.post("/api/import/product", asyncHandler(async (req, res) => {
@@ -217,14 +263,7 @@ export function registerProjectsRoutes(): express.Router {
       fs.mkdirSync(importsDir, { recursive: true });
       const htmlFile = path.join(importsDir, `${result.pageId}.html`);
       fs.writeFileSync(htmlFile, sourceHtml, "utf-8");
-      stateStore.setImport(result.pageId, {
-        kind,
-        source: sourceName,
-        url: kind === "url" ? String(url) : undefined,
-        html_file: htmlFile,
-        imported_at: new Date().toISOString(),
-        component_count: result.imported,
-      }, "user");
+      await recordProductImport(result.pageId, kind, sourceName, result.imported, kind === "url" ? String(url) : undefined);
       stateStore.switchPage(result.pageId, "user");
       res.json({
         success: true,

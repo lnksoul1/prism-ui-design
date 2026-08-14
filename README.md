@@ -1,14 +1,18 @@
-# UI Design MCP Server
+# Prism
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js >= 20](https://img.shields.io/badge/node-%3E%3D20-green.svg)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
-[![Tests](https://img.shields.io/badge/tests-60%2B%20passing-brightgreen.svg)](https://nodejs.org/api/test.html)
+[![Tests](https://img.shields.io/badge/tests-450%20passing-brightgreen.svg)](https://nodejs.org/api/test.html)
 [![MCP Protocol](https://img.shields.io/badge/MCP-Protocol-purple.svg)](https://modelcontextprotocol.io/)
 
-An MCP (Model Context Protocol) server that provides comprehensive UI design assistance tools for LLMs. Generate color palettes, typography pairings, spacing systems, shadow systems, design tokens, and more — all through the MCP protocol.
-
-> **中文文档**：请阅读 [README.zh-CN.md](./README.zh-CN.md)
+Prism is a visual adjustment surface for non-designers: import a website or app
+you made (or an AI made), adjust any component, button, or interaction precisely
+and freely on the canvas, then apply the changes back to your product with one
+click. Quick-change presets (styles, component blocks, interaction templates)
+get you there fast; fine-tuning gets you there precisely. See
+[`prism-product-definition-v2.md`](./prism-product-definition-v2.md) for the
+full product definition.
 
 ## Features
 
@@ -33,7 +37,7 @@ An MCP (Model Context Protocol) server that provides comprehensive UI design ass
 
 The dashboard is designed so people without design vocabulary or coding
 skills can drive it. See
-[prism-nonprofessional-painpoints.md](./prism-nonprofessional-painpoints.md)
+[docs/archive/prism-nonprofessional-painpoints.md](./docs/archive/prism-nonprofessional-painpoints.md)
 for the full pain-point analysis and benchmark against open-source tools
 (OpenUI, Lovable, draw-a-ui, v0, ui-toolkit-mcp …).
 

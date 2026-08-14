@@ -5,7 +5,7 @@
 > 1. "目标不是一次性生成顶尖 UI，而是让用户能对自己产品的 UI 进行精确、自由的调整"
 > 2. "**Prism 不负责首次生成原型**——用户导入自己做的网站/App，通过 Prism 调整，最好一键应用"
 > 3. "产品定位是非设计专业用户，可通过本产品对其**自己创作或 AI 创作的网站/App** 的 UI/UX 进行**精确、自由地调整**；对于**任何一个组件、按钮、交互**都可以任意调整；用户**随意绘制图形或插入图片并赋予相应的功能**；可通过本产品**预设风格、组件、交互模板快速变更，也可以通过自己微调**"
-> 关联：[`prism-nonprofessional-painpoints.md`](./prism-nonprofessional-painpoints.md)、[`prism-uiux-design-plan.md`](./prism-uiux-design-plan.md)
+> 关联：[`docs/archive/prism-nonprofessional-painpoints.md`](./docs/archive/prism-nonprofessional-painpoints.md)、[`docs/archive/prism-uiux-design-plan.md`](./docs/archive/prism-uiux-design-plan.md)
 
 ---
 
@@ -135,7 +135,7 @@ type Behavior =
   - **应用结果弹窗**：一键应用后展示产物完整路径 + `<link rel="stylesheet" href="prism-adjustments.css">` 引入指引 + 就地回滚按钮。
   - 测试：server 增加 import-client/capture provenance 断言（**总数 446 保持**）+ e2e 新增"客户端界面来源 → 横幅 → 应用 → 回滚"（**e2e 9 → 10**）。
 
-- ✅ **模板资产（支柱⑦的已有基础）**：14 风格预设（`STYLE_PRESETS`）+ 每风格动效（`STYLE_MOTION_PROFILES`）+ 5 页面模板 + 41 组件类型（组件库拖拽上画布）；风格预设升级方案见 [`prism-style-preset-upgrade-plan.md`](./prism-style-preset-upgrade-plan.md)（14→30、完整设计系统字段）。
+- ✅ **模板资产（支柱⑦的已有基础）**：14 风格预设（`STYLE_PRESETS`）+ 每风格动效（`STYLE_MOTION_PROFILES`）+ 5 页面模板 + 41 组件类型（组件库拖拽上画布）；风格预设升级方案见 [`docs/archive/prism-style-preset-upgrade-plan.md`](./docs/archive/prism-style-preset-upgrade-plan.md)（14→30、完整设计系统字段）。
 - ✅ **模板快速变更（P0，支柱⑦）**：  - 组件模板（`src/template-catalog.ts` `COMPONENT_TEMPLATES`，10 个成品块）：Hero 分屏+CTA / 导航+按钮 / 定价三档 / 注册表单（自带提交行为）/ 评价墙 / 统计条 / FAQ / CTA 横幅（自带链接行为）/ Cookie 横幅 / 便当盒网格。
   - **就地替换**（`state.replaceComponent`）：同 id 同布局位置换装，可撤销；组件库新增「替换选中」开关，点块即替换、拖到画布即添加。
   - 交互模板（`BEHAVIOR_TEMPLATES`，6 个）：打开链接（新标签页）/ 点击提示 / 跳转首页 / 显隐切换 / 表单提交反馈 / AI 联动指令；组件库新增「交互」tab，点选即绑定到选中组件（播放模式触发）。
@@ -145,8 +145,8 @@ type Behavior =
 
 ## 7. 不变的东西
 
-- 现有 416 单测 + 6 e2e 作为回归基线；每改动必有测试。
-- 设计语言维持"现代极简毛玻璃"；UI/UX 方案（`prism-uiux-design-plan.md`）继续作为界面规范。
+- 现有 450 单测 + 12 e2e 作为回归基线；每改动必有测试。
+- 设计语言维持"现代极简毛玻璃"；UI/UX 方案（[`docs/archive/prism-uiux-design-plan.md`](./docs/archive/prism-uiux-design-plan.md)）继续作为界面规范。
 - MCP 层保留：对开发者用户仍然有价值，且内置 LLM 与它共享同一代码路径。
 
 ---

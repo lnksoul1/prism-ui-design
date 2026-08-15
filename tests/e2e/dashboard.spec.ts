@@ -142,7 +142,13 @@ test("drawing canvas mounts and offers a template-first start", async ({ page }:
     editor.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, clientX: x, clientY: y, dataTransfer: dt }));
     editor.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, clientX: x, clientY: y, dataTransfer: dt }));
   })()`);
-  await page.waitForTimeout(900);
+  // Deterministic: wait until the canvas actually gained a shape.
+  await expect.poll(async () => {
+    return page.evaluate(() => {
+      const canvas = (globalThis as { PrismCanvas?: { countShapes(): number } }).PrismCanvas;
+      return canvas ? canvas.countShapes() : -1;
+    });
+  }, { timeout: 10000 }).toBeGreaterThan(beforeDrop);
   const afterDrop = await page.evaluate(() => {
     const canvas = (globalThis as { PrismCanvas?: { countShapes(): number } }).PrismCanvas;
     return canvas ? canvas.countShapes() : -1;
@@ -328,7 +334,6 @@ test("multi-select and alignment adjust freeform layouts", async ({ page }: { pa
 
   // Freeform is the default mode; components already get editable layouts.
   // (Clicking the toggle would switch to flow, so we skip it here.)
-  await page.waitForTimeout(500);
 
   // Give the first two components distinct positions via REST
   await page.evaluate(async () => {
@@ -344,7 +349,16 @@ test("multi-select and alignment adjust freeform layouts", async ({ page }: { pa
       });
     }
   });
-  await page.waitForTimeout(600);
+  // Deterministic: wait until the REST layout landed in state before selecting.
+  await expect.poll(async () => {
+    return page.evaluate(async () => {
+      const s = (await (await fetch("/api/state")).json()) as {
+        components: Array<{ layout: { x: number } }>;
+      };
+      const xs = s.components.slice(0, 2).map((c) => c.layout.x);
+      return xs[0] === 40 && xs[1] === 240;
+    });
+  }, { timeout: 10000 }).toBe(true);
 
   // Select the first two components via the layer panel (deterministic —
   // clicking overlapping freeform wrappers would hit the topmost element)
@@ -355,7 +369,16 @@ test("multi-select and alignment adjust freeform layouts", async ({ page }: { pa
 
   // Align left via the contextual toolbar
   await page.locator('.sel-tool-btn[title="左对齐"]').click();
-  await page.waitForTimeout(600);
+  // Deterministic: wait until alignment landed in state.
+  await expect.poll(async () => {
+    return page.evaluate(async () => {
+      const s = (await (await fetch("/api/state")).json()) as {
+        components: Array<{ layout: { x: number } }>;
+      };
+      const xs = s.components.slice(0, 2).map((c) => c.layout.x);
+      return xs[0] === 40 && xs[1] === 40;
+    });
+  }, { timeout: 10000 }).toBe(true);
   const xs = await page.evaluate(async () => {
     const s = (await (await fetch("/api/state")).json()) as {
       components: Array<{ layout: { x: number } }>;
@@ -470,7 +493,16 @@ test("library: component template replaces the selected component in place", asy
 
   // Click a curated block → it should replace the selection (not add)
   await page.locator('.lib-item-block', { hasText: "Hero 分屏" }).first().click();
-  await page.waitForTimeout(800);
+  // Deterministic: wait until the first component became the hero/split block.
+  await expect.poll(async () => {
+    return page.evaluate(async (id) => {
+      const s = (await (await fetch("/api/state")).json()) as {
+        components: Array<{ id: string; type: string; variant?: string }>;
+      };
+      const comp = s.components.find((c) => c.id === id);
+      return comp ? `${comp.type}/${comp.variant || ""}` : null;
+    }, firstId);
+  }, { timeout: 10000 }).toBe("hero/split");
 
   const after = await page.evaluate(async () => {
     const s = (await (await fetch("/api/state")).json()) as {
@@ -493,7 +525,15 @@ test("library: component template replaces the selected component in place", asy
   // The interactions tab binds a behavior template to the selection
   await page.locator('.lib-tab[data-lib="interactions"]').click();
   await page.locator('.lib-item', { hasText: "点击提示" }).first().click();
-  await page.waitForTimeout(600);
+  // Deterministic: wait until the toast behavior landed on the component.
+  await expect.poll(async () => {
+    return page.evaluate(async (id) => {
+      const s = (await (await fetch("/api/state")).json()) as {
+        components: Array<{ id: string; behavior?: { type: string } }>;
+      };
+      return s.components.find((c) => c.id === id)?.behavior?.type ?? null;
+    }, firstId);
+  }, { timeout: 10000 }).toBe("toast");
   const behavior = await page.evaluate(async (id) => {
     const s = (await (await fetch("/api/state")).json()) as {
       components: Array<{ id: string; behavior?: { type: string } }>;
@@ -522,7 +562,6 @@ test("exact editing: layer rename + rulers/guides appear in freeform", async ({ 
   await expect(page.locator(".comp-wrapper").first()).toBeVisible({ timeout: 10000 });
 
   // Freeform is the default mode: rulers + guides stage appear immediately.
-  await page.waitForTimeout(500);
   await expect(page.locator("#ruler-h")).toBeVisible();
   await expect(page.locator("#ruler-v")).toBeVisible();
   await expect(page.locator(".ruler-tick").first()).toBeVisible();
@@ -533,7 +572,7 @@ test("exact editing: layer rename + rulers/guides appear in freeform", async ({ 
   await expect(nameInput).toBeVisible();
   await nameInput.fill("我的 Hero");
   await nameInput.press("Enter");
-  await page.waitForTimeout(600);
+  // toHaveText retries until the rename lands; then verify it persisted.
   await expect(page.locator("#layer-tree .layer-name").first()).toHaveText("我的 Hero");
   const state = await page.evaluate(async () => {
     const s = (await (await fetch("/api/state")).json()) as {
@@ -614,7 +653,8 @@ test("drawing canvas: bind an interaction to a shape, play mode triggers it", as
 
   // Play mode: clicking the shape triggers the toast
   await page.locator("#play-btn").click();
-  await page.waitForTimeout(300);
+  // Deterministic: wait until play mode is active before clicking the shape.
+  await expect(page.locator("#play-btn")).toHaveClass(/active/, { timeout: 5000 });
   const center = await page.evaluate((id) => {
     const canvas = (globalThis as { PrismCanvas?: { getShapeCenter?: (id: string) => { x: number; y: number } | null } }).PrismCanvas;
     return canvas && canvas.getShapeCenter ? canvas.getShapeCenter(id) : null;
@@ -655,7 +695,16 @@ test("edit inner parts of a component (nested item text is editable)", async ({ 
   await page.keyboard.press("Control+A");
   await page.keyboard.type("重新命名的功能");
   await page.keyboard.press("Enter");
-  await page.waitForTimeout(600);
+  // Deterministic: wait until the inline edit persisted to state.
+  await expect.poll(async () => {
+    return page.evaluate(async () => {
+      const s = (await (await fetch("/api/state")).json()) as {
+        components: Array<{ props?: { items?: Array<{ title?: string }> } }>;
+      };
+      const feat = s.components.find((c) => c.props?.items && c.props.items.some((it) => it.title));
+      return feat?.props?.items?.some((it) => it.title === "重新命名的功能");
+    });
+  }, { timeout: 10000 }).toBe(true);
   const state = await page.evaluate(async () => {
     const s = (await (await fetch("/api/state")).json()) as {
       components: Array<{ props?: { items?: Array<{ title?: string }> } }>;
@@ -696,7 +745,8 @@ test("child component is selectable and adjustable via the inspector", async ({ 
     const child = await mk("button", { text: "子按钮" }, parent);
     return { parent, child };
   });
-  await page.waitForTimeout(800);
+  // Deterministic: wait until the child wrapper actually rendered.
+  await expect(page.locator(`.comp-wrapper[data-id="${ids.child}"]`)).toBeVisible({ timeout: 10000 });
 
   // Child appears indented in the layers panel.
   const childLayer = page.locator(`#layer-tree .layer-item[data-id="${ids.child}"]`);
@@ -707,8 +757,8 @@ test("child component is selectable and adjustable via the inspector", async ({ 
   const childComp = page.locator(`.comp-wrapper[data-id="${ids.child}"]`);
   await expect(childComp).toBeVisible();
   await childComp.click();
-  await page.waitForTimeout(400);
-  await expect(page.locator(".inspector-section-title").first()).toContainText("button");
+  // toBeVisible retries; the inspector header updates on selection.
+  await expect(page.locator(".inspector-section-title").first()).toContainText("button", { timeout: 5000 });
   await expect(page.locator(".inspector-parent-path")).toBeVisible();
 
   // Click the child layer → inspector shows the child, with a parent path.
@@ -722,7 +772,19 @@ test("child component is selectable and adjustable via the inspector", async ({ 
   const textField = contentInputs.nth(count - 1);
   await textField.fill("子按钮改名");
   await textField.blur();
-  await page.waitForTimeout(600);
+  // Deterministic: wait until the rename persisted in state.
+  await expect.poll(async () => {
+    return page.evaluate(async (childId) => {
+      const s = (await (await fetch("/api/state")).json()) as {
+        components: Array<{ id: string; children?: Array<{ id: string; props: { text?: string } }> }>;
+      };
+      for (const c of s.components) {
+        const found = c.children?.find((ch) => ch.id === childId);
+        if (found) return found.props.text;
+      }
+      return null;
+    }, ids.child);
+  }, { timeout: 10000 }).toBe("子按钮改名");
   const renamed = await page.evaluate(async (childId) => {
     const s = (await (await fetch("/api/state")).json()) as {
       components: Array<{ id: string; children?: Array<{ id: string; props: { text?: string } }> }>;
@@ -765,7 +827,8 @@ test("element-level editing: select inner text, promote to button, bind behavior
     });
     return ((await res.json()) as { id: string }).id;
   });
-  await page.waitForTimeout(800);
+  // Deterministic: wait until the hero rendered on the canvas.
+  await expect(page.locator('.comp-hero h1[data-prop="title"]')).toBeVisible({ timeout: 10000 });
 
   // 1. Single-click the inner title → element panel appears (not just component).
   const heroTitle = page.locator('.comp-hero h1[data-prop="title"]');
@@ -776,7 +839,14 @@ test("element-level editing: select inner text, promote to button, bind behavior
 
   // 2. Promote the title to a button → kind persisted + rendered class.
   await page.locator(".el-kind-option", { hasText: "按钮" }).click();
-  await page.waitForTimeout(600);
+  await expect.poll(async () => {
+    return page.evaluate(async (id) => {
+      const s = (await (await fetch("/api/state")).json()) as {
+        components: Array<{ id: string; elementMeta?: Record<string, { kind?: string }> }>;
+      };
+      return s.components.find((c) => c.id === id)?.elementMeta?.title?.kind ?? null;
+    }, heroId);
+  }, { timeout: 10000 }).toBe("button");
   const kindState = await page.evaluate(async (id) => {
     const s = (await (await fetch("/api/state")).json()) as {
       components: Array<{ id: string; elementMeta?: Record<string, { kind?: string }> }>;
@@ -789,7 +859,14 @@ test("element-level editing: select inner text, promote to button, bind behavior
   // 3. Bind a toast behavior to the element → persisted elementMeta.
   const elSelect = page.locator("select.el-prop-select").first();
   await elSelect.selectOption("toast");
-  await page.waitForTimeout(600);
+  await expect.poll(async () => {
+    return page.evaluate(async (id) => {
+      const s = (await (await fetch("/api/state")).json()) as {
+        components: Array<{ id: string; elementMeta?: Record<string, { behavior?: { type: string } }> }>;
+      };
+      return s.components.find((c) => c.id === id)?.elementMeta?.title?.behavior?.type ?? null;
+    }, heroId);
+  }, { timeout: 10000 }).toBe("toast");
   const behaviorState = await page.evaluate(async (id) => {
     const s = (await (await fetch("/api/state")).json()) as {
       components: Array<{ id: string; elementMeta?: Record<string, { behavior?: { type: string } }> }>;
@@ -836,7 +913,14 @@ test("page background editor applies presets and custom values to the canvas", a
 
   // Click the "海洋" gradient preset → applied to the canvas + persisted.
   await page.locator(".bg-preset", { hasText: "海洋" }).click();
-  await page.waitForTimeout(600);
+  await expect.poll(async () => {
+    return page.evaluate(async () => {
+      const s = (await (await fetch("/api/state")).json()) as {
+        pageBackground?: { type: string; value: string };
+      };
+      return s.pageBackground ? s.pageBackground.type : null;
+    });
+  }, { timeout: 10000 }).toBe("gradient");
   const state = await page.evaluate(async () => {
     const s = (await (await fetch("/api/state")).json()) as {
       pageBackground?: { type: string; value: string };
@@ -854,7 +938,14 @@ test("page background editor applies presets and custom values to the canvas", a
   // Custom color input applies too.
   await page.locator(".prop-text-input").first().fill("#0f172a");
   await page.locator(".inspector-action-btn", { hasText: "应用颜色" }).click();
-  await page.waitForTimeout(600);
+  await expect.poll(async () => {
+    return page.evaluate(async () => {
+      const s = (await (await fetch("/api/state")).json()) as {
+        pageBackground?: { type: string; value: string };
+      };
+      return s.pageBackground?.value ?? null;
+    });
+  }, { timeout: 10000 }).toBe("#0f172a");
   const colorState = await page.evaluate(async () => {
     const s = (await (await fetch("/api/state")).json()) as {
       pageBackground?: { type: string; value: string };
@@ -865,7 +956,14 @@ test("page background editor applies presets and custom values to the canvas", a
 
   // Clear removes it.
   await page.locator(".inspector-delete-btn", { hasText: "清除背景" }).click();
-  await page.waitForTimeout(600);
+  await expect.poll(async () => {
+    return page.evaluate(async () => {
+      const s = (await (await fetch("/api/state")).json()) as {
+        pageBackground?: unknown;
+      };
+      return s.pageBackground === undefined;
+    });
+  }, { timeout: 10000 }).toBe(true);
   const cleared = await page.evaluate(async () => {
     const s = (await (await fetch("/api/state")).json()) as {
       pageBackground?: unknown;
@@ -898,9 +996,8 @@ test("pointer events: touch drag moves a freeform component (Phase 2.5)", async 
       body: JSON.stringify({ type: "button", props: { text: "可拖动按钮" } }),
     });
   });
-  await page.waitForTimeout(800);
   const comp = page.locator(".comp-wrapper").first();
-  await expect(comp).toBeVisible();
+  await expect(comp).toBeVisible({ timeout: 10000 });
 
   const box = await comp.boundingBox();
   expect(box).toBeTruthy();
@@ -925,7 +1022,16 @@ test("pointer events: touch drag moves a freeform component (Phase 2.5)", async 
     },
     [startX, startY]
   );
-  await page.waitForTimeout(600);
+  // Deterministic: wait until the drag result landed in state.
+  await expect.poll(async () => {
+    return page.evaluate(async () => {
+      const s = (await (await fetch("/api/state")).json()) as {
+        components: Array<{ id: string; layout?: { x: number; y: number } }>;
+      };
+      const l = s.components[0] && s.components[0].layout;
+      return l ? (l.x >= 50 && l.y >= 30) : false;
+    });
+  }, { timeout: 10000 }).toBe(true);
 
   // The component's layout should have moved by ~(60, 40) (freeform default).
   const layout = await page.evaluate(async () => {

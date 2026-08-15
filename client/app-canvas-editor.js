@@ -279,12 +279,16 @@ function setCanvasEditorMode(design) {
     canvasEditorMode = false;
     if (scrollWrap) scrollWrap.style.display = "block";
     if (editorWrap) editorWrap.style.display = "none";
+    if (editorWrap) editorWrap.classList.remove("overlay-mode");
     if (actions) actions.style.display = "none";
     if (label) label.textContent = t("canvasLabel");
   } else {
     canvasEditorMode = true;
-    if (scrollWrap) scrollWrap.style.display = "none";
+    // 预览界面绘制 (P1): 不再隐藏预览——tldraw 以透明背景覆盖在预览之上，
+    // 预览组件作为参考背景可见，用户直接在预览界面自由绘制。
+    if (scrollWrap) scrollWrap.style.display = "block";
     if (editorWrap) editorWrap.style.display = "flex";
+    if (editorWrap) editorWrap.classList.add("overlay-mode");
     if (actions) actions.style.display = "inline-flex";
     if (label) label.textContent = t("designMode");
     const hint = $("canvas-editor-hint");

@@ -318,6 +318,8 @@ body::after {
   -webkit-backdrop-filter: var(--blur-light);
   box-shadow: var(--shadow-glass);
   flex-shrink: 0;
+  position: relative;
+  z-index: 30; /* 预览绘制 overlay 之下仍需可点击工具栏 */
 }
 .canvas-toolbar-left {
   display: flex;
@@ -4374,12 +4376,26 @@ textarea:focus-visible,
   display: flex;
   flex-direction: column;
   position: relative;
-  background: #f4f4f5;
+  background: transparent;
+}
+/* 预览界面绘制 (P1): 画布编辑器以透明层覆盖在预览画布之上，预览组件作为
+   参考背景可见，用户无需切换到完全不同的界面即可自由绘制。
+   工具栏 z-index 高于 overlay，仍可正常点击。 */
+.canvas-editor-wrap.overlay-mode {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  background: transparent;
+  pointer-events: auto;
 }
 .canvas-editor {
   flex: 1;
   min-height: 0;
   position: relative;
+  background: transparent;
+}
+.canvas-editor .tl-container {
+  background: transparent;
 }
 .canvas-editor-hint {
   position: absolute;
@@ -4398,7 +4414,7 @@ textarea:focus-visible,
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
 }
 body[data-theme="dark"] .canvas-editor-wrap {
-  background: #17171c;
+  background: transparent;
 }
 
 /* Template picker cards */
@@ -4814,6 +4830,7 @@ body[data-theme="dark"] .canvas-editor-wrap {
   top: 52px;
   left: 50%;
   transform: translateX(-50%);
+  z-index: 30; /* 高于绘制 overlay */
   display: flex;
   gap: 4px;
   padding: 4px;

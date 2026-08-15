@@ -8,6 +8,10 @@
 
 // ===== WebSocket Connection =====
 
+// Phase 2.4 (增量更新): component ids the latest change touched, so the
+// renderer can re-render only those instead of the whole canvas.
+let lastChangeAffectedIds = null;
+
 function connect() {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   const wsUrl = `${protocol}//${window.location.host}/ws`;
@@ -145,6 +149,7 @@ function handleMessage(msg) {
       break;
     case "change":
       currentState = msg.state;
+      lastChangeAffectedIds = Array.isArray(msg.affected_ids) ? msg.affected_ids : null;
       handleChange(msg.change);
       break;
     case "activity":
@@ -227,16 +232,28 @@ function handleChange(change) {
     case "addComponent":
     case "updateComponent":
     case "removeComponent":
+    case "setBehavior":
+      // 细粒度变更：优先增量重绘受影响组件（Phase 2.4），兜底静默全量。
+      if (lastChangeAffectedIds && lastChangeAffectedIds.length > 0) {
+        renderCanvas({ silent: true, onlyIds: lastChangeAffectedIds });
+      } else {
+        renderCanvas({ silent: true });
+      }
+      renderLayerPanel();
+      break;
+    case "duplicateComponent":
     case "reorderComponent":
     case "reorder_component":
-    case "duplicateComponent":
-    case "setBehavior":
-      // 细粒度变更：静默重绘，避免入场动画重放闪烁
+      // 这些变更改变 DOM 顺序/插入位置，增量替换无法正确重排 → 全量静默。
       renderCanvas({ silent: true });
       renderLayerPanel();
       break;
     case "setAnimation":
-      renderCanvas({ silent: true });
+      if (lastChangeAffectedIds && lastChangeAffectedIds.length > 0) {
+        renderCanvas({ silent: true, onlyIds: lastChangeAffectedIds });
+      } else {
+        renderCanvas({ silent: true });
+      }
       break;
     case "clearAll":
       renderAll();

@@ -1296,6 +1296,114 @@ test(
 );
 
 test(
+  "WS change broadcasts carry affected_ids for incremental rendering (Phase 2.4)",
+  { timeout: 60000 },
+  async () => {
+    const port = await getFreePort();
+    const child = spawn(process.execPath, [SERVER_ENTRY], {
+      cwd: path.resolve(__dirname, "..", ".."),
+      env: {
+        ...process.env,
+        DASHBOARD_PORT: String(port),
+        PRISM_PROJECT_DIR: path.join(os.tmpdir(), `prism-incremental-server-${Date.now()}`),
+        PRISM_AUTOIMPORT: "off",
+        PRISM_AUTOLOAD: "off",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let logs = "";
+    child.stderr?.on("data", (d) => (logs += d.toString()));
+    const base = `http://127.0.0.1:${port}`;
+    const headers = { "Content-Type": "application/json" };
+
+    try {
+      await waitForHealth(`${base}/health`, 20000);
+
+      // Add a component via REST, then listen for the WS change broadcast.
+      const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+      const changePromise = new Promise<{ change: { type?: string; id?: string }; affected_ids?: string[] }>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("no change message")), 10000);
+        ws.on("message", (data) => {
+          const msg = JSON.parse(data.toString());
+          if (msg.type === "change" && msg.change && msg.change.type === "addComponent") {
+            clearTimeout(timer);
+            resolve(msg);
+          }
+        });
+      });
+      await new Promise<void>((resolve) => ws.on("open", () => resolve()));
+
+      const addRes = await fetch(`${base}/api/component`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ type: "hero", props: { title: "增量测试" } }),
+      });
+      assert.equal(addRes.status, 200);
+      const added = (await addRes.json()) as { id: string };
+
+      const addMsg = await Promise.race([
+        changePromise,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("timed out waiting for addComponent change")), 10000)
+        ),
+      ]);
+      assert.ok(
+        Array.isArray(addMsg.affected_ids) && addMsg.affected_ids.includes(added.id),
+        `addComponent affected_ids should contain ${added.id}, got ${JSON.stringify(addMsg.affected_ids)}`
+      );
+
+      // Update the component → updateComponent change carries its id.
+      const updateChange = new Promise<{ affected_ids?: string[] }>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("no update change")), 10000);
+        const onMsg = (data: Buffer) => {
+          const msg = JSON.parse(data.toString());
+          if (msg.type === "change" && msg.change && msg.change.type === "updateComponent") {
+            clearTimeout(timer);
+            ws.off("message", onMsg);
+            resolve(msg);
+          }
+        };
+        ws.on("message", onMsg);
+      });
+      await fetch(`${base}/api/component/${added.id}`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ props: { title: "更新标题" } }),
+      });
+      const updMsg = await Promise.race([
+        updateChange,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("timed out waiting for updateComponent change")), 10000)
+        ),
+      ]);
+      assert.ok(
+        Array.isArray(updMsg.affected_ids) && updMsg.affected_ids.includes(added.id),
+        `updateComponent affected_ids should contain ${added.id}`
+      );
+
+      ws.close();
+    } catch (error) {
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}\n--- server logs ---\n${logs}`,
+        { cause: error }
+      );
+    } finally {
+      child.kill();
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(() => {
+          child.kill("SIGKILL");
+          resolve();
+        }, 3000);
+        child.once("exit", () => {
+          clearTimeout(timer);
+          resolve();
+        });
+      });
+    }
+  }
+);
+
+test(
   "element-meta REST endpoint binds per-element behavior and kind promotion",
   { timeout: 60000 },
   async () => {

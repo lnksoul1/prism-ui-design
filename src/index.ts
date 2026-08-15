@@ -654,6 +654,39 @@ function broadcastPromptExecuted(summary: string, action: string): void {
 
 // ===== Broadcast state changes to all WebSocket clients =====
 
+/**
+ * Phase 2.4 (增量更新): extract the component ids a change touched, so the
+ * client can re-render only those components instead of the whole canvas.
+ */
+function affectedComponentIds(change: unknown): string[] {
+  const c = change as {
+    type?: string;
+    id?: string;
+    componentId?: string;
+    newId?: string;
+    fromId?: string;
+    toId?: string;
+    component?: { id?: string };
+  };
+  if (!c) return [];
+  switch (c.type) {
+    case "addComponent":
+      return c.component && c.component.id ? [c.component.id] : [];
+    case "updateComponent":
+    case "removeComponent":
+    case "setBehavior":
+    case "setAnimation":
+    case "setElementMeta":
+      return c.id || c.componentId ? [c.id || c.componentId || ""] : [];
+    case "duplicateComponent":
+      return [c.id, c.newId].filter(Boolean) as string[];
+    case "reorderComponent":
+      return [c.fromId, c.toId].filter(Boolean) as string[];
+    default:
+      return [];
+  }
+}
+
 stateStore.on("change", (change: unknown) => {
   const c = change as {
     type?: string;
@@ -672,6 +705,7 @@ stateStore.on("change", (change: unknown) => {
     type: "change",
     change,
     patch,
+    affected_ids: affectedComponentIds(change),
     state: stateStore.getState(),
   });
   wss.clients.forEach((client: WebSocket) => {

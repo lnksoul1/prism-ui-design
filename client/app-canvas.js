@@ -27,6 +27,15 @@ function renderCanvas(opts) {
   const silent = !!(opts && opts.silent);
   canvas.classList.toggle("no-reenter", silent);
 
+  // Phase 2.4 (增量更新): when the change only touched a few components,
+  // re-render just those wrappers instead of the whole canvas.
+  const onlyIds = opts && Array.isArray(opts.onlyIds) && opts.onlyIds.length > 0 ? opts.onlyIds : null;
+  if (onlyIds && currentState && canvas.querySelector(".comp-wrapper")) {
+    applyComponentDelta(onlyIds);
+    applyElementSelectionHighlight();
+    return;
+  }
+
   const components = getCurrentComponents();
 
   if (!currentState || components.length === 0) {
@@ -177,6 +186,77 @@ function renderCanvas(opts) {
   renderGuides();
   // 元素级编辑 P1: 重绘后恢复内部元素高亮
   applyElementSelectionHighlight();
+}
+
+/**
+ * Phase 2.4 (增量更新): apply a component delta — for each affected id,
+ * replace (or add/remove) exactly that component's wrapper in place. Falls
+ * back to a full re-render when a wrapper cannot be matched.
+ */
+function applyComponentDelta(ids) {
+  const canvas = $("canvas");
+  if (!canvas) return;
+  const all = getCurrentComponents();
+
+  // Top-level component ids: children render inside their parent wrapper, so
+  // we rebuild the top-level ancestor of every affected id. If no ancestor
+  // wrapper exists on the canvas, fall back to a full re-render.
+  const rootIds = [];
+  for (const id of ids) {
+    const root = topLevelAncestorOf(all, id);
+    if (root) rootIds.push(root.id);
+  }
+  const uniqueRoots = [...new Set(rootIds)];
+
+  // Remove deleted top-level components first (wrappers no longer in state).
+  const liveRootIds = new Set(all.map((c) => c.id));
+  uniqueRoots.forEach((id) => {
+    if (!liveRootIds.has(id)) {
+      const wrapper = canvas.querySelector(`.comp-wrapper[data-id="${CSS.escape(id)}"]`);
+      if (wrapper) wrapper.remove();
+    }
+  });
+
+  let ok = true;
+  uniqueRoots.forEach((id) => {
+    if (!liveRootIds.has(id)) return; // removed above
+    const comp = findCompDeep(all, id);
+    if (!comp) return;
+    const fresh = renderComponent(comp);
+    const existing = canvas.querySelector(`.comp-wrapper[data-id="${CSS.escape(id)}"]`);
+    if (existing) {
+      existing.replaceWith(fresh);
+    } else {
+      canvas.appendChild(fresh);
+    }
+  });
+
+  // If any affected id had no top-level ancestor on the canvas (or the canvas
+  // was empty), a full re-render is safer than leaving the delta half-applied.
+  if (uniqueRoots.length === 0 || !ok) {
+    renderCanvas({ silent: true });
+    return;
+  }
+  updateComponentCount();
+  renderRulers();
+  renderGuides();
+}
+
+/** Walk up from a component id to its top-level ancestor (or null). */
+function topLevelAncestorOf(roots, id) {
+  for (const root of roots) {
+    if (root.id === id) return root;
+    const child = findCompDeep(root.children || [], id);
+    if (child) return root;
+  }
+  return null;
+}
+
+/** Update the "N 个组件" counter without a full re-render. */
+function updateComponentCount() {
+  const meta = $("canvas-meta");
+  if (!meta || !currentState) return;
+  meta.textContent = `${countComponents(getCurrentComponents())} 个组件`;
 }
 
 /**

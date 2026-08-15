@@ -474,6 +474,14 @@ export function componentToHTML(node: ComponentNode): string {
       html = `<label class="toggle${v}"><span class="toggle__track${checked}"><span class="toggle__thumb"></span></span><span>${escapeHTML(String(p.label ?? ""))}</span></label>`;
       break;
     }
+    case "html_fragment": {
+      // 忠实显示：原片段 HTML + 原 CSS（Shadow DOM 由客户端渲染；导出时
+      // 内联 <style> + 片段一起输出，保证写回产物与画布一致）。
+      const fragCss = String(p.css ?? "");
+      const fragHtml = String(p.html ?? "");
+      html = `<div class="prism-fragment prism-fragment-${escapeHTML(String(p.region ?? "region"))}">${fragCss ? `<style>${fragCss}</style>` : ""}${fragHtml}</div>`;
+      break;
+    }
     default: {
       const text = escapeHTML(JSON.stringify(p));
       html = `<div class="component component--${escapeHTML(node.type)}">${text}</div>`;

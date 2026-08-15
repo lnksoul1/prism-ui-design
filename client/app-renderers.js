@@ -97,6 +97,9 @@ function renderComponentContent(comp) {
       return renderShapeNote(props);
     case "connector":
       return renderShapeConnector(props);
+    // 忠实显示：导入的原始 HTML 片段（Shadow DOM + 原 CSS 驱动）
+    case "html_fragment":
+      return renderHtmlFragment(props);
     // New component types
     case "tabs":
       return renderTabs(props);
@@ -1007,6 +1010,148 @@ function renderContainer(props) {
   const p = el("div", "comp-container");
   if (props.text) p.appendChild(el("div", "container-label", props.text));
   return p;
+}
+
+// ===== 画布绘制 (第一步: 预览画布直接绘制，统一坐标系) =====
+
+// ===== HTML 片段渲染 (v2: Shadow DOM 隔离 + 原 CSS 驱动，忠实显示用户 UI) =====
+
+/**
+ * CSS 选择器改写：body/html/:root → :host，让用户 CSS 在 shadow root 内生效
+ * （shadow 没有 body/html 元素，:host 即片段根）。按规则拆分（括号配平，
+ * 忽略字符串/注释），@media/@keyframes 整块保留。
+ */
+function rewriteShadowCss(css) {
+  if (!css) return "";
+  const out = [
+    ":host { all: initial; display: block; width: 100%; height: 100%; overflow: hidden; box-sizing: border-box; }",
+  ];
+  const n = css.length;
+  let i = 0;
+  let buf = "";
+  const rules = [];
+  while (i < n) {
+    const ch = css[i];
+    if (ch === "/" && css[i + 1] === "*") {
+      const end = css.indexOf("*/", i + 2);
+      if (end === -1) break;
+      i = end + 2;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      const q = ch;
+      let j = i + 1;
+      while (j < n && css[j] !== q) {
+        if (css[j] === "\\") j++;
+        j++;
+      }
+      i = j + 1;
+      continue;
+    }
+    if (ch === "{") {
+      let depth = 1;
+      let j = i + 1;
+      while (j < n && depth > 0) {
+        if (css[j] === "{") depth++;
+        else if (css[j] === "}") depth--;
+        else if (css[j] === '"' || css[j] === "'") {
+          const q = css[j];
+          let k = j + 1;
+          while (k < n && css[k] !== q) {
+            if (css[k] === "\\") k++;
+            k++;
+          }
+          j = k;
+          continue;
+        }
+        j++;
+      }
+      rules.push({ sel: buf.trim(), body: css.slice(i + 1, j - 1) });
+      buf = "";
+      i = j;
+      continue;
+    }
+    buf += ch;
+    i++;
+  }
+  for (const r of rules) {
+    const sel = r.sel
+      .replace(/(^|[,>+~\s])body(?=[\s.#:[\],>+~]|$)/g, "$1:host")
+      .replace(/(^|[,>+~\s])html(?=[\s.#:[\],>+~]|$)/g, "$1:host")
+      .replace(/(^|[,>+~\s]):root(?=[\s.#:[\],>+~]|$)/g, "$1:host");
+    out.push(`${sel} { ${r.body} }`);
+  }
+  return out.join("\n");
+}
+
+/** 标记片段内文本叶子节点为可双击编辑。 */
+function markEditableInShadow(root) {
+  const selector = "p, h1, h2, h3, h4, h5, h6, span, a, button, li, label, td, th, div";
+  root.querySelectorAll(selector).forEach((el) => {
+    if (el.childElementCount === 0 && (el.textContent || "").trim()) {
+      el.setAttribute("data-editable", "true");
+    }
+  });
+}
+
+/** Shadow root 内联编辑：双击编辑 → 失焦提交（序列化整个片段回写 props.html）。 */
+function setupShadowInlineEditing(host, shadow) {
+  const root = shadow.querySelector(".prism-fragment-root");
+  if (!root) return;
+
+  root.addEventListener("dblclick", (e) => {
+    const t = e.target;
+    if (!(t instanceof Element)) return;
+    if (!t.closest("[data-editable='true']")) return;
+    e.stopPropagation();
+    t.contentEditable = "true";
+    t.focus();
+    try {
+      const range = document.createRange();
+      range.selectNodeContents(t);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } catch (err) {
+      /* ignore */
+    }
+  });
+
+  root.addEventListener(
+    "blur",
+    (e) => {
+      const t = e.target;
+      if (!(t instanceof Element) || !t.hasAttribute("data-editable") || t.contentEditable !== "true") return;
+      t.contentEditable = "false";
+      const wrapper = host.closest(".comp-wrapper");
+      const compId = wrapper ? wrapper.dataset.id : null;
+      if (!compId) return;
+      const comp = getCompById(compId);
+      if (!comp) return;
+      const updated = root.innerHTML;
+      if (updated === comp.props.html) return;
+      send({
+        type: "update_component",
+        id: compId,
+        props: { ...(comp.props || {}), html: updated },
+      });
+    },
+    true
+  );
+}
+
+function renderHtmlFragment(props) {
+  const host = el("div", "prism-fragment");
+  const shadow = host.attachShadow({ mode: "open" });
+  const css = rewriteShadowCss(props.css || "");
+  const frag = String(props.html || "");
+  shadow.innerHTML = `<style>${css}</style><div class="prism-fragment-root">${frag}</div>`;
+  const root = shadow.querySelector(".prism-fragment-root");
+  if (root) {
+    markEditableInShadow(root);
+    setupShadowInlineEditing(host, shadow);
+  }
+  return host;
 }
 
 // ===== 画布绘制 (第一步: 预览画布直接绘制，统一坐标系) =====

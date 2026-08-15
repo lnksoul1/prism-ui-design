@@ -11,6 +11,7 @@
 </head>
 <body>
 
+<!-- prism-region:topbar -->
 <!-- Top Bar -->
 <header class="topbar">
   <div class="topbar-left">
@@ -39,7 +40,9 @@
     <button class="toolbar-btn" id="lang-toggle" title="切换语言 / Switch language">EN</button>
   </div>
 </header>
+<!-- /prism-region:topbar -->
 
+<!-- prism-region:toplib -->
 <!-- 顶部设计库 (P1): 13 个知识分类 tab，悬停向下展开气泡卡片 -->
 <div class="top-library" id="top-library">
   <div class="top-lib-tabs" id="top-lib-tabs">
@@ -59,10 +62,12 @@
   </div>
   <div class="top-lib-strip" id="top-lib-strip"></div>
 </div>
+<!-- /prism-region:toplib -->
 
 <!-- Main Layout: 3 columns -->
 <div class="main-layout">
 
+<!-- prism-region:left -->
   <!-- Left Panel: Page Switcher + Layers + Design Library + Activity Log -->
   <aside class="panel panel-left">
     <div class="page-switcher">
@@ -104,6 +109,7 @@
       <div class="activity-empty">AI Agent 操作将显示在这里</div>
     </div>
   </aside>
+<!-- /prism-region:left -->
 
   <!-- Design Library Hover Preview Popup -->
   <div class="lib-preview-popup" id="lib-preview-popup" style="display:none"></div>
@@ -114,6 +120,7 @@
   <!-- Canvas Drop Hint -->
   <div class="canvas-drop-hint" id="canvas-drop-hint" style="display:none">释放以添加到画布</div>
 
+<!-- prism-region:canvas -->
   <!-- Center: Canvas -->
   <main class="canvas-area">
     <div class="canvas-toolbar">
@@ -181,7 +188,9 @@
       </div>
     </div>
   </main>
+<!-- /prism-region:canvas -->
 
+<!-- prism-region:right -->
   <!-- Right Panel: Property Inspector + Tokens -->
   <aside class="panel panel-right">
     <!-- Property Inspector -->
@@ -217,6 +226,7 @@
       <div class="token-empty">令牌将在 AI 初始化后出现</div>
     </div>
   </aside>
+<!-- /prism-region:right -->
 
 </div>
 

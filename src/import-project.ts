@@ -25,6 +25,13 @@ export interface ExtractedPage {
   components: ExtractedComponent[];
 }
 
+/** 忠实显示的 HTML 片段（渲染层 Shadow DOM + 原 CSS 驱动）。 */
+export interface HtmlFragmentSpec {
+  region: string;
+  html: string;
+  css: string;
+}
+
 export interface ImportResult {
   pages: ExtractedPage[];
   totalComponents: number;
@@ -51,7 +58,7 @@ export function scanProject(folderPath: string): ImportResult {
       let page: ExtractedPage | null = null;
 
       if (ext === ".html" || ext === ".htm") {
-        page = parseHTMLFile(filePath);
+        page = parseHtmlFragmentsFile(filePath);
       } else if (ext === ".jsx" || ext === ".tsx") {
         page = parseJSXFile(filePath);
       } else if (ext === ".vue") {
@@ -76,16 +83,22 @@ export function scanProject(folderPath: string): ImportResult {
 }
 
 /**
- * Import a raw HTML string into the state store as a new page, reusing the
- * same extraction pipeline as `scanProject`. Used by `design_import_webpage`
- * (URL fetch or pasted HTML).
+ * Import a raw HTML string into the state store as a new page. v2: 完整解析 —
+ * 按语义区域拆成 html_fragment（忠实显示用户 UI，原 CSS 驱动）。
+ * `css` 可选：路由层已内联抓取的 link 样式表内容。
  */
 export function importHtmlString(
   html: string,
   sourceName: string,
-  clearExisting: boolean
+  clearExisting: boolean,
+  css = ""
 ): { pageName: string; pageId: string; imported: number } {
-  const components = parseHTML(html);
+  const inlineCss = extractInlineStyles(html);
+  const bodyHtml = extractBodyHtml(html);
+  const components: ExtractedComponent[] = extractHtmlFragments(bodyHtml, css || inlineCss).map((f) => ({
+    type: "html_fragment",
+    props: { region: f.region, html: f.html, css: f.css },
+  }));
   if (components.length === 0) {
     throw new Error(`No recognizable UI components found in "${sourceName}"`);
   }
@@ -99,75 +112,25 @@ export function importHtmlString(
   return { pageName: page.name, pageId: page.id, imported: components.length };
 }
 
-/**
- * Parse the Prism dashboard shell (client/index.html) into design components so
- * the service can open the project's own UI and adjust it on the canvas.
- */
-function parseClientShell(html: string): ExtractedComponent[] {
-  const text = (s: string | undefined): string =>
-    (s || "").replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
-
-  const components: ExtractedComponent[] = [];
-
-  const brand = text(/<span class="logo">([\s\S]*?)<\/span>/.exec(html)?.[1]) || "Prism";
-  const topbarButtons = [...html.matchAll(/<button[^>]*class="toolbar-btn"[^>]*>([\s\S]*?)<\/button>/g)]
-    .map((m) => text(m[1]))
-    .filter(Boolean)
-    .slice(0, 6);
-  components.push({
-    type: "navbar",
-    variant: "with_cta",
-    props: { brand, links: topbarButtons, cta_text: "EN" },
-  });
-
-  const toolTabs = [...html.matchAll(/<button[^>]*class="tool-tab[^>]*>([\s\S]*?)<\/button>/g)]
-    .map((m) => text(m[1]))
-    .filter(Boolean);
-  components.push({
-    type: "sidebar",
-    props: { title: "工具面板", links: toolTabs.length ? toolTabs : ["设计库", "版本", "评论"] },
-  });
-
-  const libTabs = [...html.matchAll(/<button[^>]*class="lib-tab[^>]*>([\s\S]*?)<\/button>/g)]
-    .map((m) => text(m[1]))
-    .filter(Boolean);
-  components.push({ type: "tabs", props: { tabs: libTabs.length ? libTabs : ["风格", "动效", "组件", "模板"] } });
-
-  const panelTitles = [...html.matchAll(/<h3 class="panel-title[^>]*>([\s\S]*?)<\/h3>/g)]
-    .map((m) => text(m[1]))
-    .filter(Boolean);
-  components.push({
-    type: "text_section",
-    props: { title: "面板区", body: panelTitles.join(" · ") || "图层 · 活动日志 · 设计令牌" },
-  });
-
-  const canvasLabel = text(/<span class="canvas-label"[^>]*>([\s\S]*?)<\/span>/.exec(html)?.[1]) || "实时预览画布";
-  components.push({
-    type: "hero",
-    variant: "centered",
-    props: { title: canvasLabel, subtitle: "实时预览 · 平台切换 · 自由布局", button_text: "流式 / 自由" },
-  });
-
-  const promptPh = text(/<input[^>]*id="prompt-input"[^>]*placeholder="([\s\S]*?)"/.exec(html)?.[1]) || "";
-  components.push({
-    type: "form",
-    props: { fields: [{ label: "AI 指令", type: "text", placeholder: promptPh }], button_text: "发送" },
-  });
-
-  const tokenTabs = [...html.matchAll(/<button[^>]*class="tab-btn[^>]*>([\s\S]*?)<\/button>/g)]
-    .map((m) => text(m[1]))
-    .filter(Boolean);
-  components.push({
-    type: "badge",
-    props: { text: "设计令牌: " + (tokenTabs.join("/") || "色彩/字体/间距/阴影/圆角") },
-  });
-
-  return components;
+/** 将 HTML 文件解析为语义区域片段（v2：忠实显示用户页面）。 */
+function parseHtmlFragmentsFile(filePath: string): ExtractedPage {
+  const html = fs.readFileSync(filePath, "utf-8");
+  const name = derivePageName(filePath);
+  const bodyHtml = extractBodyHtml(html);
+  const css = extractInlineStyles(html);
+  const components: ExtractedComponent[] = extractHtmlFragments(bodyHtml, css).map((f) => ({
+    type: "html_fragment",
+    props: { region: f.region, html: f.html, css: f.css },
+  }));
+  return { name, filePath, components };
 }
 
 /**
  * Import the Prism client dashboard shell (client/index.html) as a new page in
  * the design canvas, so the service can be used to adjust the project's own UI.
+ *
+ * v2 (片段化): 按 `<!-- prism-region:xxx -->` 标记切分为 html_fragment 组件，
+ * 渲染层用 Shadow DOM + 完整 style.css 驱动，画布所见即真实客户端。
  */
 export function importClientUi(clearExisting = false): {
   pageName: string;
@@ -176,14 +139,18 @@ export function importClientUi(clearExisting = false): {
   components: ExtractedComponent[];
 } {
   // Works both from dist/ (server runtime) and .test-build/ (tests) via cwd.
-  const htmlFile = [
-    path.resolve(process.cwd(), "client", "index.html"),
-    path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "client", "index.html"),
-  ].find((candidate) => fs.existsSync(candidate));
-  if (!htmlFile) {
-    throw new Error(`Client UI file not found (client/index.html)`);
+  const htmlFile = resolveClientHtmlFile();
+  const html = fs.readFileSync(htmlFile, "utf-8");
+  const cssFile = path.join(path.dirname(htmlFile), "style.css");
+  const css = fs.existsSync(cssFile) ? fs.readFileSync(cssFile, "utf-8") : "";
+  const components: ExtractedComponent[] = [];
+  for (const [region, regionHtml] of Object.entries(splitClientRegions(html))) {
+    if (!regionHtml.trim()) continue;
+    components.push({
+      type: "html_fragment",
+      props: { region, html: regionHtml, css },
+    });
   }
-  const components = parseClientShell(fs.readFileSync(htmlFile, "utf-8"));
   if (clearExisting) {
     stateStore.clearAll("ai");
   }
@@ -192,6 +159,124 @@ export function importClientUi(clearExisting = false): {
     stateStore.addComponent(comp.type, comp.variant, comp.props, null, "ai");
   }
   return { pageName: page.name, pageId: page.id, imported: components.length, components };
+}
+
+/** Locate client/index.html (works from dist/ and repo root). */
+export function resolveClientHtmlFile(): string {
+  const candidates = [
+    path.resolve(process.cwd(), "client", "index.html"),
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "client", "index.html"),
+  ];
+  const found = candidates.find((candidate) => fs.existsSync(candidate));
+  if (!found) {
+    throw new Error(`Client UI file not found (client/index.html)`);
+  }
+  return found;
+}
+
+/** 按 `<!-- prism-region:name -->...<!-- /prism-region:name -->` 标记切分。 */
+export function splitClientRegions(html: string): Record<string, string> {
+  const regions: Record<string, string> = {};
+  const re = /<!-- prism-region:([\w-]+) -->([\s\S]*?)<!-- \/prism-region:\1 -->/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html)) !== null) {
+    regions[m[1]] = m[2];
+  }
+  return regions;
+}
+
+/** 把画布上的片段写回 client/index.html（按区域标记原位替换，带备份）。 */
+export function applyClientUiWriteback(
+  regions: Record<string, string>
+): { success: boolean; files: Array<{ file: string; size: number }>; backup: string | null; message: string } {
+  const htmlFile = resolveClientHtmlFile();
+  const html = fs.readFileSync(htmlFile, "utf-8");
+  const esc = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  let updated = html;
+  let replaced = 0;
+  for (const [region, fragHtml] of Object.entries(regions)) {
+    const re = new RegExp(
+      `(<!-- prism-region:${esc(region)} -->)[\\s\\S]*?(<!-- /prism-region:${esc(region)} -->)`
+    );
+    const m = re.exec(updated);
+    if (!m) continue;
+    if (m[2].trim() === String(fragHtml).trim()) continue; // 未改动，跳过
+    updated = updated.replace(re, `$1\n${fragHtml}\n$2`);
+    replaced++;
+  }
+  if (replaced === 0) {
+    return { success: false, files: [], backup: null, message: "没有改动，无需写回" };
+  }
+  const backup = `${htmlFile}.bak-${Date.now()}`;
+  fs.copyFileSync(htmlFile, backup);
+  fs.writeFileSync(htmlFile, updated, "utf-8");
+  return {
+    success: true,
+    files: [{ file: htmlFile, size: Buffer.byteLength(updated, "utf-8") }],
+    backup,
+    message: "已写回 client/index.html",
+  };
+}
+
+/**
+ * 从原始 HTML（用户页面）提取语义区域片段：nav / header / main / footer /
+ * section-N / 其余 content。每个片段携带页面自己的 CSS，渲染层按原样式驱动。
+ */
+export function extractHtmlFragments(bodyHtml: string, css: string): HtmlFragmentSpec[] {
+  const frags: HtmlFragmentSpec[] = [];
+  let remainder = bodyHtml;
+  const take = (frag: string) => {
+    if (frag && frag.trim() && remainder.includes(frag)) {
+      remainder = remainder.replace(frag, "");
+      return true;
+    }
+    return false;
+  };
+  const grabFirst = (tag: string): string | null => {
+    const re = new RegExp(`<${tag}\\b[^>]*>[\\s\\S]*?<\\/${tag}>`, "i");
+    const m = re.exec(remainder);
+    return m ? m[0] : null;
+  };
+  const push = (region: string, frag: string) => {
+    if (take(frag)) frags.push({ region, html: frag, css });
+  };
+  const nav = grabFirst("nav");
+  if (nav) push("nav", nav);
+  const header = grabFirst("header");
+  if (header) push("header", header);
+  const main = grabFirst("main");
+  if (main) push("main", main);
+  const footer = grabFirst("footer");
+  if (footer) push("footer", footer);
+  const sectionRe = /<section\b[^>]*>[\s\S]*?<\/section>/gi;
+  let sm: RegExpExecArray | null;
+  let secIdx = 0;
+  while ((sm = sectionRe.exec(remainder)) !== null) {
+    secIdx += 1;
+    push(`section-${secIdx}`, sm[0]);
+  }
+  const leftover = remainder.trim();
+  if (leftover) frags.push({ region: "content", html: leftover, css });
+  return frags;
+}
+
+/** 抓取 HTML 内嵌 <style> 内容（同步；link 样式表由路由异步抓取后合并传入）。 */
+export function extractInlineStyles(html: string): string {
+  const parts: string[] = [];
+  const re = /<style[^>]*>([\s\S]*?)<\/style>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html)) !== null) {
+    if (m[1].trim()) parts.push(m[1]);
+  }
+  return parts.join("\n");
+}
+
+/** 提取 body 内部 HTML。 */
+export function extractBodyHtml(html: string): string {
+  const m = /<body[^>]*>([\s\S]*?)<\/body>/i.exec(html);
+  if (m) return m[1];
+  const m2 = /<body[^>]*>([\s\S]*)$/i.exec(html);
+  return m2 ? m2[1] : html;
 }
 
 function findSupportedFiles(rootDir: string): string[] {

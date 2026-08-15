@@ -5259,6 +5259,14 @@ textarea:focus-visible,
 }
 .comp-shape { width: 100%; height: 100%; overflow: hidden; }
 
+/* 导入的原始 HTML 片段（Shadow DOM 隔离，原 CSS 驱动） */
+.prism-fragment {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
 /* ===== Built-in LLM channel ===== */
 
 .llm-badge {

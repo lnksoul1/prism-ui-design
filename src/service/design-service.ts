@@ -70,6 +70,7 @@ export const COMPONENT_TYPES = new Set([
   "line",
   "note",
   "connector",
+  "html_fragment",
 ]);
 
 export function isKnownComponentType(type: string): boolean {

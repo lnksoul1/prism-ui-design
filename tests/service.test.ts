@@ -26,8 +26,8 @@ beforeEach(() => {
 });
 
 test("component type allowlist matches the dashboard catalog", () => {
-  assert.equal(COMPONENT_TYPES.size, 50);
-  for (const type of ["hero", "navbar", "card_grid", "card", "cta", "footer", "text_section", "feature_list", "button", "stats", "pricing", "testimonial", "banner", "timeline", "faq", "form", "image", "tabs", "accordion", "carousel", "modal", "sidebar", "breadcrumb", "pagination", "progress", "badge", "avatar", "input", "grid", "table", "alert", "tooltip", "bento_grid", "skeleton", "command_palette", "glass_card", "fab", "marquee", "feature_grid", "cookie_banner", "toggle", "text", "section", "container", "rect", "ellipse", "arrow", "line", "note", "connector"]) {
+  assert.equal(COMPONENT_TYPES.size, 51);
+  for (const type of ["hero", "navbar", "card_grid", "card", "cta", "footer", "text_section", "feature_list", "button", "stats", "pricing", "testimonial", "banner", "timeline", "faq", "form", "image", "tabs", "accordion", "carousel", "modal", "sidebar", "breadcrumb", "pagination", "progress", "badge", "avatar", "input", "grid", "table", "alert", "tooltip", "bento_grid", "skeleton", "command_palette", "glass_card", "fab", "marquee", "feature_grid", "cookie_banner", "toggle", "text", "section", "container", "rect", "ellipse", "arrow", "line", "note", "connector", "html_fragment"]) {
     assert.ok(isKnownComponentType(type), `expected ${type} to be known`);
   }
   assert.equal(isKnownComponentType("mystery"), false);

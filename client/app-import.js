@@ -307,7 +307,9 @@ function setupApplyBanner() {
   const doRollback = async (btn) => {
     if (btn) btn.disabled = true;
     try {
-      const res = await fetch("/api/apply/rollback", { method: "POST" });
+      const importRec = currentState && currentState.imports ? currentState.imports[currentState.currentPageId] : null;
+      const url = importRec && importRec.kind === "client" ? "/api/apply-client-ui/rollback" : "/api/apply/rollback";
+      const res = await fetch(url, { method: "POST" });
       const data = await res.json();
       showToastMsg(data.success ? t("rolledBack", { file: data.restored ? data.restored.split(/[\\/]/).pop() : "" }) : (data.message || t("rollbackNone")));
       if (data.success) closeResult();
@@ -322,7 +324,9 @@ function setupApplyBanner() {
     applyBtn.addEventListener("click", async () => {
       applyBtn.disabled = true;
       try {
-        const res = await fetch("/api/apply", { method: "POST" });
+        const importRec = currentState && currentState.imports ? currentState.imports[currentState.currentPageId] : null;
+        const isClientUi = !!(importRec && importRec.kind === "client");
+        const res = await fetch(isClientUi ? "/api/apply-client-ui" : "/api/apply", { method: "POST" });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || String(res.status));
         showToastMsg(t("appliedResult", { n: data.files.length, backup: data.backup ? data.backup.split(/[\\/]/).pop() : "—" }));

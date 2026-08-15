@@ -282,7 +282,7 @@ test("import product → banner → one-click apply pipeline", async ({ page }: 
   expect(errors).toEqual([]);
 });
 
-test("import wizard: client-UI source lands on canvas with apply banner", async ({ page }: { page: Page }) => {
+test("import wizard: client-UI source renders faithfully and applies back to client/index.html", async ({ page }: { page: Page }) => {
   const errors: string[] = [];
   page.on("console", (msg) => {
     if (msg.type() === "error" && !msg.text().includes("Failed to load resource")) errors.push(msg.text());
@@ -298,20 +298,67 @@ test("import wizard: client-UI source lands on canvas with apply banner", async 
   await page.locator('.import-tab[data-import-tab="client"]').click();
   await page.click("#import-go");
 
-  // The client-UI page lands on the canvas and the apply banner appears
-  // (provenance recorded → same 导入→调整→一键应用 journey)
+  // The client-UI page lands on the canvas as Shadow-DOM fragments + apply banner
   await expect(page.locator("#import-banner")).toBeVisible({ timeout: 15000 });
-  await expect(page.locator(".comp-wrapper").first()).toBeVisible({ timeout: 15000 });
+  await expect(page.locator(".prism-fragment").first()).toBeVisible({ timeout: 15000 });
 
-  // Apply → result modal with paths, then rollback restores the receipt flow
+  // 忠实渲染：topbar 片段含 🔮 Prism，toplib 片段含 13 个 top-lib-tab
+  const faithful = await page.evaluate(() => {
+    const hosts = Array.from(document.querySelectorAll(".prism-fragment"));
+    const shadowHtmls = hosts.filter((h) => h.shadowRoot).map((h) => h.shadowRoot!.innerHTML);
+    const tabMatches = shadowHtmls.map((s) => (s.match(/class="top-lib-tab"/g) || []).length);
+    return {
+      logo: shadowHtmls.some((s) => s.includes("🔮 Prism")),
+      maxTabs: Math.max(0, ...tabMatches),
+      shadowCount: shadowHtmls.length,
+    };
+  });
+  expect(faithful.logo).toBe(true);
+  expect(faithful.maxTabs).toBe(13);
+  expect(faithful.shadowCount).toBeGreaterThanOrEqual(5);
+
+  // 编辑 shadow 内文本（双击 logo → 改字 → blur 提交到 props.html）
+  await page.evaluate(() => {
+    const hosts = Array.from(document.querySelectorAll(".prism-fragment"));
+    const target = hosts.find((h) => h.shadowRoot && h.shadowRoot.innerHTML.includes("🔮 Prism"))!;
+    const root = target.shadowRoot!.querySelector(".prism-fragment-root")!;
+    const el = Array.from(root.querySelectorAll("span, a, div")).find(
+      (x) => x.childElementCount === 0 && x.textContent!.includes("Prism")
+    )!;
+    el.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    el.textContent = "🔮 Prism E2E";
+    el.dispatchEvent(new Event("blur", { bubbles: true }));
+  });
+  await expect
+    .poll(async () => {
+      return page.evaluate(async () => {
+        const s = (await (await fetch("/api/state")).json()) as { components: Array<{ props?: { html?: string } }> };
+        return s.components.some((c) => String(c.props?.html || "").includes("🔮 Prism E2E"));
+      });
+    }, { timeout: 10000 })
+    .toBe(true);
+
+  // 一键应用 → 写回 client/index.html（真实产物）；校验后回滚恢复
+  const indexHtml = path.resolve(__dirname, "..", "..", "client", "index.html");
+  const { readFileSync, readdirSync, rmSync } = await import("node:fs");
+  const before = readFileSync(indexHtml, "utf-8");
   await page.click("#apply-btn");
   await expect(page.locator("#apply-result-modal")).toBeVisible({ timeout: 5000 });
-  await page.click("#apply-result-done");
-  // Apply again so a backup exists, then rollback from the banner
-  await page.click("#apply-btn");
-  await expect(page.locator("#apply-result-modal")).toBeVisible({ timeout: 5000 });
+  await expect(page.locator("#apply-result-list")).toContainText("index.html");
+  await expect
+    .poll(() => readFileSync(indexHtml, "utf-8").includes("🔮 Prism E2E"), { timeout: 5000 })
+    .toBe(true);
+
+  // 回滚 → 恢复原文件，并清理测试产生的备份
   await page.click("#apply-result-rollback");
   await expect(page.locator("#prism-toast")).toContainText("已回滚", { timeout: 5000 });
+  await expect
+    .poll(() => !readFileSync(indexHtml, "utf-8").includes("🔮 Prism E2E"), { timeout: 5000 })
+    .toBe(true);
+  for (const f of readdirSync(path.dirname(indexHtml)).filter((x) => x.startsWith("index.html.bak-"))) {
+    rmSync(path.join(path.dirname(indexHtml), f), { force: true });
+  }
+  expect(before).toContain("🔮 Prism");
 
   expect(errors).toEqual([]);
 });

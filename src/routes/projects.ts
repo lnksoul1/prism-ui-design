@@ -3,7 +3,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { stateStore, type ImportRecord } from "../state.js";
 import * as designService from "../service/design-service.js";
-import { importClientUi, importHtmlString, scanProject } from "../import-project.js";
+import { applyClientUiWriteback, importClientUi, importHtmlString, resolveClientHtmlFile, scanProject } from "../import-project.js";
 import { applyStyleTokenSet } from "../tokens.js";
 import { saveProject, loadProject, listProjects, getProjectDir } from "../project-store.js";
 import { writebackAll, writebackPreview, writebackTokens, type WritebackMode } from "../writeback.js";
@@ -258,7 +258,23 @@ export function registerProjectsRoutes(): express.Router {
       if (sourceHtml.length > 2_000_000) {
         throw new HttpError(400, `Page too large (${sourceHtml.length} chars, max 2000000)`);
       }
-      const result = importHtmlString(sourceHtml, sourceName, false);
+      // 内联抓取 link 样式表，让片段渲染还原用户页面的完整样式
+      let extraCss = "";
+      if (kind === "url") {
+        const parsed = new URL(String(url));
+        const linkRe = /<link[^>]*rel=["']stylesheet["'][^>]*href=["']([^"']+)["'][^>]*>/gi;
+        let m: RegExpExecArray | null;
+        while ((m = linkRe.exec(sourceHtml)) !== null) {
+          try {
+            const href = new URL(m[1], parsed).toString();
+            const cssRes = await fetch(href, { signal: AbortSignal.timeout(8000) });
+            if (cssRes.ok) extraCss += (await cssRes.text()) + "\n";
+          } catch {
+            // 单条样式失败不影响整体导入
+          }
+        }
+      }
+      const result = importHtmlString(sourceHtml, sourceName, false, extraCss);
       // Persist the original HTML for provenance / future apply steps
       const importsDir = path.join(getProjectDir(), "imports");
       fs.mkdirSync(importsDir, { recursive: true });
@@ -300,6 +316,42 @@ export function registerProjectsRoutes(): express.Router {
   router.post("/api/apply/rollback", asyncHandler(async (_req, res) => {
     const result = rollbackApply();
     res.json(result);
+  }));
+
+  // API: 一键应用（客户端界面）——把画布上的片段按区域标记写回 client/index.html
+  router.post("/api/apply-client-ui", asyncHandler(async (_req, res) => {
+    const state = stateStore.getState();
+    const page = state.pages.find((p) => p.id === state.currentPageId);
+    if (!page) {
+      throw new HttpError(400, "没有当前页面");
+    }
+    const regions: Record<string, string> = {};
+    for (const frag of page.components) {
+      if (frag.type === "html_fragment" && frag.props && typeof frag.props.region === "string" && typeof frag.props.html === "string") {
+        regions[frag.props.region] = frag.props.html;
+      }
+    }
+    if (Object.keys(regions).length === 0) {
+      throw new HttpError(400, "当前页面没有可写回的 UI 片段");
+    }
+    const result = applyClientUiWriteback(regions);
+    if (!result.success) throw new HttpError(400, result.message);
+    res.json(result);
+  }));
+
+  // API: 回滚客户端界面写回
+  router.post("/api/apply-client-ui/rollback", asyncHandler(async (_req, res) => {
+    const { readdirSync, copyFileSync } = await import("fs");
+    const htmlFile = resolveClientHtmlFile();
+    const dir = path.dirname(htmlFile);
+    const backups = readdirSync(dir).filter((f) => f.startsWith("index.html.bak-")).sort();
+    if (backups.length === 0) {
+      res.json({ success: false, message: "没有可回滚的备份" });
+      return;
+    }
+    const newest = backups[backups.length - 1];
+    copyFileSync(path.join(dir, newest), htmlFile);
+    res.json({ success: true, restored: path.join(dir, newest), message: "已回滚客户端界面" });
   }));
 
   return router;

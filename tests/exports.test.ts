@@ -52,3 +52,49 @@ test("svelte export produces an SFC with token CSS", () => {
   assert.match(code, /--color-primary:/);
   assert.match(code, /export let title/);
 });
+
+test("HTML export escapes malicious props (XSS boundary, Phase 3.4)", () => {
+  stateStore.resetForTests();
+  stateStore.setProjectName("XSS Test", "ai");
+  const payload = `<img src=x onerror=alert(1)><script>alert("pwned")</script>" ' `;
+  stateStore.addComponent(
+    "hero",
+    "centered",
+    {
+      title: payload,
+      subtitle: `"></div><script>alert(2)</script>`,
+      button_text: `<svg onload=alert(3)>`,
+      image_url: `" onerror="alert(4)`,
+    },
+    null,
+    "ai"
+  );
+  stateStore.addComponent("navbar", "simple", { brand: `<script>alert(5)</script>` }, null, "ai");
+  stateStore.addComponent("button", undefined, { text: `<script>alert(6)</script>` }, null, "ai");
+
+  const code = exportDesign("html");
+  // The raw payload must never appear unescaped.
+  assert.ok(!code.includes("<script>alert("), "script tags must be escaped");
+  assert.ok(!code.includes("<img src=x onerror"), "event handler attributes must be escaped");
+  assert.ok(!code.includes("<svg onload"), "svg onload must be escaped");
+  // Escaped entities must be present instead.
+  assert.ok(code.includes("&lt;script&gt;"), "escaped script tag present");
+  assert.ok(code.includes("&lt;img"), "escaped img present");
+  assert.ok(code.includes("&lt;svg"), "escaped svg present");
+  // Attribute-context quotes are escaped (double quotes).
+  assert.ok(!code.includes('" onerror='), "attribute breakout prevented");
+});
+
+test("CSS-injection attempts cannot break out of the export stylesheet (Phase 3.4)", () => {
+  stateStore.resetForTests();
+  stateStore.setProjectName("CSS XSS Test", "ai");
+  stateStore.addComponent(
+    "alert",
+    undefined,
+    { text: "hello", type: "danger</style><script>alert(7)</script>" },
+    null,
+    "ai"
+  );
+  const code = exportDesign("html");
+  assert.ok(!code.includes("</style><script>alert(7)"), "CSS breakout prevented in class attribute");
+});

@@ -47,6 +47,14 @@ async function runPrompt(page: Page, text: string): Promise<void> {
   await page.keyboard.press("Enter");
 }
 
+/** Expand the bottom design library (collapsed by default; click to expand). */
+async function openLibrary(page: Page): Promise<void> {
+  const toggle = page.locator("#bottom-lib-toggle");
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") {
+    await toggle.click();
+  }
+}
+
 let server: ChildProcess | null = null;
 let port = 0;
 
@@ -82,6 +90,7 @@ test("dashboard loads with the premium empty state", async ({ page }: { page: Pa
   await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "domcontentloaded", timeout: 60000 });
   await expect(page.locator(".topbar")).toBeVisible();
   await expect(page.locator(".placeholder-guide")).toBeVisible();
+  await openLibrary(page);
   await expect(page.locator("#top-lib-strip")).toBeVisible();
   // Primary topbar actions stay visible; secondary utilities live in the "…" menu.
   await expect(page.locator("#export-btn")).toBeVisible();
@@ -156,6 +165,7 @@ test("drawing canvas: draw shapes directly on the preview canvas (unified coordi
   await expect(page.locator(".inspector-tabs")).toBeVisible();
 
   // 顶部设计库: 组件知识卡渲染（悬停展开气泡）
+  await openLibrary(page);
   await page.locator('.top-lib-tab[data-lib="按钮与链接"]').click();
   await page.waitForSelector(".top-lib-card", { timeout: 5000 });
   await page.locator(".top-lib-card").first().hover();
@@ -227,7 +237,8 @@ test("inspect code tab and brand design systems work from the dashboard", async 
   const copyEnabled = await page.locator(".inspector-copy-btn").isEnabled();
   expect(copyEnabled).toBe(true);
 
-  // 设计库重做 (P1): 顶部库"设计风格" tab 渲染 VibeHub 知识卡片。
+  // 设计库重做 (P1): 底部库"设计风格" tab 渲染 VibeHub 知识卡片。
+  await openLibrary(page);
   await page.locator('.top-lib-tab[data-lib="设计风格"]').click();
   await expect(page.locator(".top-lib-card").first()).toBeVisible({ timeout: 5000 });
   const vhCount = await page.locator(".top-lib-card").count();
@@ -579,7 +590,8 @@ test("library: component template replaces the selected component in place", asy
   expect(replaced?.type).toBe("hero");
   expect(replaced?.variant).toBe("split");
 
-  // 顶部设计库: 组件知识卡添加到画布 (VibeHub 知识卡 + 应用到画布)
+  // 底部设计库: 组件知识卡添加到画布 (VibeHub 知识卡 + 应用到画布)
+  await openLibrary(page);
   await page.locator('.top-lib-tab[data-lib="按钮与链接"]').click();
   await expect(page.locator(".top-lib-card").first()).toBeVisible();
   const cardCount = await page.locator(".top-lib-card").count();

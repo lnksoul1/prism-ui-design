@@ -802,6 +802,38 @@ let currentLibraryTab = "components";
 function setupDesignLibrary() {
   setupTopLibrary();
   setupCanvasDropZone();
+  setupChromeToggles();
+}
+
+/** 布局开关：底部设计库展开/收起 + 左右栏收起/展开。 */
+function setupChromeToggles() {
+  const libToggle = $("bottom-lib-toggle");
+  const topLibrary = $("top-library");
+  if (libToggle && topLibrary) {
+    libToggle.addEventListener("click", () => {
+      const expanded = topLibrary.style.display !== "none";
+      topLibrary.style.display = expanded ? "none" : "";
+      libToggle.setAttribute("aria-expanded", String(!expanded));
+      if (!expanded) {
+        const firstTab = document.querySelector(".top-lib-tab");
+        renderTopLibraryStrip(topLibraryActive || (firstTab && firstTab.dataset.lib) || "按钮与链接");
+      }
+    });
+  }
+  const leftBtn = $("toggle-left-panel");
+  const rightBtn = $("toggle-right-panel");
+  if (leftBtn) {
+    leftBtn.addEventListener("click", () => {
+      const panel = document.querySelector(".panel-left");
+      if (panel) panel.classList.toggle("collapsed");
+    });
+  }
+  if (rightBtn) {
+    rightBtn.addEventListener("click", () => {
+      const panel = document.querySelector(".panel-right");
+      if (panel) panel.classList.toggle("collapsed");
+    });
+  }
 }
 
 // ===== 顶部设计库 (P1): 13 知识分类 tab + 悬停展开气泡卡片 =====

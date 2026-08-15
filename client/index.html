@@ -39,34 +39,12 @@
     </div>
     <button class="theme-toggle" id="theme-toggle" title="切换主题">主题</button>
     <button class="toolbar-btn" id="lang-toggle" title="切换语言 / Switch language">EN</button>
+    <button class="toolbar-btn panel-collapse-btn" id="toggle-left-panel" title="收起/展开左栏">◧</button>
+    <button class="toolbar-btn panel-collapse-btn" id="toggle-right-panel" title="收起/展开右栏">◨</button>
   </div>
 </header>
 
 <!-- /prism-region:topbar -->
-
-<!-- prism-region:toplib -->
-
-<!-- 顶部设计库 (P1): 13 个知识分类 tab，悬停向下展开气泡卡片 -->
-<div class="top-library" id="top-library">
-  <div class="top-lib-tabs" id="top-lib-tabs">
-    <button class="top-lib-tab" data-lib="按钮与链接">按钮与链接</button>
-    <button class="top-lib-tab" data-lib="表单">表单</button>
-    <button class="top-lib-tab" data-lib="内容展示">内容展示</button>
-    <button class="top-lib-tab" data-lib="弹窗与提示">弹窗与提示</button>
-    <button class="top-lib-tab" data-lib="导航">导航</button>
-    <button class="top-lib-tab" data-lib="官网区块">官网区块</button>
-    <button class="top-lib-tab" data-lib="页面布局">页面布局</button>
-    <button class="top-lib-tab" data-lib="CSS 布局">CSS 布局</button>
-    <button class="top-lib-tab" data-lib="文字">文字</button>
-    <button class="top-lib-tab" data-lib="外观">外观</button>
-    <button class="top-lib-tab" data-lib="动画">动画</button>
-    <button class="top-lib-tab" data-lib="鼠标">鼠标</button>
-    <button class="top-lib-tab" data-lib="设计风格">设计风格</button>
-  </div>
-  <div class="top-lib-strip" id="top-lib-strip"></div>
-</div>
-
-<!-- /prism-region:toplib -->
 
 <!-- prism-region:main -->
 <!-- Main Layout: 3 columns -->
@@ -229,6 +207,31 @@
 
 </div>
 <!-- /prism-region:main -->
+
+<!-- prism-region:toplib -->
+<!-- 底部设计库：点击展开 / 再次点击收起 -->
+<div class="bottom-library" id="bottom-library">
+  <button class="bottom-lib-toggle" id="bottom-lib-toggle" aria-expanded="false" title="点击展开设计库">📚 设计库 <span class="bl-arrow">▴</span></button>
+  <div class="top-library" id="top-library" style="display:none">
+    <div class="top-lib-tabs" id="top-lib-tabs">
+      <button class="top-lib-tab" data-lib="按钮与链接">按钮与链接</button>
+      <button class="top-lib-tab" data-lib="表单">表单</button>
+      <button class="top-lib-tab" data-lib="内容展示">内容展示</button>
+      <button class="top-lib-tab" data-lib="弹窗与提示">弹窗与提示</button>
+      <button class="top-lib-tab" data-lib="导航">导航</button>
+      <button class="top-lib-tab" data-lib="官网区块">官网区块</button>
+      <button class="top-lib-tab" data-lib="页面布局">页面布局</button>
+      <button class="top-lib-tab" data-lib="CSS 布局">CSS 布局</button>
+      <button class="top-lib-tab" data-lib="文字">文字</button>
+      <button class="top-lib-tab" data-lib="外观">外观</button>
+      <button class="top-lib-tab" data-lib="动画">动画</button>
+      <button class="top-lib-tab" data-lib="鼠标">鼠标</button>
+      <button class="top-lib-tab" data-lib="设计风格">设计风格</button>
+    </div>
+    <div class="top-lib-strip" id="top-lib-strip"></div>
+  </div>
+</div>
+<!-- /prism-region:toplib -->
 
 <!-- AI Settings Modal (built-in LLM channel, BYO API key) -->
 <div class="modal-overlay" id="llm-modal" style="display:none">

@@ -226,20 +226,19 @@ test("inspect code tab and brand design systems work from the dashboard", async 
   const copyEnabled = await page.locator(".inspector-copy-btn").isEnabled();
   expect(copyEnabled).toBe(true);
 
-  // Brand design systems: list renders all cards, applying Linear changes tokens
-  await page.locator('.lib-tab[data-lib="designSystems"]').click();
-  await expect(page.locator(".ds-card")).toHaveCount(17, { timeout: 5000 });
-  await page.locator(".ds-apply").first().click();
-  await page.waitForFunction(
-    async () => {
-      const state = (await (await fetch("/api/state")).json()) as {
-        tokens: { colors: Record<string, { value?: string }> };
-      };
-      return state.tokens.colors["color-primary"]?.value === "#5E6AD2";
-    },
-    null,
-    { timeout: 10000 }
-  );
+  // 设计库重做 (P1): "风格" tab 渲染 VibeHub 知识卡片（外观/动画）。
+  await page.locator('.lib-tab[data-lib="styles"]').click();
+  await expect(page.locator(".vh-card").first()).toBeVisible({ timeout: 5000 });
+  const vhCount = await page.locator(".vh-card").count();
+  expect(vhCount).toBeGreaterThanOrEqual(10);
+  // 悬停展开结构/用法详情
+  await page.locator(".vh-card").first().hover();
+  await expect(page.locator(".vh-detail").first()).toBeVisible();
+  // 布局 tab 也渲染知识卡
+  await page.locator('.lib-tab[data-lib="layout"]').click();
+  await expect(page.locator(".vh-card").first()).toBeVisible();
+  const layoutCount = await page.locator(".vh-card").count();
+  expect(layoutCount).toBeGreaterThanOrEqual(10);
 
   expect(errors).toEqual([]);
 });

@@ -792,7 +792,7 @@ const LIBRARY_TEMPLATES = [
   { id: "dashboard", name: "数据看板", desc: "导航 + 指标 + 卡片网格", icon: "▦", builtin: true },
 ];
 
-let currentLibraryTab = "designSystems";
+let currentLibraryTab = "components";
 
 function setupDesignLibrary() {
   const libTabs = document.querySelectorAll(".lib-tab");
@@ -816,9 +816,18 @@ function renderLibraryList() {
 
   let items = [];
   if (currentLibraryTab === "animations") items = LIBRARY_ANIMATIONS;
-  else if (currentLibraryTab === "components") items = LIBRARY_COMPONENTS;
   else if (currentLibraryTab === "interactions") items = LIBRARY_INTERACTIONS;
   else if (currentLibraryTab === "templates") items = LIBRARY_TEMPLATES;
+  else if (currentLibraryTab === "components") {
+    // 组件 tab：原可拖拽组件列表 + VibeHub 组件知识卡（结构/示例/用法）。
+    items = LIBRARY_COMPONENTS;
+    renderVibeHubLibrary("components", { afterFirst: true });
+  }
+  else if (currentLibraryTab === "layout" || currentLibraryTab === "appearance" ||
+           currentLibraryTab === "animation" || currentLibraryTab === "styles") {
+    renderVibeHubLibrary(currentLibraryTab);
+    return;
+  }
   else if (currentLibraryTab === "designSystems") {
     renderDesignSystems();
     return;
@@ -955,6 +964,159 @@ function renderLibraryList() {
   if (currentLibraryTab === "templates") {
     renderSavedTemplates();
   }
+}
+
+// ===== 重建设计库 (P1): VibeHub 知识卡片 =====
+
+/**
+ * VibeHub 分类 → 设计库 tab 的映射。每类术语按 vibe-hub 的 12 个知识分类
+ * 分组展示；卡片悬停展开 结构(Anatomy) + 用法 + AI 提示词，并可应用到设计。
+ */
+const VIBE_TAB_GROUPS = {
+  components: ["按钮与链接", "表单", "内容展示", "弹窗与提示", "导航", "官网区块"],
+  layout: ["CSS 布局", "页面布局"],
+  appearance: ["外观", "文字"],
+  animation: ["动画", "鼠标"],
+  styles: ["外观", "动画"],
+};
+
+/** 术语 slug → Prism 可应用动作（组件类型 / 样式 / 动效）。 */
+function vibeTermAction(term) {
+  const COMPONENT_MAP = {
+    button: { type: "button", props: { text: "按钮" } },
+    link: { type: "button", props: { text: "链接 →" }, variant: "ghost" },
+    input: { type: "input", props: { label: "输入框", placeholder: "请输入" } },
+    textarea: { type: "text_section", props: { text: "多行文本" } },
+    checkbox: { type: "form", props: { fields: [{ label: "勾选项", type: "checkbox" }] } },
+    switch: { type: "toggle", props: { label: "开关" } },
+    slider: { type: "progress", props: { label: "进度", value: 60 } },
+    select: { type: "form", props: { fields: [{ label: "下拉", type: "select" }] } },
+    form: { type: "form", props: {} },
+    table: { type: "table", props: { headers: ["列1", "列2"], rows: [["A", "1"], ["B", "2"]] } },
+    list: { type: "feature_list", props: {} },
+    card: { type: "card", props: { title: "卡片标题", description: "卡片描述" } },
+    tag: { type: "badge", props: { text: "标签" } },
+    badge: { type: "badge", props: { text: "徽标" } },
+    avatar: { type: "avatar", props: { name: "用户" } },
+    statistic: { type: "stats", props: { items: [{ value: "100+", label: "用户" }] } },
+    tabs: { type: "tabs", props: {} },
+    collapse: { type: "accordion", props: {} },
+    timeline: { type: "timeline", props: {} },
+    carousel: { type: "carousel", props: {} },
+    empty: { type: "banner", props: { text: "暂无内容" } },
+    image: { type: "image", props: {} },
+    icon: { type: "banner", props: { text: "✦" } },
+    quote: { type: "testimonial", props: {} },
+    alert: { type: "alert", props: { text: "提示信息" } },
+    toast: { type: "alert", props: { text: "轻提示" } },
+    modal: { type: "modal", props: { title: "对话框" } },
+    drawer: { type: "sidebar", props: { title: "抽屉" } },
+    tooltip: { type: "tooltip", props: { text: "提示" } },
+    progress: { type: "progress", props: { label: "进度", value: 70 } },
+    skeleton: { type: "skeleton", props: {} },
+    spinner: { type: "progress", props: { label: "加载中", value: 40 } },
+    menu: { type: "sidebar", props: {} },
+    breadcrumb: { type: "breadcrumb", props: {} },
+    pagination: { type: "pagination", props: {} },
+    steps: { type: "progress", props: { label: "步骤 1/3", value: 33 } },
+    dropdown: { type: "navbar", props: { brand: "下拉菜单" } },
+    search: { type: "input", props: { label: "搜索", placeholder: "搜索…" } },
+    hero: { type: "hero", props: { title: "主标题", subtitle: "副标题", button_text: "开始" } },
+    cta: { type: "cta", props: { title: "行动号召", button_text: "立即行动" } },
+    header: { type: "navbar", props: { brand: "Logo" } },
+    navbar: { type: "navbar", props: { brand: "Logo", links: ["首页", "功能"] } },
+    footer: { type: "footer", props: {} },
+    faq: { type: "faq", props: {} },
+    pricing: { type: "pricing", props: {} },
+    banner: { type: "banner", props: { text: "公告横幅" } },
+  };
+  return COMPONENT_MAP[term.slug] || null;
+}
+
+/** 渲染 vibe-hub 知识库卡片（悬停展开 结构/用法/AI 提示词）。 */
+function renderVibeHubLibrary(tab, opts) {
+  const list = $("library-list");
+  if (!list) return;
+  const appendMode = !!(opts && opts.afterFirst);
+  if (!appendMode) list.innerHTML = "";
+  const data = window.VIBE_HUB_TERMS;
+  if (!data || !data.grouped) {
+    if (!appendMode) list.innerHTML = `<div class="library-empty">${t("dsError")}</div>`;
+    return;
+  }
+  // 组件 tab 在可拖拽列表后追加知识卡；其他 tab 全量渲染。
+  if (appendMode) {
+    const sep = el("div", "lib-group-header", "组件知识（VibeHub）");
+    list.appendChild(sep);
+  }
+  const groups = VIBE_TAB_GROUPS[tab] || [];
+  groups.forEach((groupName) => {
+    const terms = (data.grouped[groupName] || []);
+    if (terms.length === 0) return;
+    const header = el("div", "lib-group-header", groupName);
+    header.appendChild(el("span", "lib-group-count", `${terms.length}`));
+    list.appendChild(header);
+    terms.forEach((term) => {
+      const card = el("div", "vh-card");
+      const top = el("div", "vh-card-top");
+      const iconEl = el("span", "vh-icon", term.zh.slice(0, 1));
+      top.appendChild(iconEl);
+      const nameBox = el("div", "vh-name-box");
+      nameBox.appendChild(el("div", "vh-name", term.zh));
+      nameBox.appendChild(el("div", "vh-slug", term.slug));
+      top.appendChild(nameBox);
+      card.appendChild(top);
+
+      // 大白话
+      if (term.youSay) card.appendChild(el("div", "vh-yousay", `“${term.youSay}”`));
+
+      // Hover 展开层：定义 + 结构 + 用法 + AI 提示词 + 应用
+      const detail = el("div", "vh-detail");
+      if (term.definition) detail.appendChild(el("div", "vh-def", term.definition));
+      if (term.anatomy) {
+        const a = el("div", "vh-anatomy");
+        a.appendChild(el("div", "vh-section-label", "组成结构 · Anatomy"));
+        a.appendChild(el("div", "vh-text", term.anatomy));
+        detail.appendChild(a);
+      }
+      if (term.variants) {
+        const v = el("div", "vh-variants");
+        v.appendChild(el("div", "vh-section-label", "常见变体 · Variants"));
+        v.appendChild(el("div", "vh-text", term.variants));
+        detail.appendChild(v);
+      }
+      if (term.usage) {
+        const u = el("div", "vh-usage");
+        u.appendChild(el("div", "vh-section-label", "什么时候用"));
+        u.appendChild(el("div", "vh-text", term.usage));
+        detail.appendChild(u);
+      }
+      if (term.avoid) {
+        const av = el("div", "vh-avoid");
+        av.appendChild(el("div", "vh-section-label", "什么时候不用"));
+        av.appendChild(el("div", "vh-text", term.avoid));
+        detail.appendChild(av);
+      }
+      if (term.aiPrompt) {
+        const ai = el("div", "vh-ai");
+        ai.appendChild(el("div", "vh-section-label", "告诉 AI"));
+        ai.appendChild(el("div", "vh-text", term.aiPrompt));
+        detail.appendChild(ai);
+      }
+      const action = vibeTermAction(term);
+      if (action) {
+        const applyBtn = el("button", "vh-apply", "＋ 添加到画布");
+        applyBtn.type = "button";
+        applyBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          addComponentViaAPI(action);
+        });
+        detail.appendChild(applyBtn);
+      }
+      card.appendChild(detail);
+      list.appendChild(card);
+    });
+  });
 }
 
 async function renderDesignSystems() {

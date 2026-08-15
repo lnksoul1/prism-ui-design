@@ -2486,6 +2486,108 @@ body::after {
   border-bottom: 1px solid var(--border);
   margin: 4px 0 2px;
 }
+
+/* ===== 重建设计库 (P1): VibeHub 知识卡片 ===== */
+.lib-group-count {
+  float: right;
+  color: var(--accent);
+  font-size: 10px;
+}
+.vh-card {
+  position: relative;
+  margin: 6px 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  cursor: default;
+  transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
+}
+.vh-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  z-index: 5;
+}
+.vh-card-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.vh-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent), var(--accent-light, #a78bfa));
+  flex-shrink: 0;
+}
+.vh-name-box { min-width: 0; }
+.vh-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+.vh-slug {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--mono);
+}
+.vh-yousay {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  font-style: italic;
+}
+.vh-detail {
+  display: none;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+}
+.vh-card:hover .vh-detail { display: block; }
+.vh-section-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent);
+  margin: 6px 0 2px;
+}
+.vh-def {
+  font-size: 11px;
+  color: var(--text);
+  line-height: 1.6;
+}
+.vh-text {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  white-space: pre-line;
+}
+.vh-usage .vh-text { color: var(--success, #10b981); }
+.vh-avoid .vh-text { color: var(--danger, #ef4444); }
+.vh-apply {
+  margin-top: 8px;
+  width: 100%;
+  padding: 6px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--accent-bg, rgba(124, 58, 237, 0.1));
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font);
+  transition: all 0.15s var(--ease);
+}
+.vh-apply:hover {
+  background: var(--accent);
+  color: #fff;
+}
 .lib-item-block {
   border-left: 2px solid var(--accent);
 }

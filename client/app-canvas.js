@@ -152,7 +152,8 @@ function renderCanvas(opts) {
     const canvasBtn = $("empty-canvas");
     if (canvasBtn) {
       canvasBtn.addEventListener("click", () => {
-        setCanvasEditorMode(true);
+        // 第一步：预览画布直接绘制 → 切换到「矩形」绘制工具
+        if (typeof selectDrawTool === "function") selectDrawTool("rect");
       });
     }
     document.querySelectorAll(".example-btn").forEach((btn) => {
@@ -192,6 +193,8 @@ function renderCanvas(opts) {
 
   // 布局合一 (P1): 渲染后测量真实高度并回写，纠正估算值（消除重叠）。
   syncMeasuredHeights(components);
+  // 连线跟随端点（第一步：绘制元素统一为组件）。
+  syncConnectors(components);
 }
 
 /**
@@ -273,6 +276,7 @@ function applyComponentDelta(ids) {
   updateComponentCount();
   renderRulers();
   renderGuides();
+  syncConnectors(all);
 }
 
 /** Walk up from a component id to its top-level ancestor (or null). */
@@ -601,7 +605,8 @@ function renderComponent(comp) {
   }
 
   // Freeform layout: absolute positioning + drag/resize
-  if (canvasMode === "freeform" && comp.layout) {
+  // (play 模式禁用手柄：组件为纯点击目标，保证行为触发稳定)
+  if (canvasMode === "freeform" && comp.layout && !playMode) {
     const L = comp.layout;
     wrapper.style.position = "absolute";
     wrapper.style.left = L.x + "px";
@@ -697,6 +702,8 @@ function attachPointerDrag(element, handlers) {
 function attachFreeformDrag(wrapper, compId) {
   attachPointerDrag(wrapper, {
     shouldSkip: (e) => {
+      // 绘制工具激活时，组件拖拽让位给画布绘制（第一步：预览画布直接绘制）。
+      if (typeof activeDrawTool === "string" && activeDrawTool !== "select" && activeDrawTool !== "hand") return true;
       // Only exclude actual controls; dragging from the badge/overlay strip is allowed.
       if (e.target.closest(".comp-delete") || e.target.closest(".comp-drag-handle")) return true;
       if (e.target.closest(".resize-handle")) return true;
@@ -1269,5 +1276,220 @@ function setupCanvasMode() {
   const autoBtn = $("auto-layout-btn");
   if (autoBtn) autoBtn.addEventListener("click", autoLayoutAll);
   applyCanvasMode($("canvas"));
+}
+
+// ===== 画布绘制 (第一步: 预览画布直接绘制，统一坐标系) =====
+// 绘制元素直接落为组件（rect/ellipse/arrow/line/text/note/image/connector），
+// 与普通组件共用同一 layout 坐标系：可选中、拖拽、缩放、挂行为。
+
+let activeDrawTool = "select";
+let connectorSourceId = null;
+
+function selectDrawTool(toolId) {
+  activeDrawTool = toolId;
+  connectorSourceId = null;
+  document.querySelectorAll(".draw-tool").forEach((b) => b.classList.toggle("active", b.dataset.tool === toolId));
+  const canvas = $("canvas");
+  if (canvas) canvas.classList.toggle("drawing-mode", toolId !== "select" && toolId !== "hand");
+}
+
+function setupCanvasDrawing() {
+  document.querySelectorAll(".draw-tool").forEach((btn) => {
+    btn.addEventListener("click", () => selectDrawTool(btn.dataset.tool));
+  });
+  const canvas = $("canvas");
+  if (canvas) canvas.addEventListener("pointerdown", (e) => onCanvasPointerDown(e));
+  selectDrawTool("select");
+}
+
+/** 视口坐标 → 画布坐标（除以缩放）。 */
+function canvasPointFromEvent(e) {
+  const canvas = $("canvas");
+  if (!canvas) return { x: 0, y: 0 };
+  const rect = canvas.getBoundingClientRect();
+  const scale = (canvasZoom || 100) / 100;
+  return { x: (e.clientX - rect.left) / scale, y: (e.clientY - rect.top) / scale };
+}
+
+function onCanvasPointerDown(e) {
+  if (playMode) return;
+  if (activeDrawTool === "select" || activeDrawTool === "hand") return;
+  if (e.button !== 0) return;
+  const pt = canvasPointFromEvent(e);
+  if (activeDrawTool === "image") {
+    const url = window.prompt("图片 URL（粘贴链接）", "https://picsum.photos/seed/prism/400/300");
+    if (url) createDrawComponent("image", { src: url, alt: "图片" }, Math.max(0, Math.round(pt.x)), Math.max(0, Math.round(pt.y)), 400, 300);
+    return;
+  }
+  if (activeDrawTool === "connector") {
+    handleConnectorClick(e, pt);
+    return;
+  }
+  startShapeDraw(e, pt);
+}
+
+function startShapeDraw(e, pt) {
+  const canvas = $("canvas");
+  if (!canvas) return;
+  const toolType = activeDrawTool === "text" ? "text" : activeDrawTool === "note" ? "note" : activeDrawTool;
+  const start = pt;
+  let current = pt;
+  const preview = el("div", "draw-preview");
+  canvas.appendChild(preview);
+  const paint = () => {
+    const x = Math.min(start.x, current.x);
+    const y = Math.min(start.y, current.y);
+    const w = Math.max(8, Math.abs(current.x - start.x));
+    const h = Math.max(8, Math.abs(current.y - start.y));
+    preview.style.cssText =
+      `position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;` +
+      `border:1.5px dashed var(--accent, #2383E2);background:var(--accent-bg, rgba(35,131,226,.1));` +
+      `border-radius:${toolType === "ellipse" ? "50%" : "3px"};pointer-events:none;z-index:5;`;
+  };
+  paint();
+  const onMove = (ev) => { current = canvasPointFromEvent(ev); paint(); };
+  const onUp = (ev) => {
+    document.removeEventListener("pointermove", onMove);
+    document.removeEventListener("pointerup", onUp);
+    preview.remove();
+    current = canvasPointFromEvent(ev);
+    const x = Math.min(start.x, current.x);
+    const y = Math.min(start.y, current.y);
+    const w = Math.max(8, Math.abs(current.x - start.x));
+    const h = Math.max(8, Math.abs(current.y - start.y));
+    const isClick = w <= 8 && h <= 8;
+    if (isClick && (toolType === "text" || toolType === "note")) {
+      createDrawComponent(
+        toolType,
+        toolType === "text" ? { text: "文字" } : { text: "便签" },
+        Math.max(0, Math.round(x)), Math.max(0, Math.round(y)),
+        toolType === "note" ? 160 : 120, toolType === "note" ? 72 : 28
+      );
+      return;
+    }
+    if (isClick) return;
+    const props = {
+      rect: { radius: 6 },
+      ellipse: {},
+      arrow: {},
+      line: {},
+      text: { text: "文字", fontSize: "16" },
+      note: { text: "便签" },
+    }[toolType] || {};
+    createDrawComponent(toolType, props, Math.max(0, Math.round(x)), Math.max(0, Math.round(y)), Math.round(w), Math.round(h));
+  };
+  document.addEventListener("pointermove", onMove);
+  document.addEventListener("pointerup", onUp);
+}
+
+function handleConnectorClick(e, pt) {
+  e.stopPropagation();
+  const comp = componentAtCanvasPoint(pt.x, pt.y);
+  if (!comp || comp.type === "connector") {
+    connectorSourceId = null;
+    showToastMsg(t("drawConnectorHint"), true);
+    return;
+  }
+  if (!connectorSourceId) {
+    connectorSourceId = comp.id;
+    showToastMsg(t("drawConnectorSource", { name: comp.name || comp.type }));
+    return;
+  }
+  if (connectorSourceId === comp.id) {
+    connectorSourceId = null;
+    return;
+  }
+  createConnector(connectorSourceId, comp.id);
+  connectorSourceId = null;
+}
+
+function componentAtCanvasPoint(x, y) {
+  const comps = getCurrentComponents();
+  for (let i = comps.length - 1; i >= 0; i--) {
+    const c = comps[i];
+    if (!c.layout) continue;
+    if (x >= c.layout.x && x <= c.layout.x + (c.layout.w || 320) && y >= c.layout.y && y <= c.layout.y + (c.layout.h || 140)) {
+      return c;
+    }
+  }
+  return null;
+}
+
+async function createConnector(fromId, toId) {
+  try {
+    const res = await fetch("/api/component", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "connector", props: { from_id: fromId, to_id: toId } }),
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.id) {
+      await fetch(`/api/component/${encodeURIComponent(data.id)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ layout: { x: 0, y: 0, w: 80, h: 40 }, locked: true }),
+      });
+      showToastMsg(t("drawConnectorDone"));
+    }
+  } catch (err) {
+    console.error("Connector create failed:", err);
+  }
+}
+
+async function createDrawComponent(type, props, x, y, w, h) {
+  try {
+    const res = await fetch("/api/component", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type, props, variant: undefined }),
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.id) {
+      await fetch(`/api/component/${encodeURIComponent(data.id)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ layout: { x, y, w, h } }),
+      });
+    }
+  } catch (err) {
+    console.error("Draw create failed:", err);
+  }
+}
+
+/** 连线跟随端点：根据 from/to 组件的 layout 重算连线位置与坐标。 */
+function syncConnectors(components) {
+  const canvas = $("canvas");
+  if (!canvas) return;
+  (components || []).forEach((comp) => {
+    if (!comp || comp.type !== "connector") return;
+    const fromId = comp.props && comp.props.from_id;
+    const toId = comp.props && comp.props.to_id;
+    const from = fromId ? getCompById(String(fromId)) : null;
+    const to = toId ? getCompById(String(toId)) : null;
+    if (!from || !to || !from.layout || !to.layout) return;
+    const a = { x: from.layout.x + (from.layout.w || 320) / 2, y: from.layout.y + (from.layout.h || 140) / 2 };
+    const b = { x: to.layout.x + (to.layout.w || 320) / 2, y: to.layout.y + (to.layout.h || 140) / 2 };
+    const x = Math.min(a.x, b.x) - 8;
+    const y = Math.min(a.y, b.y) - 8;
+    const w = Math.max(16, Math.abs(b.x - a.x) + 16);
+    const h = Math.max(16, Math.abs(b.y - a.y) + 16);
+    if (comp.layout) comp.layout = { x, y, w, h };
+    const wrapper = canvas.querySelector(`.comp-wrapper[data-id="${CSS.escape(comp.id)}"]`);
+    if (!wrapper) return;
+    wrapper.style.position = "absolute";
+    wrapper.style.left = x + "px";
+    wrapper.style.top = y + "px";
+    wrapper.style.width = w + "px";
+    wrapper.style.minHeight = h + "px";
+    const line = wrapper.querySelector("line");
+    if (line) {
+      line.setAttribute("x1", String(a.x - x));
+      line.setAttribute("y1", String(a.y - y));
+      line.setAttribute("x2", String(b.x - x));
+      line.setAttribute("y2", String(b.y - y));
+    }
+  });
 }
 

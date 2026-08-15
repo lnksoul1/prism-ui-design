@@ -84,6 +84,19 @@ function renderComponentContent(comp) {
       return renderSection(props);
     case "container":
       return renderContainer(props);
+    // 画布绘制 (第一步): 预览画布直接绘制的形状组件
+    case "rect":
+      return renderShapeRect(props);
+    case "ellipse":
+      return renderShapeEllipse(props);
+    case "arrow":
+      return renderShapeArrow(props);
+    case "line":
+      return renderShapeLine(props);
+    case "note":
+      return renderShapeNote(props);
+    case "connector":
+      return renderShapeConnector(props);
     // New component types
     case "tabs":
       return renderTabs(props);
@@ -993,6 +1006,84 @@ function renderSection(props) {
 function renderContainer(props) {
   const p = el("div", "comp-container");
   if (props.text) p.appendChild(el("div", "container-label", props.text));
+  return p;
+}
+
+// ===== 画布绘制 (第一步: 预览画布直接绘制，统一坐标系) =====
+
+function renderShapeRect(props) {
+  const p = el("div", "comp-shape comp-rect");
+  p.style.cssText = `background:${props.fill || "var(--accent-bg, rgba(35,131,226,.12))"};border:1.5px solid ${props.stroke || "var(--accent, #2383E2)"};border-radius:${props.radius || 4}px;`;
+  return p;
+}
+
+function renderShapeEllipse(props) {
+  const p = el("div", "comp-shape comp-ellipse");
+  p.style.cssText = `background:${props.fill || "var(--accent-bg, rgba(35,131,226,.12))"};border:1.5px solid ${props.stroke || "var(--accent, #2383E2)"};border-radius:50%;`;
+  return p;
+}
+
+function renderShapeArrow(props) {
+  const color = props.stroke || "var(--accent, #2383E2)";
+  const w = 100, h = 24;
+  const p = el("div", "comp-shape comp-arrow");
+  p.style.cssText = "width:100%;height:100%;display:flex;align-items:center;";
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("width", "100%");
+  svg.setAttribute("height", "100%");
+  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+  svg.setAttribute("preserveAspectRatio", "none");
+  const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  line.setAttribute("x1", "2"); line.setAttribute("y1", String(h / 2));
+  line.setAttribute("x2", String(w - 14)); line.setAttribute("y2", String(h / 2));
+  line.setAttribute("stroke", color); line.setAttribute("stroke-width", "2.5");
+  const head = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+  head.setAttribute("points", `${w - 14},${h / 2 - 8} ${w - 2},${h / 2} ${w - 14},${h / 2 + 8}`);
+  head.setAttribute("fill", color);
+  svg.appendChild(line); svg.appendChild(head);
+  p.appendChild(svg);
+  return p;
+}
+
+function renderShapeLine(props) {
+  const color = props.stroke || "var(--accent, #2383E2)";
+  const p = el("div", "comp-shape comp-line");
+  p.style.cssText = "width:100%;height:100%;display:flex;align-items:center;";
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("width", "100%");
+  svg.setAttribute("height", "100%");
+  svg.setAttribute("preserveAspectRatio", "none");
+  const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  line.setAttribute("x1", "0"); line.setAttribute("y1", "50%");
+  line.setAttribute("x2", "100%"); line.setAttribute("y2", "50%");
+  line.setAttribute("stroke", color); line.setAttribute("stroke-width", "2");
+  svg.appendChild(line);
+  p.appendChild(svg);
+  return p;
+}
+
+function renderShapeNote(props) {
+  const p = el("div", "comp-shape comp-note");
+  p.style.cssText = "width:100%;height:100%;background:#FFF6D6;border:1px solid #E8DCA8;border-radius:4px;padding:8px;font-size:12px;color:#7A6A2F;overflow:hidden;display:flex;align-items:flex-start;";
+  p.appendChild(el("div", "", String(props.text || "便签")));
+  return p;
+}
+
+function renderShapeConnector(props) {
+  const color = props.stroke || "var(--accent, #2383E2)";
+  const p = el("div", "comp-shape comp-connector");
+  p.style.cssText = "width:100%;height:100%;pointer-events:none;";
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("width", "100%");
+  svg.setAttribute("height", "100%");
+  svg.setAttribute("preserveAspectRatio", "none");
+  const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  line.setAttribute("x1", String(props.x1 ?? 0)); line.setAttribute("y1", String(props.y1 ?? 0));
+  line.setAttribute("x2", String(props.x2 ?? 100)); line.setAttribute("y2", String(props.y2 ?? 0));
+  line.setAttribute("stroke", color); line.setAttribute("stroke-width", "2");
+  line.setAttribute("stroke-dasharray", "5 3");
+  svg.appendChild(line);
+  p.appendChild(svg);
   return p;
 }
 

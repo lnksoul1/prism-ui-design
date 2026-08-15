@@ -102,7 +102,7 @@ test("dashboard loads with the premium empty state", async ({ page }: { page: Pa
   expect(errors).toEqual([]);
 });
 
-test("drawing canvas mounts and offers a template-first start", async ({ page }: { page: Page }) => {
+test("drawing canvas: draw shapes directly on the preview canvas (unified coordinates)", async ({ page }: { page: Page }) => {
   const errors: string[] = [];
   page.on("console", (msg) => {
     if (msg.type() === "error" && !msg.text().includes("Failed to load resource")) errors.push(msg.text());
@@ -110,39 +110,57 @@ test("drawing canvas mounts and offers a template-first start", async ({ page }:
   page.on("pageerror", (err) => errors.push(String(err)));
 
   await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "domcontentloaded", timeout: 60000 });
-  await page.locator("#canvas-mode-design").click();
-  await expect(page.locator("#canvas-editor-wrap")).toBeVisible();
-  // tldraw mounts its editor surface inside #canvas-editor
-  await expect(page.locator("#canvas-editor .tl-container")).toBeVisible({ timeout: 15000 });
-  // Empty page => the template picker appears
-  await expect(page.locator("#canvas-template-modal")).toBeVisible({ timeout: 10000 });
-  await expect(page.locator(".template-card").first()).toBeVisible();
-  // Start from the first template: closes the picker and materializes shapes
-  await page.locator(".template-card").first().click();
-  await page.waitForFunction(
-    () => {
-      const canvas = (globalThis as { PrismCanvas?: { countShapes(): number } }).PrismCanvas;
-      return !!canvas && canvas.countShapes() > 0;
-    },
-    null,
-    { timeout: 10000 }
-  );
+  await expect(page.locator(".topbar")).toBeVisible();
+  // 预览画布是唯一编辑面：绘制工具栏常驻可见
+  await expect(page.locator("#canvas-tool-rail")).toBeVisible();
+  await expect(page.locator(".draw-tool").first()).toBeVisible();
+
+  // 选择「矩形」工具，在画布上拖出形状 → 直接落为组件（统一坐标系）
+  await page.locator('.draw-tool[data-tool="rect"]').click();
+  const canvasBox = await page.locator("#canvas").boundingBox();
+  expect(canvasBox).toBeTruthy();
+  await page.mouse.move(canvasBox!.x + 60, canvasBox!.y + 60);
+  await page.mouse.down();
+  await page.mouse.move(canvasBox!.x + 260, canvasBox!.y + 200, { steps: 8 });
+  await page.mouse.up();
+  await expect
+    .poll(async () => {
+      return page.evaluate(async () => {
+        const s = (await (await fetch("/api/state")).json()) as { components: Array<{ type: string }> };
+        return s.components.some((c) => c.type === "rect");
+      });
+    }, { timeout: 10000 })
+    .toBe(true);
+
+  // 文字工具：点击创建文字组件
+  await page.locator('.draw-tool[data-tool="text"]').click();
+  await page.mouse.click(canvasBox!.x + 320, canvasBox!.y + 260);
+  await expect
+    .poll(async () => {
+      return page.evaluate(async () => {
+        const s = (await (await fetch("/api/state")).json()) as { components: Array<{ type: string }> };
+        return s.components.some((c) => c.type === "text");
+      });
+    }, { timeout: 10000 })
+    .toBe(true);
+
+  // 形状组件可选中（切回选择工具；用图层树选择避免 overlay 拦截）
+  await page.locator('.draw-tool[data-tool="select"]').click();
+  const rectIdForSel = await page.evaluate(async () => {
+    const s = (await (await fetch("/api/state")).json()) as { components: Array<{ type: string; id: string }> };
+    const r = s.components.find((c) => c.type === "rect");
+    return r ? r.id : null;
+  });
+  expect(rectIdForSel).toBeTruthy();
+  await page.locator(`#layer-tree .layer-item[data-id="${rectIdForSel}"]`).locator(".layer-name").click();
+  await expect(page.locator(".inspector-tabs")).toBeVisible();
 
   // 顶部设计库: 组件知识卡渲染（悬停展开气泡）
   await page.locator('.top-lib-tab[data-lib="按钮与链接"]').click();
   await page.waitForSelector(".top-lib-card", { timeout: 5000 });
-  const beforeDrop = await page.evaluate(() => {
-    const canvas = (globalThis as { PrismCanvas?: { countShapes(): number } }).PrismCanvas;
-    return canvas ? canvas.countShapes() : -1;
-  });
-  // 悬停卡片展开气泡（用法/示例/应用）
   await page.locator(".top-lib-card").first().hover();
   await expect(page.locator(".top-lib-bubble").first()).toBeVisible({ timeout: 5000 });
-  const afterDrop = await page.evaluate(() => {
-    const canvas = (globalThis as { PrismCanvas?: { countShapes(): number } }).PrismCanvas;
-    return canvas ? canvas.countShapes() : -1;
-  });
-  expect(afterDrop).toBe(beforeDrop);
+
   expect(errors).toEqual([]);
 });
 
@@ -177,10 +195,11 @@ test("quick actions: ? help, Ctrl+K palette, template thumbnails", async ({ page
   await page.keyboard.press("Escape");
   await expect(page.locator("#help-overlay")).not.toBeVisible();
 
-  // Drawing canvas template picker shows semantic thumbnails
-  await page.locator("#canvas-mode-design").click();
-  await expect(page.locator("#canvas-template-modal")).toBeVisible({ timeout: 10000 });
-  await expect(page.locator(".tpl-thumb")).toHaveCount(6);
+  // 绘制工具栏常驻（预览画布 = 唯一编辑面），工具切换有激活态
+  await expect(page.locator("#canvas-tool-rail")).toBeVisible();
+  await page.locator('.draw-tool[data-tool="rect"]').click();
+  await expect(page.locator('.draw-tool[data-tool="rect"]')).toHaveClass(/active/);
+  await page.locator('.draw-tool[data-tool="select"]').click();
 
   expect(errors).toEqual([]);
 });
@@ -579,7 +598,7 @@ test("exact editing: layer rename + rulers/guides appear in freeform", async ({ 
   expect(errors).toEqual([]);
 });
 
-test("drawing canvas: bind an interaction to a shape, play mode triggers it", async ({ page }: { page: Page }) => {
+test("drawing canvas: draw a shape, bind an interaction, play mode triggers it", async ({ page }: { page: Page }) => {
   const errors: string[] = [];
   page.on("console", (msg) => {
     if (msg.type() === "error" && !msg.text().includes("Failed to load resource")) errors.push(msg.text());
@@ -589,78 +608,55 @@ test("drawing canvas: bind an interaction to a shape, play mode triggers it", as
   await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "domcontentloaded", timeout: 60000 });
   await expect(page.locator(".topbar")).toBeVisible();
 
-  // Open the drawing canvas and start from a template so there are shapes
-  await page.locator("#canvas-mode-design").click();
-  await expect(page.locator("#canvas-editor .tl-container")).toBeVisible({ timeout: 15000 });
-  await expect(page.locator("#canvas-template-modal")).toBeVisible({ timeout: 10000 });
-  await page.locator(".template-card").first().click();
-  await page.waitForFunction(
-    () => {
-      const canvas = (globalThis as { PrismCanvas?: { countShapes(): number } }).PrismCanvas;
-      return !!canvas && canvas.countShapes() > 0;
-    },
-    null,
-    { timeout: 10000 }
-  );
+  // 预览画布直接绘制一个矩形组件（统一坐标系）
+  await page.locator('.draw-tool[data-tool="rect"]').click();
+  const box = await page.locator("#canvas").boundingBox();
+  expect(box).toBeTruthy();
+  await page.mouse.move(box!.x + 100, box!.y + 100);
+  await page.mouse.down();
+  await page.mouse.move(box!.x + 300, box!.y + 260, { steps: 8 });
+  await page.mouse.up();
+  await expect
+    .poll(async () => {
+      return page.evaluate(async () => {
+        const s = (await (await fetch("/api/state")).json()) as { components: Array<{ type: string }> };
+        return s.components.some((c) => c.type === "rect");
+      });
+    }, { timeout: 10000 })
+    .toBe(true);
 
-  // Select exactly the first shape via the editor API, then bind 点击提示
-  const shapeId = await page.evaluate(() => {
-    const canvas = (globalThis as { PrismCanvas?: {
-      selectShape?: (ids: string[]) => boolean;
-      getSelectedShapeIds?: () => string[];
-    } }).PrismCanvas;
-    if (!canvas || !canvas.selectShape) return null;
-    canvas.selectAll();
-    const all = canvas.getSelectedShapeIds();
-    const first = all && all.length > 0 ? all[0] : null;
-    if (first) canvas.selectShape([first]);
-    return first;
+  // 选中矩形 → 检查器「交互」区绑定「提示消息」(toast)
+  await page.locator('.draw-tool[data-tool="select"]').click();
+  const rectId = await page.evaluate(async () => {
+    const s = (await (await fetch("/api/state")).json()) as { components: Array<{ type: string; id: string }> };
+    const r = s.components.find((c) => c.type === "rect");
+    return r ? r.id : null;
   });
-  expect(shapeId).toBeTruthy();
+  expect(rectId).toBeTruthy();
+  await page.locator(`#layer-tree .layer-item[data-id="${rectId}"]`).locator(".layer-name").click();
+  await expect(page.locator(".inspector-tabs")).toBeVisible();
+  const toastSelect = page.locator("select.prop-select").filter({ has: page.locator("option", { hasText: "提示消息" }) });
+  await toastSelect.selectOption("toast");
+  const msgInput = page.locator(".behavior-params input.prop-text-input").first();
+  await msgInput.fill("形状被点击了");
+  await msgInput.dispatchEvent("change");
+  // 等行为持久化到组件
+  await expect
+    .poll(async () => {
+      return page.evaluate(async () => {
+        const s = (await (await fetch("/api/state")).json()) as {
+          components: Array<{ behavior?: { type?: string } }>;
+        };
+        return s.components.some((c) => c.behavior && c.behavior.type === "toast");
+      });
+    }, { timeout: 10000 })
+    .toBe(true);
 
-  // Open the behavior menu and pick 点击提示 (toast)
-  await page.locator("#canvas-behavior-btn").click();
-  await expect(page.locator("#canvas-behavior-menu")).toBeVisible();
-  await page.locator(".cb-menu-item", { hasText: "点击提示" }).click();
-  await expect(page.locator("#prism-toast")).toContainText("已绑定交互", { timeout: 5000 });
-
-  // The behavior persisted into the saved canvas doc
-  const pageIdForCanvas = await page.evaluate(async () => {
-    const s = (await (await fetch("/api/state")).json()) as { currentPageId: string };
-    return s.currentPageId;
-  });
-  const behavior = await page.evaluate(async (pid) => {
-    const res = await fetch(`/api/canvas?pageId=${encodeURIComponent(pid)}`);
-    const s = (await res.json()) as {
-      doc?: { document?: { store?: Record<string, { meta?: { behavior?: { type: string } } }> } };
-    };
-    return s.doc;
-  }, pageIdForCanvas);
-  const shapesWithBehavior = await page.evaluate((doc) => {
-    const store = (doc as { document?: { store?: Record<string, unknown> } })?.document?.store || {};
-    return Object.values(store)
-      .filter((r) => (r as { typeName?: string }).typeName === "shape")
-      .map((r) => (r as { meta?: { behavior?: { type: string } } }).meta?.behavior?.type)
-      .filter(Boolean);
-  }, behavior);
-  expect(shapesWithBehavior).toContain("toast");
-
-  // Play mode: clicking the shape triggers the toast
+  // 播放模式：点击形状触发 toast
   await page.locator("#play-btn").click();
-  // Deterministic: wait until play mode is active before clicking the shape.
   await expect(page.locator("#play-btn")).toHaveClass(/active/, { timeout: 5000 });
-  const center = await page.evaluate((id) => {
-    const canvas = (globalThis as { PrismCanvas?: { getShapeCenter?: (id: string) => { x: number; y: number } | null } }).PrismCanvas;
-    return canvas && canvas.getShapeCenter ? canvas.getShapeCenter(id) : null;
-  }, shapeId);
-  expect(center).toBeTruthy();
-  const hitBefore = await page.evaluate((pt) => {
-    const canvas = (globalThis as { PrismCanvas?: { getShapeAtPoint?: (x: number, y: number) => { id: string } | null } }).PrismCanvas;
-    return canvas && canvas.getShapeAtPoint ? canvas.getShapeAtPoint(pt.x, pt.y) : null;
-  }, center);
-  expect(hitBefore).toBeTruthy();
-  await page.mouse.click(center!.x, center!.y);
-  await expect(page.locator("#prism-toast")).toContainText("操作成功", { timeout: 5000 });
+  await page.locator(".comp-rect").first().click();
+  await expect(page.locator("#prism-toast")).toContainText("形状被点击了", { timeout: 5000 });
   await page.keyboard.press("Escape");
 
   expect(errors).toEqual([]);

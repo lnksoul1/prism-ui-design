@@ -370,6 +370,15 @@ const I18N = {
     toolArrow: "箭头",
     toolText: "文字",
     toolNote: "便签",
+    toolRect: "矩形",
+    toolEllipse: "椭圆",
+    toolLine: "直线",
+    toolImage: "图片",
+    toolConnector: "连线",
+    drawImagePrompt: "图片 URL（粘贴链接）",
+    drawConnectorHint: "请先点击要连线的起点组件",
+    drawConnectorSource: "已选起点「{name}」，再点击终点组件",
+    drawConnectorDone: "连线已创建",
     llmSettings: "AI 设置",
     llmDesc: "填写你自己的 API Key 后，直接在指令栏说需求即可让内置 AI 生成页面。Key 只保存在本机，不会上传到任何服务器。",
     llmProvider: "服务商",
@@ -678,6 +687,15 @@ const I18N = {
     toolArrow: "Arrow",
     toolText: "Text",
     toolNote: "Note",
+    toolRect: "Rectangle",
+    toolEllipse: "Ellipse",
+    toolLine: "Line",
+    toolImage: "Image",
+    toolConnector: "Connector",
+    drawImagePrompt: "Image URL (paste a link)",
+    drawConnectorHint: "Click the component to start the connector from",
+    drawConnectorSource: "Start from “{name}” — now click the target component",
+    drawConnectorDone: "Connector created",
     llmSettings: "AI settings",
     llmDesc: "Add your own API key and the built-in AI can generate pages right from the prompt bar. The key stays on this machine and is never uploaded.",
     llmProvider: "Provider",
@@ -835,9 +853,6 @@ function setupI18n() {
       applyI18n();
       setupPromptChips();
       renderHelpShortcuts();
-      if (canvasEditorMode && $("canvas-editor-hint")) {
-        $("canvas-editor-hint").textContent = t("canvasEditorHint");
-      }
       renderCanvasTemplateCards();
       renderAll();
     });

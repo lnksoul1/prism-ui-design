@@ -145,9 +145,6 @@ function handleMessage(msg) {
       myClientId = msg.clientId || null;
       currentState = msg.state;
       renderAll();
-      if (canvasEditorMode) {
-        loadCanvasIntoEditor();
-      }
       break;
     case "change":
       currentState = msg.state;
@@ -213,28 +210,20 @@ function handleChange(change) {
       renderTokenPanel();
       applyTokensToCanvas();
       checkConflicts();
-      if (canvasEditorMode && window.PrismCanvas && window.PrismCanvas.isReady()) {
-        window.PrismCanvas.setDesignContext({
-          tokens: currentState.tokens,
-          themeMode: currentState.themeMode,
-        });
-      }
       break;
     case "tokenBatch":
       renderTokenPanel();
       applyTokensToCanvas();
       checkConflicts();
-      if (canvasEditorMode && window.PrismCanvas && window.PrismCanvas.isReady()) {
-        window.PrismCanvas.setDesignContext({
-          tokens: currentState.tokens,
-          themeMode: currentState.themeMode,
-        });
-      }
       break;
     case "addComponent":
     case "updateComponent":
     case "removeComponent":
     case "setBehavior":
+    case "reparentComponent":
+    case "groupComponents":
+    case "ungroupComponents":
+    case "moveToPage":
       // 细粒度变更：优先增量重绘受影响组件（Phase 2.4），兜底静默全量。
       if (lastChangeAffectedIds && lastChangeAffectedIds.length > 0) {
         renderCanvas({ silent: true, onlyIds: lastChangeAffectedIds });
@@ -273,25 +262,12 @@ function handleChange(change) {
     case "renamePage":
       renderPageSwitcher();
       renderCanvas();
-      if (canvasEditorMode) {
-        loadCanvasIntoEditor();
-      }
       break;
     case "canvasSave":
-      // A canvas document was saved (ours or another client's). Reload the
-      // drawing for the current page unless this is our own recent echo.
-      if (canvasEditorMode && !canvasLoading && Date.now() - canvasOwnSaveAt > 3000) {
-        loadCanvasIntoEditor();
-      }
-      break;
     case "canvasDraw":
-      // The AI queued drawing commands: apply them live if the canvas is open.
-      if (canvasEditorMode && !canvasLoading) {
-        applyPendingCanvasDraws();
-      }
-      break;
     case "canvasDrawsCleared":
-      appliedDrawIds.clear();
+      // 画布绘制已并入组件模型（第一步：预览画布直接绘制）；tldraw 快照
+      // 类变更不再影响预览画布，统一走组件渲染。
       break;
     // New: theme
     case "setTheme":

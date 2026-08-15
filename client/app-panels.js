@@ -1069,7 +1069,6 @@ function buildCommands() {
     { id: "project", label: t("cmdProject"), icon: "▤", run: () => { const b = $("project-btn"); if (b) b.click(); } },
     { id: "save", label: t("cmdSaveProject"), icon: "▣", run: saveCurrentProject },
     { id: "export", label: t("cmdExport"), icon: "↑", run: () => { const b = $("export-btn"); if (b) b.click(); } },
-    { id: "canvas", label: t("cmdCanvas"), icon: "✎", run: () => setCanvasEditorMode(true) },
     { id: "screenshot", label: t("cmdScreenshot"), icon: "▣", run: takeScreenshot },
     { id: "help", label: t("cmdHelp"), icon: "?", run: () => toggleHelp(true) },
     { id: "undo", label: t("cmdUndo"), icon: "↩", run: () => send({ type: "undo" }) },
@@ -1252,10 +1251,6 @@ function setupQuickActions() {
       e.preventDefault();
       toggleCommandPalette();
       return;
-    }
-    if (e.key.toLowerCase() === "p") {
-      e.preventDefault();
-      setCanvasEditorMode(!canvasEditorMode);
     }
   });
 }

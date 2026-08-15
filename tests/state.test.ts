@@ -664,3 +664,86 @@ describe("project buckets (Phase 2.3)", () => {
     assert.equal(stateStore.getState().projectName, "Untitled Project");
   });
 });
+
+// ===== 画布调整 P2: 成组 / 嵌套 / 跨页移动 =====
+
+describe("canvas hierarchy ops (group / reparent / move to page)", () => {
+  test("groupComponents wraps 2+ top-level components into a container", () => {
+    const a = stateStore.addComponent("button", undefined, { text: "A" }, null, "ai");
+    const b = stateStore.addComponent("button", undefined, { text: "B" }, null, "ai");
+    stateStore.updateComponent(a.id, {}, "user", { x: 10, y: 10, w: 100, h: 40 });
+    stateStore.updateComponent(b.id, {}, "user", { x: 10, y: 60, w: 100, h: 40 });
+    const group = stateStore.groupComponents([a.id, b.id], "user");
+    assert.ok(group, "group created");
+    const s = stateStore.getState();
+    const topLevel = s.pages[0].components;
+    assert.equal(topLevel.length, 1);
+    assert.equal(topLevel[0].id, group!.id);
+    assert.equal(topLevel[0].type, "container");
+    assert.equal(topLevel[0].children.length, 2);
+    // children become flow (no absolute layout)
+    assert.equal(topLevel[0].children[0].layout, undefined);
+    // group box covers both children's bounding box
+    assert.equal(topLevel[0].layout!.x, 10);
+    assert.equal(topLevel[0].layout!.y, 10);
+    assert.ok(topLevel[0].layout!.h >= 90);
+    // undo restores the two components
+    assert.equal(stateStore.undo(), true);
+    assert.equal(stateStore.getState().pages[0].components.length, 2);
+  });
+
+  test("groupComponents requires 2+ components", () => {
+    const a = stateStore.addComponent("button", undefined, {}, null, "ai");
+    assert.equal(stateStore.groupComponents([a.id], "user"), null);
+    assert.equal(stateStore.groupComponents([], "user"), null);
+  });
+
+  test("ungroupComponents promotes children back to top level", () => {
+    const a = stateStore.addComponent("button", undefined, {}, null, "ai");
+    const b = stateStore.addComponent("button", undefined, {}, null, "ai");
+    const c = stateStore.addComponent("button", undefined, {}, null, "ai");
+    const group = stateStore.groupComponents([a.id, b.id], "user");
+    assert.ok(group);
+    assert.equal(stateStore.ungroupComponents(group!.id, "user"), true);
+    const topLevel = stateStore.getState().pages[0].components;
+    assert.equal(topLevel.length, 3);
+    assert.ok(!topLevel.some((x) => x.id === group!.id), "group removed");
+    // 解组后的两个子组件重新获得布局
+    const ungrouped = topLevel.filter((x) => x.id === a.id || x.id === b.id);
+    assert.equal(ungrouped.length, 2);
+    assert.ok(ungrouped.every((x) => x.layout && typeof x.layout.y === "number"), "children re-laid out");
+  });
+
+  test("reparentComponent nests a component under another and back to top", () => {
+    const a = stateStore.addComponent("container", undefined, {}, null, "ai");
+    const b = stateStore.addComponent("button", undefined, {}, null, "ai");
+    assert.equal(stateStore.reparentComponent(b.id, a.id, "user"), true);
+    const parent = stateStore.getState().pages[0].components.find((c) => c.id === a.id)!;
+    assert.equal(parent.children.length, 1);
+    assert.equal(parent.children[0].id, b.id);
+    assert.ok(!stateStore.getState().pages[0].components.some((c) => c.id === b.id), "b no longer top-level");
+    assert.equal(stateStore.reparentComponent(b.id, null, "user"), true);
+    assert.ok(stateStore.getState().pages[0].components.some((c) => c.id === b.id), "b back to top-level");
+  });
+
+  test("reparentComponent refuses self and descendant nesting", () => {
+    const a = stateStore.addComponent("container", undefined, {}, null, "ai");
+    assert.equal(stateStore.reparentComponent(a.id, a.id, "user"), false);
+    const b = stateStore.addComponent("button", undefined, {}, null, "ai");
+    assert.equal(stateStore.reparentComponent(b.id, a.id, "user"), true);
+    // a is an ancestor of b → nesting a under b would create a cycle
+    assert.equal(stateStore.reparentComponent(a.id, b.id, "user"), false);
+    assert.ok(stateStore.getState().pages[0].components.some((c) => c.id === a.id), "a stays top-level");
+  });
+
+  test("moveComponentToPage moves a component to another page", () => {
+    const a = stateStore.addComponent("navbar", undefined, {}, null, "ai");
+    const page2 = stateStore.addPage("Detail", "ai");
+    assert.equal(stateStore.moveComponentToPage(a.id, page2.id, "user"), true);
+    const s = stateStore.getState();
+    assert.ok(!s.pages[0].components.some((c) => c.id === a.id), "removed from source page");
+    const target = s.pages.find((p) => p.id === page2.id)!;
+    assert.ok(target.components.some((c) => c.id === a.id), "added to target page");
+    assert.equal(stateStore.moveComponentToPage(a.id, "page_nope", "user"), false, "unknown page refused");
+  });
+});

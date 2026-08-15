@@ -8,7 +8,6 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%232383E2'/%3E%3Cstop offset='1' stop-color='%2357A3E8'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='%23F7F7F5'/%3E%3Cpath d='M16 7 L22 16 L16 25 L10 16 Z' fill='url(%23g)'/%3E%3C/svg%3E">
 <title>Prism Studio — 实时设计画布</title>
 <link rel="stylesheet" href="style.css">
-<link rel="stylesheet" href="vendor/prism-canvas.css">
 </head>
 <body>
 
@@ -120,10 +119,6 @@
     <div class="canvas-toolbar">
       <div class="canvas-toolbar-left">
         <span class="canvas-label" data-i18n="canvasLabel">实时预览画布</span>
-        <div class="canvas-mode-switch" role="group" aria-label="画布模式切换">
-          <button class="toolbar-btn canvas-mode-btn active" id="canvas-mode-preview" data-i18n="previewMode">预览</button>
-          <button class="toolbar-btn canvas-mode-btn" id="canvas-mode-design" data-i18n="designMode">画布</button>
-        </div>
         <select class="platform-select" id="platform-select" aria-label="平台切换" data-i18n-title="platform">
           <option value="web-desktop">桌面</option>
           <option value="web-tablet">平板</option>
@@ -135,14 +130,6 @@
         </select>
       </div>
       <div class="canvas-toolbar-right">
-        <div class="canvas-editor-actions" id="canvas-editor-actions" style="display:none">
-          <button class="toolbar-btn" id="canvas-save-btn" data-i18n="saveCanvas">保存画布</button>
-          <button class="toolbar-btn canvas-apply-btn" id="canvas-apply-btn" data-i18n="applyCanvas">应用到预览</button>
-          <button class="toolbar-btn" id="canvas-export-btn" data-i18n="exportCanvas">写回页面文件</button>
-          <button class="toolbar-btn" id="canvas-autolayout-btn" data-i18n="autoLayout">自动排列</button>
-          <button class="toolbar-btn" id="canvas-behavior-btn" data-i18n="canvasBehavior">⚡ 交互</button>
-          <button class="toolbar-btn" id="canvas-clear-btn" data-i18n="clearCanvas">清空</button>
-        </div>
         <button class="toolbar-btn play-btn" id="play-btn" data-i18n="playMode">▶ 播放</button>
         <button class="toolbar-btn layout-mode-btn" id="layout-mode-btn" title="切换画布模式（流式/自由）" data-i18n="flow">流式</button>
         <button class="toolbar-btn" id="auto-layout-btn" title="自动排列组件" data-i18n="autoLayout">自动排列</button>
@@ -158,13 +145,18 @@
     </div>
     <div class="selection-toolbar" id="selection-toolbar" style="display:none"></div>
     <div class="canvas-tool-rail" id="canvas-tool-rail" role="toolbar" aria-label="绘制工具">
-      <button class="draw-tool" data-tool="select" data-i18n-title="toolSelect" title="选择">↖</button>
+      <button class="draw-tool active" data-tool="select" data-i18n-title="toolSelect" title="选择">↖</button>
       <button class="draw-tool" data-tool="hand" data-i18n-title="toolHand" title="抓手">✋</button>
-      <button class="draw-tool" data-tool="draw" data-i18n-title="toolPen" title="画笔">✎</button>
-      <button class="draw-tool" data-tool="geo" data-i18n-title="toolShape" title="形状">▭</button>
+      <span class="rail-sep"></span>
+      <button class="draw-tool" data-tool="rect" data-i18n-title="toolRect" title="矩形">▭</button>
+      <button class="draw-tool" data-tool="ellipse" data-i18n-title="toolEllipse" title="椭圆">◯</button>
       <button class="draw-tool" data-tool="arrow" data-i18n-title="toolArrow" title="箭头">→</button>
+      <button class="draw-tool" data-tool="line" data-i18n-title="toolLine" title="直线">╱</button>
       <button class="draw-tool" data-tool="text" data-i18n-title="toolText" title="文字">T</button>
       <button class="draw-tool" data-tool="note" data-i18n-title="toolNote" title="便签">▦</button>
+      <button class="draw-tool" data-tool="image" data-i18n-title="toolImage" title="图片">🖼</button>
+      <span class="rail-sep"></span>
+      <button class="draw-tool" data-tool="connector" data-i18n-title="toolConnector" title="连线">⛓</button>
     </div>
     <div class="canvas-scroll-wrap" id="canvas-scroll-wrap">
       <div class="ruler-stage" id="ruler-stage">
@@ -187,16 +179,6 @@
           <div class="chrome-bottom" id="chrome-bottom"></div>
         </div>
       </div>
-    </div>
-    <div class="canvas-editor-wrap" id="canvas-editor-wrap" style="display:none">
-      <div class="canvas-editor-hint" id="canvas-editor-hint"></div>
-      <div class="canvas-editor" id="canvas-editor"></div>
-    </div>
-    <!-- 画布形状/图片行为绑定 (自由编辑补缺 P1) -->
-    <div class="canvas-behavior-menu" id="canvas-behavior-menu" style="display:none">
-      <div class="cb-menu-title" data-i18n="canvasBehaviorTitle">给选中的形状/图片绑定交互</div>
-      <div class="cb-menu-list" id="canvas-behavior-list"></div>
-      <button class="cb-menu-clear" id="canvas-behavior-clear" data-i18n="canvasBehaviorClear">清除交互</button>
     </div>
   </main>
 

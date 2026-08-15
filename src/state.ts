@@ -1070,6 +1070,150 @@ export class DesignStateStore extends EventEmitter {
   }
 
   /**
+   * 画布调整 (P2): 把一个组件移动为另一个组件的子组件（parentId 为 null
+   * 则回到顶层）。不能把组件移到自身或自身的后代里；parent 必须在当前页。
+   * 一次提交 = 一步撤销。
+   */
+  reparentComponent(
+    id: string,
+    parentId: string | null,
+    source: "ai" | "user" = "user"
+  ): boolean {
+    if (id === parentId) return false;
+    const page = this.state.pages?.find((p) => p.id === this.state.currentPageId) || this.state.pages?.[0];
+    if (!page) return false;
+    const parent = parentId ? this.findComponent(parentId) : null;
+    if (parentId && !parent) return false;
+
+    const detach = (nodes: ComponentNode[], targetId: string): ComponentNode | null => {
+      const i = nodes.findIndex((n) => n.id === targetId);
+      if (i >= 0) return nodes.splice(i, 1)[0];
+      for (const node of nodes) {
+        const found = detach(node.children, targetId);
+        if (found) return found;
+      }
+      return null;
+    };
+    const node = detach(page.components, id);
+    if (!node) return false;
+    if (parent) {
+      // 防止把 parent 装进自己（id === parentId 已拦）或自己的后代
+      const contains = (n: ComponentNode, targetId: string): boolean =>
+        n.id === targetId || n.children.some((c) => contains(c, targetId));
+      if (contains(node, parentId!)) {
+        page.components.push(node); // 恢复原位，拒绝操作
+        return false;
+      }
+      parent.children.push(node);
+    } else {
+      page.components.push(node);
+    }
+    this.logActivity("reparent_component", node.type, `Reparented ${id}${parentId ? " → " + parentId : " → top-level"}`, source);
+    this.commit({ type: "reparentComponent", id, parentId });
+    return true;
+  }
+
+  /**
+   * 成组 (P2): 把 2+ 个顶层组件包进一个新的分组容器（type "container"）。
+   * 子组件转为流式（删除 layout），分组容器占据其包围盒位置。
+   * 一次提交 = 一步撤销。
+   */
+  groupComponents(ids: string[], source: "ai" | "user" = "user"): ComponentNode | null {
+    const page = this.state.pages?.find((p) => p.id === this.state.currentPageId) || this.state.pages?.[0];
+    if (!page) return null;
+    const targets = ids
+      .map((id) => {
+        const i = page.components.findIndex((c) => c.id === id);
+        return i >= 0 ? { node: page.components[i], idx: i } : null;
+      })
+      .filter((x): x is { node: ComponentNode; idx: number } => !!x);
+    if (targets.length < 2) return null;
+    targets.sort((a, b) => a.idx - b.idx);
+
+    const boxes = targets.map(({ node }) => ({
+      x: node.layout?.x ?? 0,
+      y: node.layout?.y ?? 0,
+      w: node.layout?.w ?? 320,
+      h: node.layout?.h ?? 140,
+    }));
+    const minX = Math.min(...boxes.map((b) => b.x));
+    const minY = Math.min(...boxes.map((b) => b.y));
+    const maxX = Math.max(...boxes.map((b) => b.x + b.w));
+    const maxY = Math.max(...boxes.map((b) => b.y + b.h));
+
+    const group: ComponentNode = {
+      id: `comp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      type: "container",
+      props: { text: "分组" },
+      layout: { x: minX, y: minY, w: Math.max(80, maxX - minX), h: Math.max(60, maxY - minY) },
+      children: [],
+    };
+    // 倒序摘出避免下标错位；子组件转流式（随分组容器移动）
+    targets.slice().reverse().forEach(({ idx }) => {
+      const [node] = page.components.splice(idx, 1);
+      delete node.layout;
+      group.children.unshift(node);
+    });
+    page.components.splice(Math.min(targets[0].idx, page.components.length), 0, group);
+    this.logActivity("group_components", "container", `Grouped ${targets.length} components (${ids.join(",")})`, source);
+    this.commit({ type: "groupComponents", ids, groupId: group.id });
+    return group;
+  }
+
+  /**
+   * 解组 (P2): 把分组容器的子组件放回顶层（分组原位置起纵向排布），删除分组。
+   */
+  ungroupComponents(groupId: string, source: "ai" | "user" = "user"): boolean {
+    const page = this.state.pages?.find((p) => p.id === this.state.currentPageId) || this.state.pages?.[0];
+    if (!page) return false;
+    const idx = page.components.findIndex((c) => c.id === groupId);
+    if (idx === -1) return false;
+    const [group] = page.components.splice(idx, 1);
+    const originX = group.layout?.x ?? 16;
+    const originY = group.layout?.y ?? 16;
+    let cursor = originY;
+    (group.children || []).forEach((child) => {
+      const h = child.layout?.h ?? 140;
+      child.layout = { x: originX, y: cursor, w: group.layout?.w ?? 320, h };
+      cursor += h + 16;
+      page.components.splice(idx, 0, child);
+    });
+    this.logActivity("ungroup_components", "container", `Ungrouped ${groupId}`, source);
+    this.commit({ type: "ungroupComponents", groupId });
+    return true;
+  }
+
+  /**
+   * 分页 (P2): 把一个组件（含子组件）移动到另一个页面（顶层，保留布局）。
+   * 源组件可能位于任意页面，从所有非目标页面中查找并摘除。
+   */
+  moveComponentToPage(id: string, targetPageId: string, source: "ai" | "user" = "user"): boolean {
+    const pages = this.state.pages || [];
+    const target = pages.find((p) => p.id === targetPageId);
+    if (!target) return false;
+    const detach = (nodes: ComponentNode[], targetId: string): ComponentNode | null => {
+      const i = nodes.findIndex((n) => n.id === targetId);
+      if (i >= 0) return nodes.splice(i, 1)[0];
+      for (const node of nodes) {
+        const found = detach(node.children, targetId);
+        if (found) return found;
+      }
+      return null;
+    };
+    for (const page of pages) {
+      if (page.id === targetPageId) continue;
+      const node = detach(page.components, id);
+      if (node) {
+        target.components.push(node);
+        this.logActivity("move_to_page", node.type, `Moved ${id} to page ${targetPageId}`, source);
+        this.commit({ type: "moveToPage", id, targetPageId });
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
    * Align or distribute a set of components in freeform space (精确编辑 P0).
    * All targets must exist; layouts are nudged as needed and committed once,
    * so the whole operation is a single undo step. Returns false when fewer

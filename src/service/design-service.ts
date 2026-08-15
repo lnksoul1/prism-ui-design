@@ -64,6 +64,12 @@ export const COMPONENT_TYPES = new Set([
   "text",
   "section",
   "container",
+  "rect",
+  "ellipse",
+  "arrow",
+  "line",
+  "note",
+  "connector",
 ]);
 
 export function isKnownComponentType(type: string): boolean {
@@ -245,6 +251,22 @@ export function alignComponents(ids: string[], mode: AlignMode, source: Mutation
 
 export function zOrderComponent(id: string, mode: ZOrderMode, source: MutationSource = "user"): boolean {
   return stateStore.zOrderComponent(id, mode, source);
+}
+
+export function reparentComponent(id: string, parentId: string | null, source: MutationSource = "user"): boolean {
+  return stateStore.reparentComponent(id, parentId, source);
+}
+
+export function groupComponents(ids: string[], source: MutationSource = "user") {
+  return stateStore.groupComponents(ids, source);
+}
+
+export function ungroupComponents(groupId: string, source: MutationSource = "user"): boolean {
+  return stateStore.ungroupComponents(groupId, source);
+}
+
+export function moveComponentToPage(id: string, targetPageId: string, source: MutationSource = "user"): boolean {
+  return stateStore.moveComponentToPage(id, targetPageId, source);
 }
 
 // ===== 模板快速变更 (v3.2 支柱⑦ P0) =====

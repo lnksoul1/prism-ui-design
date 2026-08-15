@@ -2490,7 +2490,7 @@ body::after {
 /* ===== 顶部设计库 (P1): 13 tab + 悬停展开气泡 ===== */
 .top-library {
   position: relative;
-  z-index: 60;
+  z-index: 100; /* 位于画布之上，气泡可覆盖画布内容 */
   background: var(--surface-glass);
   backdrop-filter: var(--blur-light);
   -webkit-backdrop-filter: var(--blur-light);
@@ -2499,6 +2499,7 @@ body::after {
 }
 .top-lib-tabs {
   display: flex;
+  justify-content: center;
   gap: 2px;
   padding: 4px 12px;
   overflow-x: auto;
@@ -2541,10 +2542,13 @@ body::after {
 .top-lib-row {
   display: flex;
   gap: 8px;
-  flex-wrap: wrap;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  flex-wrap: nowrap;
 }
 .top-lib-card {
   position: relative;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -2563,21 +2567,21 @@ body::after {
 .top-lib-name { font-size: 12px; font-weight: 700; color: var(--text); white-space: nowrap; }
 .top-lib-slug { font-size: 10px; color: var(--text-muted); font-family: var(--mono); }
 
-/* 悬停向下展开的气泡 */
+/* 悬停向下展开的气泡（z-index 高于画布内容） */
 .top-lib-bubble {
   display: none;
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
   width: 320px;
-  max-height: 380px;
+  max-height: 420px;
   overflow-y: auto;
   padding: 10px 12px;
   background: var(--surface);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16);
-  z-index: 70;
+  z-index: 120;
 }
 .top-lib-card:hover .top-lib-bubble { display: block; }
 .top-lib-example { margin-top: 6px; }
@@ -2651,7 +2655,7 @@ body::after {
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16);
-  z-index: 80;
+  z-index: 130;
 }
 .top-lib-vcard:hover .top-lib-vbubble { display: block; }
 

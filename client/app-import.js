@@ -824,19 +824,28 @@ function setupTopLibrary() {
   }
 }
 
-/** 渲染顶部库的分类术语卡片条（横向滚动）。 */
+/** 渲染顶部库的分类术语卡片条（横向排列）。 */
 function renderTopLibraryStrip(category) {
   const strip = $("top-lib-strip");
   if (!strip) return;
   strip.innerHTML = "";
   const data = window.VIBE_HUB_TERMS;
-  if (!data || !data.grouped) {
+  if (!data) {
     strip.innerHTML = `<div class="library-empty">${t("dsError")}</div>`;
     return;
   }
-  const groups = category === "设计风格" ? TOP_STYLE_GROUPS : [category];
+  // 设计风格 tab：用独立的 24 种风格数据（参照 vibe-hub.org/topics/design）
+  if (category === "设计风格") {
+    const styles = data.styles || [];
+    if (styles.length === 0) return;
+    const row = el("div", "top-lib-row");
+    styles.forEach((style) => row.appendChild(buildStyleCard(style)));
+    strip.appendChild(row);
+    return;
+  }
+  const groups = [category];
   groups.forEach((groupName) => {
-    const terms = data.grouped[groupName] || [];
+    const terms = (data.grouped && data.grouped[groupName]) || [];
     if (terms.length === 0) return;
     const header = el("div", "top-lib-group", groupName);
     strip.appendChild(header);
@@ -844,6 +853,71 @@ function renderTopLibraryStrip(category) {
     terms.forEach((term) => row.appendChild(buildTopLibCard(term)));
     strip.appendChild(row);
   });
+}
+
+/** 设计风格卡（悬停展开：定义 + 设计原则 + 变体 + 迷你示例）。 */
+function buildStyleCard(style) {
+  const card = el("div", "top-lib-card");
+  const iconEl = el("span", "vh-icon", style.zh.slice(0, 1));
+  const nameBox = el("div", "top-lib-name-box");
+  nameBox.appendChild(el("div", "top-lib-name", style.zh));
+  nameBox.appendChild(el("div", "top-lib-slug", style.en || style.slug));
+  card.appendChild(iconEl);
+  card.appendChild(nameBox);
+
+  const bubble = el("div", "top-lib-bubble");
+  if (style.youSay) bubble.appendChild(el("div", "vh-yousay", `“${style.youSay}”`));
+  if (style.definition) bubble.appendChild(el("div", "vh-def", style.definition));
+  const example = el("div", "top-lib-example");
+  example.appendChild(buildStyleExample(style));
+  bubble.appendChild(example);
+  if (style.principles) {
+    const p = el("div", "vh-anatomy");
+    p.appendChild(el("div", "vh-section-label", "设计原则 · Principles"));
+    p.appendChild(el("div", "vh-text", style.principles));
+    bubble.appendChild(p);
+  }
+  card.appendChild(bubble);
+  return card;
+}
+
+/** 设计风格的迷你视觉示例（按风格 id 配色渲染）。 */
+function buildStyleExample(style) {
+  const box = el("div", "tl-example-box");
+  const s = style.slug;
+  const palettes = {
+    minimal: ["#ffffff", "#1a1a1a"],
+    apple: ["#f5f5f7", "#1d1d1f"],
+    notion: ["#f7f6f3", "#37352f"],
+    bento: ["#fafafa", "#8b5cf6"],
+    glass: ["#e5e7eb", "#6366f1"],
+    brutalism: ["#ffd43b", "#1a1a2e"],
+    swiss: ["#e30613", "#1a1a1a"],
+    editorial: ["#f8f5f0", "#2b2b2b"],
+    skeuomorphism: ["#a8b8c8", "#3d5a73"],
+    flat: ["#22c55e", "#f97316"],
+    material: ["#6750a4", "#fef7ff"],
+    neumorphism: ["#e0e5ec", "#a3b1c6"],
+    saas: ["#0ea5e9", "#1e293b"],
+    enterprise: ["#1d4ed8", "#f8fafc"],
+    commerce: ["#f43f5e", "#18181b"],
+    "dark-tech": ["#0f1115", "#22d3ee"],
+    playful: ["#f472b6", "#fbbf24"],
+    organic: ["#d6c6a8", "#6b5d4f"],
+    y2k: ["#f0abfc", "#4ade80"],
+    memphis: ["#facc15", "#f43f5e"],
+    terminal: ["#0c0a09", "#22c55e"],
+    wabisabi: ["#e8e0d5", "#7d6e5f"],
+    bauhaus: ["#e4572e", "#1a1a2e"],
+    "art-deco": ["#0f766e", "#fcd34d"],
+  };
+  const [c1, c2] = palettes[s] || ["#6366f1", "#a78bfa"];
+  box.style.cssText = `height:54px;border-radius:8px;background:${c1};display:flex;align-items:center;justify-content:center;`;
+  const inner = el("div");
+  inner.style.cssText = `padding:6px 12px;border-radius:6px;background:${c2};color:#fff;font-size:11px;font-weight:700;`;
+  inner.textContent = style.zh;
+  box.appendChild(inner);
+  return box;
 }
 
 /** 构建单个术语卡片：悬停向下展开气泡（用法 + 图片示例 + 应用）。 */
@@ -871,24 +945,6 @@ function buildTopLibCard(term) {
     term.variantsList.forEach((v) => vRow.appendChild(buildVariantCard(term, v)));
     vGroup.appendChild(vRow);
     bubble.appendChild(vGroup);
-  }
-  if (term.usage) {
-    const u = el("div", "vh-usage");
-    u.appendChild(el("div", "vh-section-label", "什么时候用"));
-    u.appendChild(el("div", "vh-text", term.usage));
-    bubble.appendChild(u);
-  }
-  if (term.avoid) {
-    const av = el("div", "vh-avoid");
-    av.appendChild(el("div", "vh-section-label", "什么时候不用"));
-    av.appendChild(el("div", "vh-text", term.avoid));
-    bubble.appendChild(av);
-  }
-  if (term.aiPrompt) {
-    const ai = el("div", "vh-ai");
-    ai.appendChild(el("div", "vh-section-label", "告诉 AI"));
-    ai.appendChild(el("div", "vh-text", term.aiPrompt));
-    bubble.appendChild(ai);
   }
   const action = vibeTermAction(term);
   if (action) {

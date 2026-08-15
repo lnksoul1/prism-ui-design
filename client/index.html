@@ -73,21 +73,18 @@
       <div class="page-tabs" id="page-tabs"></div>
       <button class="page-add-btn" id="page-add-btn" title="添加页面">+</button>
     </div>
-    <!-- Layer Panel -->
-    <div class="layer-section">
-      <div class="layer-header">
-        <span class="layer-title" data-i18n="layers">图层</span>
-      </div>
+    <!-- Tools: Layers / Versions / Comments (合并 tab 栏) -->
+    <div class="tools-tabs" id="tools-tabs">
+      <button class="tool-tab active" data-tool="layers" data-i18n="layers">图层</button>
+      <button class="tool-tab" data-tool="versions" data-i18n="versions">版本</button>
+      <button class="tool-tab" data-tool="comments" data-i18n="comments">评论</button>
+    </div>
+    <div class="tool-pane active" id="pane-layers">
       <div class="layer-tree" id="layer-tree">
         <div class="layer-empty">组件图层将显示在这里</div>
       </div>
     </div>
-    <!-- Tools: Versions / Comments -->
-    <div class="tools-tabs">
-      <button class="tool-tab active" data-tool="versions" data-i18n="versions">版本</button>
-      <button class="tool-tab" data-tool="comments" data-i18n="comments">评论</button>
-    </div>
-    <div class="tool-pane active" id="pane-versions">
+    <div class="tool-pane" id="pane-versions">
       <button class="toolbar-btn version-create" id="version-create-btn" data-i18n="createVersion">+ 新建版本</button>
       <div class="version-list" id="version-list"><div class="tool-empty" data-i18n="versionEmpty">暂无版本</div></div>
     </div>
@@ -242,18 +239,6 @@
     </div>
   </aside>
 
-</div>
-
-<!-- Prompt Bar (fixed at bottom) -->
-<div class="prompt-bar">
-  <div class="prompt-suggest" id="prompt-suggest" style="display:none"></div>
-  <div class="prompt-chips" id="prompt-chips" role="list" aria-label="快捷指令"></div>
-  <div class="prompt-bar-main">
-    <span class="llm-badge" id="llm-badge" style="display:none" title="内置 AI 通道已连接">AI</span>
-    <input type="text" class="prompt-input" id="prompt-input" data-i18n-placeholder="promptPlaceholder" placeholder="输入指令给 AI，如：把主色改成蓝色">
-    <button class="prompt-send" id="prompt-send" data-i18n="send">发送</button>
-    <span class="prompt-status" id="prompt-status"></span>
-  </div>
 </div>
 
 <!-- AI Settings Modal (built-in LLM channel, BYO API key) -->

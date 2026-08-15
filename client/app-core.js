@@ -57,7 +57,7 @@ let tokenSearchQuery = "";
 let activitySearchQuery = "";
 let activitySourceFilter = "";
 let librarySearchQuery = "";
-let currentToolTab = "library";
+let currentToolTab = "layers";
 
 // ===== DOM Helpers =====
 

@@ -503,6 +503,7 @@ function setupToolTabs() {
       document.querySelectorAll(".tool-pane").forEach((pane) => pane.classList.remove("active"));
       const pane = $("pane-" + currentToolTab);
       if (pane) pane.classList.add("active");
+      if (currentToolTab === "layers") renderLayerPanel();
       if (currentToolTab === "versions") renderVersions();
       if (currentToolTab === "comments") renderComments();
     });
@@ -912,7 +913,64 @@ function renderTopLibraryStrip(category) {
   });
 }
 
-/** 设计风格卡（悬停展开：定义 + 设计原则 + 变体 + 迷你示例）。 */
+/** 解析 anatomy 文本 → [{num, name, en, desc}]。格式：N 名称[ En] 描述 ... */
+function parseAnatomyParts(text) {
+  if (!text) return [];
+  let body = String(text);
+  const aiIdx = body.indexOf("AI 提示词");
+  if (aiIdx > 0) body = body.slice(0, aiIdx);
+  body = body.replace(/\s*\/\s*/g, "/");
+  const parts = [];
+  // 每段以「数字 中文」开头；描述持续到下一个「数字 中文」
+  const re = /(\d{1,2})\s+([\u4e00-\u9fff][^\d]*?)(?=\d{1,2}\s+[\u4e00-\u9fff]|$)/g;
+  let m;
+  while ((m = re.exec(body)) !== null) {
+    const num = parseInt(m[1], 10);
+    const rest = m[2].trim();
+    const nm = rest.match(
+      /^([\u4e00-\u9fff][\u4e00-\u9fff·/（）()\s]*?)(?:\s+([A-Za-z][A-Za-z&. ]*?))?\s+([\u4e00-\u9fff][\s\S]*)$/
+    );
+    if (!nm) {
+      parts.push({ num, name: rest, en: "", desc: "" });
+      continue;
+    }
+    parts.push({ num, name: nm[1].trim(), en: (nm[2] || "").trim(), desc: nm[3].trim() });
+  }
+  return parts;
+}
+
+/**
+ * 结构示意图：顶部是组件/风格迷你示例，下方用连接线引出编号部件
+ * （名称 + 英文名 + 描述），替代纯文字 anatomy，成为可读的拆解图。
+ */
+function buildStructureDiagram(exampleBox, anatomyText) {
+  const wrap = el("div", "tl-structure");
+  wrap.appendChild(el("div", "vh-section-label", "组成结构 · Anatomy"));
+  const body = el("div", "tl-structure-body");
+  const ex = el("div", "tl-structure-example");
+  ex.appendChild(exampleBox);
+  body.appendChild(ex);
+  const parts = parseAnatomyParts(anatomyText);
+  if (parts.length > 0) {
+    const list = el("div", "tl-anatomy");
+    parts.forEach((p) => {
+      const row = el("div", "tl-part");
+      row.appendChild(el("span", "tl-part-num", String(p.num)));
+      const info = el("div", "tl-part-info");
+      const nameLine = el("div", "tl-part-name", p.name);
+      if (p.en) nameLine.appendChild(el("span", "tl-part-en", p.en));
+      info.appendChild(nameLine);
+      if (p.desc) info.appendChild(el("div", "tl-part-desc", p.desc));
+      row.appendChild(info);
+      list.appendChild(row);
+    });
+    body.appendChild(list);
+  }
+  wrap.appendChild(body);
+  return wrap;
+}
+
+/** 设计风格卡（悬停展开：定义 + 结构示意图 + 设计原则；拖拽应用风格）。 */
 function buildStyleCard(style) {
   const card = el("div", "top-lib-card");
   const iconEl = el("span", "vh-icon", style.zh.slice(0, 1));
@@ -925,9 +983,7 @@ function buildStyleCard(style) {
   const bubble = el("div", "top-lib-bubble");
   if (style.youSay) bubble.appendChild(el("div", "vh-yousay", `“${style.youSay}”`));
   if (style.definition) bubble.appendChild(el("div", "vh-def", style.definition));
-  const example = el("div", "top-lib-example");
-  example.appendChild(buildStyleExample(style));
-  bubble.appendChild(example);
+  bubble.appendChild(buildStructureDiagram(buildStyleExample(style), style.anatomy));
   if (style.principles) {
     const p = el("div", "vh-anatomy");
     p.appendChild(el("div", "vh-section-label", "设计原则 · Principles"));
@@ -936,6 +992,18 @@ function buildStyleCard(style) {
   }
   card._bubble = bubble; // 悬停时移入顶层浮层展示，卡片自身不参与气泡布局
   bindTopLibHover(card);
+  // 拖拽到画布 = 应用该设计风格
+  card.draggable = true;
+  card.addEventListener("dragstart", (e) => {
+    e.dataTransfer.setData(
+      "text/plain",
+      JSON.stringify({ libType: "styles", style: { slug: style.slug, zh: style.zh, en: style.en || "" } })
+    );
+    e.dataTransfer.effectAllowed = "copy";
+    card.classList.add("dragging");
+    hideTopLibPopup();
+  });
+  card.addEventListener("dragend", () => card.classList.remove("dragging"));
   return card;
 }
 
@@ -988,13 +1056,11 @@ function buildTopLibCard(term) {
   card.appendChild(iconEl);
   card.appendChild(nameBox);
 
-  // 气泡层（向下展开）：定义 + 用法 + 图片示例 + 应用按钮
+  // 气泡层：定义 + 结构示意图（示例 + 组成结构）+ 变种 + 应用按钮
   const bubble = el("div", "top-lib-bubble");
   if (term.youSay) bubble.appendChild(el("div", "vh-yousay", `“${term.youSay}”`));
   if (term.definition) bubble.appendChild(el("div", "vh-def", term.definition));
-  const example = el("div", "top-lib-example");
-  example.appendChild(buildTermExample(term));
-  bubble.appendChild(example);
+  bubble.appendChild(buildStructureDiagram(buildTermExample(term), term.anatomy));
   // 变种卡组：与原版术语分开展示（悬停展开各自的气泡详情）
   if (term.variantsList && term.variantsList.length > 0) {
     const vGroup = el("div", "top-lib-variants");
@@ -1013,6 +1079,26 @@ function buildTopLibCard(term) {
       addComponentViaAPI(action);
     });
     bubble.appendChild(applyBtn);
+    // 拖拽到画布 = 添加组件（无选中）或应用到选中组件（原位替换）
+    card.draggable = true;
+    card.addEventListener("dragstart", (e) => {
+      e.dataTransfer.setData(
+        "text/plain",
+        JSON.stringify({
+          libType: "components",
+          item: {
+            id: action.id,
+            variant: action.variant,
+            defaultProps: action.defaultProps || {},
+            name: term.zh,
+          },
+        })
+      );
+      e.dataTransfer.effectAllowed = "copy";
+      card.classList.add("dragging");
+      hideTopLibPopup();
+    });
+    card.addEventListener("dragend", () => card.classList.remove("dragging"));
   }
   card._bubble = bubble; // 悬停时移入顶层浮层展示，卡片自身不参与气泡布局
   bindTopLibHover(card);
@@ -1269,7 +1355,10 @@ function vibeTermAction(term) {
     pricing: { type: "pricing", props: {} },
     banner: { type: "banner", props: { text: "公告横幅" } },
   };
-  return COMPONENT_MAP[term.slug] || null;
+  const entry = COMPONENT_MAP[term.slug];
+  if (!entry) return null;
+  // 统一动作形状：{ id, variant, defaultProps }，与 addComponentViaAPI / 拖拽载荷一致
+  return { id: entry.type, variant: entry.variant, defaultProps: entry.props || {} };
 }
 
 /** 渲染 vibe-hub 知识库卡片（悬停展开 结构/用法/AI 提示词）。 */
@@ -1739,8 +1828,8 @@ function setupCanvasDropZone() {
       // If it's a JSON object from the library, handle it
       if (raw.startsWith("{")) {
         const data = JSON.parse(raw);
-        if (data.libType && data.item) {
-          handleLibraryDrop(data.item, data.libType);
+        if (data.libType) {
+          handleLibraryDrop(data.item, data.libType, data);
         }
       }
       // If it's a plain component ID (from reorder), ignore — handled by attachDragHandlers
@@ -1750,12 +1839,32 @@ function setupCanvasDropZone() {
   });
 }
 
-function handleLibraryDrop(item, libType) {
+/** 拖放风格 → 服务端风格指南 slug 映射（VibeHub slug → Prism style guide id）。 */
+const STYLE_GUIDE_ALIAS = {
+  glass: "glassmorphism",
+  brutalism: "brutalist",
+  neumorphism: "neumorphism",
+  editorial: "editorial",
+  apple: "apple",
+  notion: "notion",
+  saas: "linear",
+  enterprise: "ibm-carbon",
+  commerce: "shopify-polaris",
+};
+
+function handleLibraryDrop(item, libType, extra) {
   if (libType === "blocks") {
     // 组件模板 dropped on the canvas: add the block (drop never replaces)
     applyComponentTemplateViaAPI(item, null);
   } else if (libType === "components") {
-    addComponentViaAPI(item);
+    // 拖拽添加或应用：无选中 → 追加组件；有选中 → 原位替换选中组件
+    if (selectedComponentId) {
+      replaceSelectedWithLibraryItem(item);
+    } else {
+      addComponentViaAPI(item);
+    }
+  } else if (libType === "styles" && extra && extra.style) {
+    applyLibraryStyle(extra.style);
   } else if (libType === "animations") {
     const components = getCurrentComponents();
     if (components.length === 0) return;
@@ -1768,6 +1877,48 @@ function handleLibraryDrop(item, libType) {
       hover: item.hover,
       duration: item.duration,
     });
+  }
+}
+
+/** 拖拽术语卡且画布有选中组件：原位替换（应用），失败则回退为追加。 */
+async function replaceSelectedWithLibraryItem(item) {
+  const id = selectedComponentId;
+  if (!id || !item) return;
+  try {
+    const res = await fetch(`/api/component/${encodeURIComponent(id)}/replace`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: item.id, variant: item.variant, props: item.defaultProps || {} }),
+    });
+    if (res.ok) {
+      showToastMsg(`已将「${item.name || item.id}」应用到选中组件`);
+      return;
+    }
+    showToastMsg("原位应用失败，已改为添加到画布", true);
+    addComponentViaAPI(item);
+  } catch (err) {
+    console.error("Replace on drop failed:", err);
+    addComponentViaAPI(item);
+  }
+}
+
+/** 拖拽风格卡：应用到当前设计（token 覆盖，可撤销）。 */
+async function applyLibraryStyle(style) {
+  const name = STYLE_GUIDE_ALIAS[style.slug] || style.slug;
+  try {
+    const res = await fetch("/api/design-system/apply", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    if (res.ok) {
+      showToastMsg(`已应用风格「${style.zh}」`);
+    } else {
+      showToastMsg(`风格「${style.zh}」暂无可应用的预设`, true);
+    }
+  } catch (err) {
+    console.error("Apply style on drop failed:", err);
+    showToastMsg("应用风格失败", true);
   }
 }
 

@@ -83,8 +83,7 @@ function renderCanvas(opts) {
     const aiBtn = $("empty-ai");
     if (aiBtn) {
       aiBtn.addEventListener("click", () => {
-        const input = $("prompt-input");
-        if (input) input.focus();
+        toggleCommandPalette();
       });
     }
     const libBtn = $("empty-library");

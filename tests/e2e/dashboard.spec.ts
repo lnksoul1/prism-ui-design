@@ -40,6 +40,13 @@ async function waitForHealth(url: string, timeoutMs: number): Promise<void> {
   throw new Error(`Server did not become healthy at ${url}`);
 }
 
+/** Run an instruction through the command palette (the chat bar was removed). */
+async function runPrompt(page: Page, text: string): Promise<void> {
+  await page.keyboard.press("Control+K");
+  await page.fill("#command-input", text);
+  await page.keyboard.press("Enter");
+}
+
 let server: ChildProcess | null = null;
 let port = 0;
 
@@ -75,7 +82,7 @@ test("dashboard loads with the premium empty state", async ({ page }: { page: Pa
   await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "domcontentloaded", timeout: 60000 });
   await expect(page.locator(".topbar")).toBeVisible();
   await expect(page.locator(".placeholder-guide")).toBeVisible();
-  await expect(page.locator("#prompt-input")).toBeVisible();
+  await expect(page.locator("#top-lib-strip")).toBeVisible();
   // Primary topbar actions stay visible; secondary utilities live in the "…" menu.
   await expect(page.locator("#export-btn")).toBeVisible();
   await expect(page.locator("#more-btn")).toBeVisible();
@@ -83,10 +90,8 @@ test("dashboard loads with the premium empty state", async ({ page }: { page: Pa
   await expect(page.locator("#project-btn")).toBeVisible();
   await page.locator("#more-btn").click();
 
-  // Sending a matchable instruction executes locally and shows a receipt
-  await page.fill("#prompt-input", "把主色改成蓝色");
-  await page.click("#prompt-send");
-  await expect(page.locator("#prompt-status")).toContainText("已执行", { timeout: 5000 });
+  // Sending a matchable instruction via the command palette executes locally
+  await runPrompt(page, "把主色改成蓝色");
   const primary = await page.evaluate(async () => {
     const state = (await (await fetch("/api/state")).json()) as {
       tokens: { colors: Record<string, { value?: string }> };
@@ -147,7 +152,7 @@ test("start-from-template creates a page", async ({ page }: { page: Page }) => {
   await expect(page.locator(".comp-wrapper").first()).toBeVisible({ timeout: 10000 });
 });
 
-test("quick actions: prompt chips, ? help, Ctrl+K palette, template thumbnails", async ({ page }: { page: Page }) => {
+test("quick actions: ? help, Ctrl+K palette, template thumbnails", async ({ page }: { page: Page }) => {
   const errors: string[] = [];
   page.on("console", (msg) => {
     if (msg.type() === "error" && !msg.text().includes("Failed to load resource")) errors.push(msg.text());
@@ -157,18 +162,6 @@ test("quick actions: prompt chips, ? help, Ctrl+K palette, template thumbnails",
   await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "domcontentloaded", timeout: 60000 });
   await expect(page.locator(".topbar")).toBeVisible();
 
-  // Prompt chips render and one-click instructions execute via the built-in engine
-  await expect(page.locator(".prompt-chip")).toHaveCount(9);
-  await page.locator(".prompt-chip").first().click();
-  await expect(page.locator("#prompt-status")).toContainText("已执行", { timeout: 5000 });
-
-  // Help overlay toggles with "?" and lists shortcuts
-  await page.keyboard.press("?");
-  await expect(page.locator("#help-overlay")).toBeVisible();
-  await expect(page.locator(".help-row").first()).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(page.locator("#help-overlay")).not.toBeVisible();
-
   // Command palette via Ctrl+K filters and executes the first match
   await page.keyboard.press("Control+K");
   await expect(page.locator("#command-overlay")).toBeVisible();
@@ -176,7 +169,13 @@ test("quick actions: prompt chips, ? help, Ctrl+K palette, template thumbnails",
   await expect(page.locator(".command-row").first()).toBeVisible();
   await page.keyboard.press("Enter");
   await expect(page.locator("#command-overlay")).not.toBeVisible();
-  await expect(page.locator("#prompt-status")).toContainText("已执行", { timeout: 5000 });
+
+  // Help overlay toggles with "?" and lists shortcuts
+  await page.keyboard.press("?");
+  await expect(page.locator("#help-overlay")).toBeVisible();
+  await expect(page.locator(".help-row").first()).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#help-overlay")).not.toBeVisible();
 
   // Drawing canvas template picker shows semantic thumbnails
   await page.locator("#canvas-mode-design").click();
@@ -197,9 +196,7 @@ test("inspect code tab and brand design systems work from the dashboard", async 
   await expect(page.locator(".topbar")).toBeVisible();
 
   // Generate a SaaS page so there is a component to inspect
-  await page.fill("#prompt-input", "应用 SaaS 模板");
-  await page.click("#prompt-send");
-  await expect(page.locator("#prompt-status")).toContainText("已执行", { timeout: 5000 });
+  await runPrompt(page, "应用 SaaS 模板");
   await expect(page.locator(".comp-wrapper").first()).toBeVisible({ timeout: 10000 });
 
   // Inspect: select the first component and open the Code tab
@@ -310,9 +307,7 @@ test("multi-select and alignment adjust freeform layouts", async ({ page }: { pa
   await expect(page.locator(".topbar")).toBeVisible();
 
   // Start from a template so there are multiple components
-  await page.fill("#prompt-input", "应用 SaaS 模板");
-  await page.click("#prompt-send");
-  await expect(page.locator("#prompt-status")).toContainText("已执行", { timeout: 5000 });
+  await runPrompt(page, "应用 SaaS 模板");
   await expect(page.locator(".comp-wrapper").first()).toBeVisible({ timeout: 10000 });
 
   // Freeform is the default mode; components already get editable layouts.
@@ -385,9 +380,7 @@ test("play mode: a linked component navigates to the target page", async ({ page
   await expect(page.locator(".topbar")).toBeVisible();
 
   // Start from the SaaS template so there is a component to click
-  await page.fill("#prompt-input", "应用 SaaS 模板");
-  await page.click("#prompt-send");
-  await expect(page.locator("#prompt-status")).toContainText("已执行", { timeout: 5000 });
+  await runPrompt(page, "应用 SaaS 模板");
   await expect(page.locator(".comp-wrapper").first()).toBeVisible({ timeout: 10000 });
 
   // Remember the current page, then create the target page through the REST API
@@ -453,9 +446,7 @@ test("library: component template replaces the selected component in place", asy
   await expect(page.locator(".topbar")).toBeVisible();
 
   // Start from a template so there is a component to replace
-  await page.fill("#prompt-input", "应用 SaaS 模板");
-  await page.click("#prompt-send");
-  await expect(page.locator("#prompt-status")).toContainText("已执行", { timeout: 5000 });
+  await runPrompt(page, "应用 SaaS 模板");
   await expect(page.locator(".comp-wrapper").first()).toBeVisible({ timeout: 10000 });
 
   const firstId = await page.evaluate(async () => {
@@ -560,9 +551,7 @@ test("exact editing: layer rename + rulers/guides appear in freeform", async ({ 
   await expect(page.locator(".topbar")).toBeVisible();
 
   // Start from a template so there is a component to rename
-  await page.fill("#prompt-input", "应用 SaaS 模板");
-  await page.click("#prompt-send");
-  await expect(page.locator("#prompt-status")).toContainText("已执行", { timeout: 5000 });
+  await runPrompt(page, "应用 SaaS 模板");
   await expect(page.locator(".comp-wrapper").first()).toBeVisible({ timeout: 10000 });
 
   // Freeform is the default mode: rulers + guides stage appear immediately.
@@ -687,9 +676,7 @@ test("edit inner parts of a component (nested item text is editable)", async ({ 
   await expect(page.locator(".topbar")).toBeVisible();
 
   // SaaS template includes a feature_list with nested items and a pricing grid.
-  await page.fill("#prompt-input", "应用 SaaS 模板");
-  await page.click("#prompt-send");
-  await expect(page.locator("#prompt-status")).toContainText("已执行", { timeout: 5000 });
+  await runPrompt(page, "应用 SaaS 模板");
   await expect(page.locator(".comp-wrapper").first()).toBeVisible({ timeout: 10000 });
 
   // Feature-list item titles are editable in place (nested path items.0.title).

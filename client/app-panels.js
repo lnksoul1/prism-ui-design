@@ -849,11 +849,7 @@ function renderExplain(data) {
       row.addEventListener("click", () => {
         const modal = $("explain-modal");
         if (modal) modal.style.display = "none";
-        const input = $("prompt-input");
-        if (input) {
-          input.value = String(s.phrase);
-          input.focus();
-        }
+        sendPrompt(String(s.phrase));
       });
       list.appendChild(row);
     });
@@ -1249,8 +1245,7 @@ function setupQuickActions() {
     }
     if (e.key === "/") {
       e.preventDefault();
-      const input = $("prompt-input");
-      if (input) input.focus();
+      toggleCommandPalette();
       return;
     }
     if (e.key.toLowerCase() === "p") {

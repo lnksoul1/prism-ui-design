@@ -2590,6 +2590,85 @@ body::after {
   padding: 4px;
   overflow: hidden;
 }
+
+/* 结构示意图：示例 + 组成结构部件（贯通竖线 + 引出线 + 编号徽标） */
+.tl-structure { margin-top: 6px; }
+.tl-structure-body {
+  position: relative;
+  padding-left: 16px;
+}
+.tl-structure-body::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 8px;
+  bottom: 4px;
+  width: 2px;
+  background: var(--border-strong);
+  border-radius: 2px;
+}
+.tl-structure-example { position: relative; margin: 8px 0 8px 0; }
+.tl-structure-example::before {
+  content: "";
+  position: absolute;
+  left: -14px;
+  top: 50%;
+  width: 12px;
+  height: 2px;
+  background: var(--border-strong);
+  border-radius: 2px;
+}
+.tl-anatomy {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.tl-part {
+  position: relative;
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.tl-part::before {
+  content: "";
+  position: absolute;
+  left: -14px;
+  top: 9px;
+  width: 12px;
+  height: 2px;
+  background: var(--border-strong);
+  border-radius: 2px;
+}
+.tl-part-num {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent-bg, rgba(124, 58, 237, 0.14));
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
+}
+.tl-part-info { min-width: 0; }
+.tl-part-name { font-size: 12px; font-weight: 700; color: var(--text); }
+.tl-part-en {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+  font-family: var(--mono);
+  margin-left: 5px;
+}
+.tl-part-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.45;
+  margin-top: 1px;
+}
+.top-lib-card.dragging { opacity: 0.45; }
 @keyframes tlBounce {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-6px); }
@@ -4770,6 +4849,7 @@ body[data-theme="dark"] .canvas-editor-wrap {
   backdrop-filter: blur(10px);
   max-width: min(560px, 90vw);
   text-align: center;
+  pointer-events: none; /* 通知浮层不拦截拖放落点 */
 }
 .prism-toast.toast-error {
   background: rgba(190, 40, 60, 0.94);

@@ -581,50 +581,102 @@ function renderComponent(comp) {
 
 // ===== Freeform Canvas (B6) =====
 
-function attachFreeformDrag(wrapper, compId) {
-  wrapper.addEventListener("mousedown", (e) => {
-    if (e.button !== 0) return;
-    // Only exclude actual controls; dragging from the badge/overlay strip is allowed.
-    if (e.target.closest(".comp-delete") || e.target.closest(".comp-drag-handle")) return;
-    if (e.target.closest(".resize-handle")) return;
-    if (e.target.closest("[contenteditable='true']")) return;
-    // 内联编辑文字：mousedown 不启动拖动，否则双击编辑会被打断。
-    if (e.target.closest("[data-editable='true']")) return;
-    // 元素级编辑 P1: 内部元素（文字/按钮）mousedown 不启动组件拖动，
-    // 让元素的 click 处理器完成元素选中/交互。
-    if (e.target.closest("[data-element='true']")) return;
-    // 子组件拦截：点击落在内部子组件上时，不启动父组件拖动、不选中父，
-    // 让子组件自己的 click 处理器接管（否则 mousedown 冒泡会选中父组件）。
-    const inner = e.target.closest(".comp-wrapper");
-    if (inner && inner !== wrapper && inner.contains(e.target)) {
-      if (inner.dataset.id !== compId) return;
-    }
-    e.preventDefault();
-    selectComponent(compId);
-    const startX = e.clientX;
-    const startY = e.clientY;
-    const comp = getCompById(compId);
-    const origX = (comp && comp.layout ? comp.layout.x : 0);
-    const origY = (comp && comp.layout ? comp.layout.y : 0);
-    const origW = (comp && comp.layout ? comp.layout.w : 0);
-    const origH = (comp && comp.layout ? comp.layout.h : 0);
-    wrapper.style.transition = "none";
+/**
+ * Phase 2.5 (Pointer Events): run a drag gesture on pointerdown and track it
+ * with pointermove/pointerup — one code path for mouse, touch and pen.
+ * `onMove(dx, dy, ev)` receives deltas from the pointerdown position and the
+ * raw event; `onUp(dx, dy, ev)` runs once on release (including touch end).
+ */
+function attachPointerDrag(element, handlers) {
+  let activePointerId = null;
+  let startX = 0;
+  let startY = 0;
 
-    const onMove = (ev) => {
-      const dx = ev.clientX - startX;
-      const dy = ev.clientY - startY;
+  const onPointerDown = (e) => {
+    if (e.button !== 0 && e.pointerType === "mouse") return;
+    if (activePointerId !== null) return;
+    // Let overlays / handles keep their own behavior unless opted in.
+    if (handlers.shouldSkip && handlers.shouldSkip(e)) return;
+    activePointerId = e.pointerId;
+    startX = e.clientX;
+    startY = e.clientY;
+    if (handlers.onStart) handlers.onStart(e, startX, startY);
+    try { element.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+    if (handlers.preventDefault !== false) e.preventDefault();
+  };
+
+  const onPointerMove = (e) => {
+    if (e.pointerId !== activePointerId) return;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    if (handlers.onMove) handlers.onMove(dx, dy, e);
+  };
+
+  const onPointerUp = (e) => {
+    if (e.pointerId !== activePointerId) return;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    activePointerId = null;
+    try { element.releasePointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+    if (handlers.onUp) handlers.onUp(dx, dy, e);
+  };
+
+  element.addEventListener("pointerdown", onPointerDown);
+  element.addEventListener("pointermove", onPointerMove);
+  element.addEventListener("pointerup", onPointerUp);
+  element.addEventListener("pointercancel", onPointerUp);
+  // Suppress the browser's synthetic mouse events during touch drags so
+  // click-based selection still works correctly.
+  element.addEventListener("touchstart", (e) => {
+    if (handlers.touchstart !== false) e.preventDefault();
+  }, { passive: false });
+}
+
+/** True when a pointer drag is active on the given element (internal). */
+function attachFreeformDrag(wrapper, compId) {
+  attachPointerDrag(wrapper, {
+    shouldSkip: (e) => {
+      // Only exclude actual controls; dragging from the badge/overlay strip is allowed.
+      if (e.target.closest(".comp-delete") || e.target.closest(".comp-drag-handle")) return true;
+      if (e.target.closest(".resize-handle")) return true;
+      if (e.target.closest("[contenteditable='true']")) return true;
+      // 内联编辑文字：不启动拖动，否则双击编辑会被打断。
+      if (e.target.closest("[data-editable='true']")) return true;
+      // 元素级编辑 P1: 内部元素（文字/按钮）不启动组件拖动，
+      // 让元素的 click 处理器完成元素选中/交互。
+      if (e.target.closest("[data-element='true']")) return true;
+      // 子组件拦截：点击落在内部子组件上时，不启动父组件拖动、不选中父，
+      // 让子组件自己的 click 处理器接管。
+      const inner = e.target.closest(".comp-wrapper");
+      if (inner && inner !== wrapper && inner.contains(e.target)) {
+        if (inner.dataset.id !== compId) return true;
+      }
+      return false;
+    },
+    onStart: (e, startX, startY) => {
+      selectComponent(compId);
+      const comp = getCompById(compId);
+      const origX = (comp && comp.layout ? comp.layout.x : 0);
+      const origY = (comp && comp.layout ? comp.layout.y : 0);
+      const origW = (comp && comp.layout ? comp.layout.w : 0);
+      const origH = (comp && comp.layout ? comp.layout.h : 0);
+      wrapper.style.transition = "none";
+      wrapper._prismDrag = { startX, startY, origX, origY, origW, origH };
+    },
+    onMove: (dx, dy) => {
+      const d = wrapper._prismDrag;
+      if (!d) return;
       // 吸附 (snapping): align to guides / canvas edges / other components.
       const snapped = snapLayout(
-        { x: Math.max(0, origX + dx), y: Math.max(0, origY + dy), w: origW, h: origH },
+        { x: Math.max(0, d.origX + dx), y: Math.max(0, d.origY + dy), w: d.origW, h: d.origH },
         compId,
         { all: true }
       );
       wrapper.style.left = snapped.x + "px";
       wrapper.style.top = snapped.y + "px";
-    };
-    const onUp = () => {
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
+    },
+    onUp: () => {
+      if (wrapper._prismDrag) delete wrapper._prismDrag;
       wrapper.style.transition = "";
       clearSnapLines();
       const x = parseFloat(wrapper.style.left) || 0;
@@ -634,9 +686,7 @@ function attachFreeformDrag(wrapper, compId) {
       if (compNow) {
         compNow.layout = { ...(compNow.layout || {}), x, y };
       }
-    };
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
+    },
   });
 }
 
@@ -646,17 +696,20 @@ function attachResizeHandles(wrapper, compId) {
   RESIZE_DIRS.forEach((dir) => {
     const handle = el("div", `resize-handle rh-${dir}`);
     handle.dataset.dir = dir;
-    handle.addEventListener("mousedown", (e) => {
-      e.stopPropagation();
-      e.preventDefault();
-      const startX = e.clientX;
-      const startY = e.clientY;
-      const comp = getCompById(compId);
-      const L = comp && comp.layout ? { ...comp.layout } : { x: 0, y: 0, w: 0, h: 0 };
-
-      const onMove = (ev) => {
-        const dx = ev.clientX - startX;
-        const dy = ev.clientY - startY;
+    attachPointerDrag(handle, {
+      // Handles only start their own drag; the pointerdown target is the
+      // handle itself so no extra skip logic is needed.
+      shouldSkip: (e) => e.target !== handle,
+      onStart: (e, startX, startY) => {
+        e.stopPropagation();
+        const comp = getCompById(compId);
+        const L = comp && comp.layout ? { ...comp.layout } : { x: 0, y: 0, w: 0, h: 0 };
+        handle._prismResize = { startX, startY, L };
+      },
+      onMove: (dx, dy) => {
+        const d = handle._prismResize;
+        if (!d) return;
+        const { L } = d;
         let { x, y, w, h } = L;
         if (dir.includes("e")) w = Math.max(60, (L.w || 320) + dx);
         if (dir.includes("s")) h = Math.max(40, (L.h || 140) + dy);
@@ -681,10 +734,9 @@ function attachResizeHandles(wrapper, compId) {
         wrapper.style.top = y + "px";
         wrapper.style.width = w + "px";
         wrapper.style.minHeight = h + "px";
-      };
-      const onUp = () => {
-        document.removeEventListener("mousemove", onMove);
-        document.removeEventListener("mouseup", onUp);
+      },
+      onUp: () => {
+        if (handle._prismResize) delete handle._prismResize;
         clearSnapLines();
         const rect = wrapper.getBoundingClientRect();
         const canvasRect = $("canvas").getBoundingClientRect();
@@ -697,9 +749,7 @@ function attachResizeHandles(wrapper, compId) {
         sendUpdateComponent(compId, {}, layout);
         const compNow = getCompById(compId);
         if (compNow) compNow.layout = layout;
-      };
-      document.addEventListener("mousemove", onMove);
-      document.addEventListener("mouseup", onUp);
+      },
     });
     wrapper.appendChild(handle);
   });
@@ -810,7 +860,7 @@ function startGuideFromRuler(axis) {
   if (!layer) return;
   const guide = el("div", "canvas-guide guide-" + axis);
   guide.classList.add("dragging");
-  const move = (ev) => {
+  const move = (dx, dy, ev) => {
     const z = rulerZoom();
     if (axis === "h") {
       const y = Math.round((ev.clientY - layer.getBoundingClientRect().top) / z);
@@ -821,8 +871,6 @@ function startGuideFromRuler(axis) {
     }
   };
   const up = () => {
-    document.removeEventListener("mousemove", move);
-    document.removeEventListener("mouseup", up);
     guide.classList.remove("dragging");
     guide.remove();
     const pos = axis === "h" ? parseFloat(guide.style.top) : parseFloat(guide.style.left);
@@ -832,34 +880,33 @@ function startGuideFromRuler(axis) {
       renderGuides();
     }
   };
-  document.addEventListener("mousemove", move);
-  document.addEventListener("mouseup", up);
   layer.appendChild(guide);
+  // Track the gesture on the guide element itself via pointer events.
+  attachPointerDrag(guide, { onMove: move, onUp: up, preventDefault: false, touchstart: false });
 }
 
 /** Drag an existing guide to move it; dragging onto the ruler strip deletes it. */
 function attachGuideDrag(guideEl, axis, initial) {
   let startClient = 0;
   let startPos = initial;
-  guideEl.addEventListener("mousedown", (e) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    e.stopPropagation();
-    startClient = axis === "h" ? e.clientY : e.clientX;
-    startPos = initial;
-    guideEl.classList.add("dragging");
-    const z = rulerZoom();
-    const move = (ev) => {
+  attachPointerDrag(guideEl, {
+    shouldSkip: (e) => e.target !== guideEl,
+    onStart: (e) => {
+      e.stopPropagation();
+      startClient = axis === "h" ? e.clientY : e.clientX;
+      startPos = initial;
+      guideEl.classList.add("dragging");
+    },
+    onMove: (dx, dy, ev) => {
+      const z = rulerZoom();
       const d = ((axis === "h" ? ev.clientY : ev.clientX) - startClient) / z;
       const next = startPos + d;
       if (axis === "h") guideEl.style.top = next + "px";
       else guideEl.style.left = next + "px";
       // Dragging onto the ruler strip (negative coordinate) deletes on release.
       guideEl.dataset.draggingOut = String(next < 0);
-    };
-    const up = () => {
-      document.removeEventListener("mousemove", move);
-      document.removeEventListener("mouseup", up);
+    },
+    onUp: () => {
       guideEl.classList.remove("dragging");
       if (guideEl.dataset.draggingOut === "true") {
         canvasGuides[axis] = canvasGuides[axis].filter((p) => Math.abs(p - startPos) > 0.01);
@@ -874,9 +921,7 @@ function attachGuideDrag(guideEl, axis, initial) {
         guideEl.style[axis === "h" ? "top" : "left"] = value + "px";
         guideEl.dataset.pos = String(value);
       }
-    };
-    document.addEventListener("mousemove", move);
-    document.addEventListener("mouseup", up);
+    },
   });
   // Double-click removes the guide.
   guideEl.addEventListener("dblclick", (e) => {
@@ -900,17 +945,17 @@ function setupRulersAndGuides() {
     });
   });
   window.addEventListener("resize", renderRulers);
-  // Drag guides out of the rulers.
+  // Drag guides out of the rulers (pointer events — mouse + touch).
   const hRuler = $("ruler-h");
   const vRuler = $("ruler-v");
   if (hRuler) {
-    hRuler.addEventListener("mousedown", (e) => {
+    hRuler.addEventListener("pointerdown", (e) => {
       e.preventDefault();
       startGuideFromRuler("h");
     });
   }
   if (vRuler) {
-    vRuler.addEventListener("mousedown", (e) => {
+    vRuler.addEventListener("pointerdown", (e) => {
       e.preventDefault();
       startGuideFromRuler("v");
     });

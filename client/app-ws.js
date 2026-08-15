@@ -59,7 +59,8 @@ function send(msg) {
 function setupLiveCursors() {
   const scrollWrap = $("canvas-scroll-wrap");
   if (!scrollWrap) return;
-  scrollWrap.addEventListener("mousemove", (e) => {
+  // Phase 2.5: pointermove covers mouse + touch; throttled to CURSOR_THROTTLE.
+  const report = (e) => {
     const now = Date.now();
     if (now - lastCursorSent < CURSOR_THROTTLE) return;
     lastCursorSent = now;
@@ -67,7 +68,8 @@ function setupLiveCursors() {
     if (!frame) return;
     const rect = frame.getBoundingClientRect();
     send({ type: "cursor", x: Math.round(e.clientX - rect.left), y: Math.round(e.clientY - rect.top) });
-  });
+  };
+  scrollWrap.addEventListener("pointermove", report);
 }
 
 function renderRemoteCursors() {

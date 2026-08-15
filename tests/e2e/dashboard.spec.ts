@@ -879,3 +879,64 @@ test("page background editor applies presets and custom values to the canvas", a
   }
   expect(errors).toEqual([]);
 });
+
+test("pointer events: touch drag moves a freeform component (Phase 2.5)", async ({ page }: { page: Page }) => {
+  const errors: string[] = [];
+  page.on("console", (msg) => {
+    if (msg.type() === "error" && !msg.text().includes("Failed to load resource")) errors.push(msg.text());
+  });
+  page.on("pageerror", (err) => errors.push(String(err)));
+
+  await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "domcontentloaded", timeout: 60000 });
+  await expect(page.locator(".topbar")).toBeVisible();
+
+  // Add a button so the canvas has a draggable component.
+  await page.evaluate(async () => {
+    await fetch("/api/component", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "button", props: { text: "可拖动按钮" } }),
+    });
+  });
+  await page.waitForTimeout(800);
+  const comp = page.locator(".comp-wrapper").first();
+  await expect(comp).toBeVisible();
+
+  const box = await comp.boundingBox();
+  expect(box).toBeTruthy();
+  const startX = box!.x + box!.width / 2;
+  const startY = box!.y + box!.height / 2;
+
+  // Dispatch synthetic pointer events to exercise the pointerdown/move/up path.
+  await page.evaluate(
+    ([x, y]) => {
+      const el = document.elementFromPoint(x, y) as HTMLElement | null;
+      const wrapper = el && el.closest ? el.closest(".comp-wrapper") : null;
+      if (!wrapper) return;
+      const fire = (type: string, px: number, py: number) => {
+        wrapper.dispatchEvent(new PointerEvent(type, {
+          bubbles: true, cancelable: true, pointerId: 1, pointerType: "touch",
+          clientX: px, clientY: py, button: 0,
+        }));
+      };
+      fire("pointerdown", x, y);
+      fire("pointermove", x + 60, y + 40);
+      fire("pointerup", x + 60, y + 40);
+    },
+    [startX, startY]
+  );
+  await page.waitForTimeout(600);
+
+  // The component's layout should have moved by ~(60, 40) (freeform default).
+  const layout = await page.evaluate(async () => {
+    const s = (await (await fetch("/api/state")).json()) as {
+      components: Array<{ id: string; layout?: { x: number; y: number } }>;
+    };
+    return s.components[0] && s.components[0].layout;
+  });
+  expect(layout).toBeTruthy();
+  expect(layout!.x).toBeGreaterThanOrEqual(50);
+  expect(layout!.y).toBeGreaterThanOrEqual(30);
+
+  expect(errors).toEqual([]);
+});

@@ -863,6 +863,15 @@ function buildTopLibCard(term) {
   const example = el("div", "top-lib-example");
   example.appendChild(buildTermExample(term));
   bubble.appendChild(example);
+  // 变种卡组：与原版术语分开展示（悬停展开各自的气泡详情）
+  if (term.variantsList && term.variantsList.length > 0) {
+    const vGroup = el("div", "top-lib-variants");
+    vGroup.appendChild(el("div", "vh-section-label", "变种"));
+    const vRow = el("div", "top-lib-vrow");
+    term.variantsList.forEach((v) => vRow.appendChild(buildVariantCard(term, v)));
+    vGroup.appendChild(vRow);
+    bubble.appendChild(vGroup);
+  }
   if (term.usage) {
     const u = el("div", "vh-usage");
     u.appendChild(el("div", "vh-section-label", "什么时候用"));
@@ -893,6 +902,89 @@ function buildTopLibCard(term) {
   }
   card.appendChild(bubble);
   return card;
+}
+
+/**
+ * 变种卡：展示某个术语的具体变体（如毛玻璃的 浅色/深色/强模糊）。
+ * 悬停时向上弹出自己的详情气泡（描述 + 该变种的迷你示例）。
+ */
+function buildVariantCard(parentTerm, variant) {
+  const card = el("div", "top-lib-vcard");
+  const nameLine = el("div", "top-lib-vname", variant.name);
+  if (variant.en) {
+    const en = el("span", "top-lib-ven", variant.en);
+    nameLine.appendChild(en);
+  }
+  card.appendChild(nameLine);
+  // 迷你示例（基于父术语 + 变种名着色/变体）
+  const ex = el("div", "tl-example-box tl-example-mini");
+  ex.appendChild(buildVariantExample(parentTerm, variant));
+  card.appendChild(ex);
+  if (variant.desc) card.appendChild(el("div", "top-lib-vdesc", variant.desc));
+
+  // 变种详情气泡（向上展开，避免与主气泡重叠）
+  const vb = el("div", "top-lib-vbubble");
+  const info = el("div", "vh-def");
+  info.textContent = `${variant.name}${variant.en ? " · " + variant.en : ""}${variant.desc ? " — " + variant.desc : ""}`;
+  vb.appendChild(info);
+  const action = vibeTermAction(parentTerm);
+  if (action) {
+    const applyBtn = el("button", "vh-apply", "＋ 添加到画布");
+    applyBtn.type = "button";
+    applyBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      addComponentViaAPI(action);
+    });
+    vb.appendChild(applyBtn);
+  }
+  card.appendChild(vb);
+  return card;
+}
+
+/**
+ * 变种的迷你示例：在父术语示例基础上，按变种名做简单变体着色，
+ * 让每个变种卡看起来不同。
+ */
+function buildVariantExample(parentTerm, variant) {
+  const base = buildTermExample(parentTerm);
+  const name = variant.name || "";
+  // 根据变种名调整颜色/样式，产生视觉差异
+  const hueMap = [
+    ["浅", "Light", "#93c5fd", "#60a5fa"],
+    ["深", "Dark", "#1e293b", "#334155"],
+    ["强", "Strong", "#f59e0b", "#f97316"],
+    ["圆", "Circle", "#34d399", "#10b981"],
+    ["胶囊", "Pill", "#a78bfa", "#8b5cf6"],
+    ["危险", "Danger", "#f87171", "#ef4444"],
+    ["次要", "Outline", "#e2e8f0", "#94a3b8"],
+    ["主要", "Primary", "#6366f1", "#4f46e5"],
+    ["文字", "Text", "#cbd5e1", "#64748b"],
+    ["线性", "Linear", "#6366f1", "#3b82f6"],
+    ["径向", "Radial", "#06b6d4", "#0ea5e9"],
+    ["双色", "Duotone", "#ec4899", "#f97316"],
+    ["同色", "Tonal", "#a5b4fc", "#818cf8"],
+    ["中", "Medium", "#818cf8", "#6366f1"],
+    ["大", "Large", "#7c3aed", "#6d28d9"],
+    ["小", "Small", "#94a3b8", "#64748b"],
+  ];
+  let hit = null;
+  for (const [key, enKey, c1, c2] of hueMap) {
+    if (name.includes(key) || (variant.en || "").includes(enKey)) { hit = [c1, c2]; break; }
+  }
+  if (hit) {
+    const [c1, c2] = hit;
+    const s = base.style.cssText || "";
+    if (s.includes("linear-gradient")) {
+      base.style.background = `linear-gradient(135deg, ${c1}, ${c2})`;
+    } else if (s.includes("background:")) {
+      base.style.background = c1;
+    } else {
+      base.style.background = `linear-gradient(135deg, ${c1}, ${c2})`;
+    }
+    base.style.border = "1px solid transparent";
+    base.style.color = "#fff";
+  }
+  return base;
 }
 
 /**

@@ -2592,6 +2592,69 @@ body::after {
   50% { transform: translateY(-6px); }
 }
 
+/* 变种卡组：与原版术语分开展示 */
+.top-lib-variants { margin-top: 6px; }
+.top-lib-vrow {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.top-lib-vcard {
+  position: relative;
+  flex: 1 1 90px;
+  max-width: 140px;
+  min-width: 84px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated, rgba(0,0,0,0.02));
+  cursor: default;
+  transition: border-color 0.15s var(--ease);
+}
+.top-lib-vcard:hover { border-color: var(--accent); }
+.top-lib-vname {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.top-lib-ven {
+  font-size: 9px;
+  font-weight: 500;
+  color: var(--text-muted);
+  font-family: var(--mono);
+  margin-left: 4px;
+}
+.tl-example-mini { margin-top: 4px; }
+.tl-example-mini .tl-example-box { height: 36px !important; font-size: 9px; }
+.top-lib-vdesc {
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--text-muted);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* 变种详情气泡（向上展开） */
+.top-lib-vbubble {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  width: 220px;
+  padding: 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16);
+  z-index: 80;
+}
+.top-lib-vcard:hover .top-lib-vbubble { display: block; }
+
 /* 主布局让出顶部库的高度 */
 .main-layout {
   min-height: 0;

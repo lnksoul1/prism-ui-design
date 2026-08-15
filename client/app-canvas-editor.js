@@ -844,6 +844,7 @@ function setupDrawTools() {
 }
 
 function init() {
+  exposePerf();
   setupI18n();
   setupTabs();
   setupPlatformSwitcher();

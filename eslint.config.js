@@ -129,7 +129,7 @@ export default [
         myClientId: "writable", normalizeColorForPicker: "readonly",
         openExplainModal: "readonly", openHtmlScreenshot: "readonly",
         pageBgAnimStyleEl: "writable", parseHex: "readonly",
-        pendingDrawTool: "writable", playMode: "writable",
+        pendingDrawTool: "writable", perfTime: "readonly", exposePerf: "readonly", playMode: "writable",
         promptStatusTimer: "writable", promptSuggestTimer: "writable",
         reconnectAttempts: "writable", relativeLuminance: "readonly",
         remoteCursors: "readonly", renderAccordion: "readonly",

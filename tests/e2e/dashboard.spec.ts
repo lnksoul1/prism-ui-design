@@ -940,3 +940,26 @@ test("pointer events: touch drag moves a freeform component (Phase 2.5)", async 
 
   expect(errors).toEqual([]);
 });
+
+test("performance instrumentation collects render stats with ?perf=1 (Phase 3.5)", async ({ page }: { page: Page }) => {
+  const errors: string[] = [];
+  page.on("console", (msg) => {
+    if (msg.type() === "error" && !msg.text().includes("Failed to load resource")) errors.push(msg.text());
+  });
+  page.on("pageerror", (err) => errors.push(String(err)));
+
+  await page.goto(`http://127.0.0.1:${port}/?perf=1`, { waitUntil: "domcontentloaded", timeout: 60000 });
+  await expect(page.locator(".topbar")).toBeVisible();
+
+  // PrismPerf is exposed with a summary + recorded stats after init renders.
+  const perf = await page.evaluate(() => {
+    const p = (window as unknown as { PrismPerf?: { enabled: boolean; stats: { renders: number; totalMs: number; window: unknown[] }; summary(): string } }).PrismPerf;
+    return p ? { enabled: p.enabled, renders: p.stats.renders, summary: p.summary() } : null;
+  });
+  expect(perf).toBeTruthy();
+  expect(perf!.enabled).toBe(true);
+  expect(perf!.renders).toBeGreaterThanOrEqual(1);
+  expect(perf!.summary).toMatch(/renders=\d+ avg=[\d.]+ms/);
+
+  expect(errors).toEqual([]);
+});

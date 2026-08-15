@@ -31,8 +31,10 @@ function renderCanvas(opts) {
   // re-render just those wrappers instead of the whole canvas.
   const onlyIds = opts && Array.isArray(opts.onlyIds) && opts.onlyIds.length > 0 ? opts.onlyIds : null;
   if (onlyIds && currentState && canvas.querySelector(".comp-wrapper")) {
-    applyComponentDelta(onlyIds);
-    applyElementSelectionHighlight();
+    perfTime("renderCanvas.delta", () => {
+      applyComponentDelta(onlyIds);
+      applyElementSelectionHighlight();
+    }, { count: onlyIds.length });
     return;
   }
 
@@ -178,14 +180,16 @@ function renderCanvas(opts) {
     ensureFreeformLayouts();
   }
 
-  components.forEach((comp) => {
-    canvas.appendChild(renderComponent(comp));
-  });
-  // 标尺/参考线跟随画布尺寸刷新
-  renderRulers();
-  renderGuides();
-  // 元素级编辑 P1: 重绘后恢复内部元素高亮
-  applyElementSelectionHighlight();
+  perfTime("renderCanvas.full", () => {
+    components.forEach((comp) => {
+      canvas.appendChild(renderComponent(comp));
+    });
+    // 标尺/参考线跟随画布尺寸刷新
+    renderRulers();
+    renderGuides();
+    // 元素级编辑 P1: 重绘后恢复内部元素高亮
+    applyElementSelectionHighlight();
+  }, { count });
 }
 
 /**

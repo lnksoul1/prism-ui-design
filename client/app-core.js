@@ -72,6 +72,74 @@ function el(tag, className, text) {
   return e;
 }
 
+// ===== Performance Metrics (Phase 3.5) =====
+
+/**
+ * Render performance instrumentation. Enabled with `?perf=1` (or
+ * `?perf=2` for per-call verbose logs). Keeps a sliding window of recent
+ * render timings and exposes them on `window.PrismPerf` so the stats can be
+ * read from the console or automated tests.
+ */
+const perfEnabled = (() => {
+  try {
+    return new URLSearchParams(window.location.search).get("perf") === "1" || new URLSearchParams(window.location.search).get("perf") === "2";
+  } catch {
+    return false;
+  }
+})();
+const perfVerbose = (() => {
+  try {
+    return new URLSearchParams(window.location.search).get("perf") === "2";
+  } catch {
+    return false;
+  }
+})();
+
+const perfStats = {
+  renders: 0,
+  totalMs: 0,
+  lastMs: 0,
+  maxMs: 0,
+  window: [],
+};
+const PERF_WINDOW = 50;
+
+/** Time a render operation; logs + records stats when ?perf= is active. */
+function perfTime(name, fn, opts) {
+  if (!perfEnabled) return fn();
+  const t0 = performance.now();
+  const result = fn();
+  const ms = performance.now() - t0;
+  perfStats.renders++;
+  perfStats.totalMs += ms;
+  perfStats.lastMs = ms;
+  if (ms > perfStats.maxMs) perfStats.maxMs = ms;
+  const entry = { name, ms, count: opts && opts.count };
+  perfStats.window.push(entry);
+  if (perfStats.window.length > PERF_WINDOW) perfStats.window.shift();
+  if (perfVerbose) {
+    const suffix = entry.count ? ` (${entry.count} comps)` : "";
+    console.debug(`[perf] ${name} ${ms.toFixed(2)}ms${suffix}`);
+  }
+  return result;
+}
+
+/** Expose perf stats to tests / console (only when enabled). */
+function exposePerf() {
+  if (!perfEnabled) return;
+  try {
+    window.PrismPerf = {
+      enabled: true,
+      verbose: perfVerbose,
+      stats: perfStats,
+      summary: () =>
+        `renders=${perfStats.renders} avg=${(perfStats.totalMs / Math.max(1, perfStats.renders)).toFixed(2)}ms last=${perfStats.lastMs.toFixed(2)}ms max=${perfStats.maxMs.toFixed(2)}ms`,
+    };
+  } catch {
+    // ignore
+  }
+}
+
 // ===== i18n (F8) =====
 
 /**

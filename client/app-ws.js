@@ -309,6 +309,10 @@ function handleChange(change) {
 // ===== Full Render =====
 
 function renderAll() {
+  perfTime("renderAll", () => renderAllImpl());
+}
+
+function renderAllImpl() {
   if (!currentState) return;
 
   // Keep the canvas platform in sync with the server state (C2 seed)

@@ -44,8 +44,8 @@ let selectedIds = [];
 // 元素级编辑 P1: 组件内部被选中的元素路径（如 "title" / "items.0.title"）。
 let selectedElementPath = null;
 let canvasZoom = 100;
-// 默认自由模式：组件可任意移动/缩放（定位核心"精确自由调整"）。
-// "流式"切换按钮保留，作为自动纵向排列的选项。
+// 布局合一 (P1): 单一"智能画布"模式——组件默认自动纵向流式排布（真实高度、
+// 不重叠），同时每个组件仍可自由拖动/缩放。不再有流式/自由二元切换。
 let canvasMode = "freeform";
 let playMode = false;
 let pendingDrawTool = null;

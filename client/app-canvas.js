@@ -190,6 +190,31 @@ function renderCanvas(opts) {
     // 元素级编辑 P1: 重绘后恢复内部元素高亮
     applyElementSelectionHighlight();
   }, { count });
+
+  // 布局合一 (P1): 渲染后测量真实高度并回写，纠正估算值（消除重叠）。
+  syncMeasuredHeights(components);
+}
+
+/**
+ * 布局合一 (P1): 将渲染后的真实高度回写到 layout.h（仅当差异明显时），
+ * 使后续的自动排布/吸附基于真实尺寸，不再重叠。回写是静默的（只更新本地
+ * 与远端，不触发整页重绘循环——只在差异 > 8px 时才发送）。
+ */
+function syncMeasuredHeights(components) {
+  const canvas = $("canvas");
+  if (!canvas) return;
+  for (const comp of components) {
+    if (!comp.layout) continue;
+    const el = canvas.querySelector(`.comp-wrapper[data-id="${CSS.escape(comp.id)}"]`);
+    if (!el) continue;
+    const realH = Math.round(el.getBoundingClientRect().height);
+    if (realH < 20) continue;
+    const curH = comp.layout.h || 0;
+    if (Math.abs(realH - curH) > 8) {
+      comp.layout.h = realH;
+      // 静默更新：仅回写高度，不广播（避免重绘循环）；拖拽结束时会广播完整布局。
+    }
+  }
 }
 
 /**
@@ -264,7 +289,8 @@ function updateComponentCount() {
 }
 
 /**
- * 自由模式下，为所有缺 layout 的顶层组件分配坐标。
+ * 布局合一 (P1): 为所有缺 layout 的顶层组件分配坐标。
+ * 优先用已渲染 DOM 的真实高度（避免重叠），否则按类型估算，兜底 140。
  * 子组件相对其父容器排列（流式），无需画布级坐标，因此不在此处递归。
  */
 function ensureFreeformLayouts() {
@@ -273,11 +299,34 @@ function ensureFreeformLayouts() {
   let cursor = 16;
   for (const comp of getCurrentComponents()) {
     if (!comp.layout) {
-      comp.layout = { x: 16, y: cursor, w: width, h: 140 };
+      const h = measureComponentHeight(comp.id) || estimatedComponentHeight(comp.type);
+      comp.layout = { x: 16, y: cursor, w: width, h };
       sendUpdateComponent(comp.id, {}, comp.layout);
     }
     cursor = Math.max(cursor, (comp.layout.y || 0) + (comp.layout.h || 140) + 16);
   }
+}
+
+/** 测量已渲染组件的真实高度（px，取整），无 DOM 时返回 null。 */
+function measureComponentHeight(compId) {
+  const canvas = $("canvas");
+  if (!canvas) return null;
+  const el = canvas.querySelector(`.comp-wrapper[data-id="${CSS.escape(compId)}"]`);
+  if (!el) return null;
+  const h = Math.round(el.getBoundingClientRect().height);
+  return h > 20 ? h : null;
+}
+
+/** 按组件类型估算的默认高度（布局合一 P1：用于尚无真实高度时）。 */
+function estimatedComponentHeight(type) {
+  const map = {
+    hero: 240, navbar: 72, card_grid: 260, cta: 180, footer: 96,
+    text_section: 120, feature_list: 220, stats: 140, pricing: 340,
+    testimonial: 160, banner: 96, timeline: 240, faq: 200, form: 260,
+    tabs: 160, accordion: 180, carousel: 220, modal: 200, sidebar: 260,
+    table: 200, bento_grid: 240, button: 56, card: 220, image: 200,
+  };
+  return map[type] || 140;
 }
 
 // Apply platform width class + device chrome to canvas
@@ -690,9 +739,15 @@ function attachFreeformDrag(wrapper, compId) {
       const x = parseFloat(wrapper.style.left) || 0;
       const y = parseFloat(wrapper.style.top) || 0;
       const compNow = getCompById(compId);
-      sendUpdateComponent(compId, {}, { x, y });
+      const measuredH = measureComponentHeight(compId);
+      sendUpdateComponent(compId, {}, { x, y, h: measuredH || (compNow && compNow.layout && compNow.layout.h) || 140 });
       if (compNow) {
-        compNow.layout = { ...(compNow.layout || {}), x, y };
+        compNow.layout = {
+          ...(compNow.layout || {}),
+          x,
+          y,
+          ...(measuredH ? { h: measuredH } : {}),
+        };
       }
     },
   });
@@ -1171,11 +1226,12 @@ function initializeFreeformLayouts() {
   // 顶层组件按列排列获得布局坐标（子组件相对父容器流式排列）。
   getCurrentComponents().forEach((comp) => {
     if (!comp.layout) {
-      const layout = { x: 16, y: cursor, w: width, h: 140 };
+      const h = measureComponentHeight(comp.id) || estimatedComponentHeight(comp.type);
+      const layout = { x: 16, y: cursor, w: width, h };
       comp.layout = layout;
       sendUpdateComponent(comp.id, {}, layout);
     }
-    cursor += (comp.layout.h || 140) + 16;
+    cursor += (comp.layout.h || estimatedComponentHeight(comp.type) || 140) + 16;
   });
 }
 
@@ -1184,43 +1240,30 @@ function autoLayout() {
   const width = canvas ? Math.max(320, Math.round(canvas.getBoundingClientRect().width) - 32) : 640;
   let cursor = 16;
   getCurrentComponents().forEach((comp) => {
-    const layout = { x: 16, y: cursor, w: width, h: comp.layout && comp.layout.h ? comp.layout.h : 140 };
+    const h = measureComponentHeight(comp.id) || (comp.layout && comp.layout.h) || estimatedComponentHeight(comp.type);
+    const layout = { x: 16, y: cursor, w: width, h };
     comp.layout = layout;
     sendUpdateComponent(comp.id, {}, layout);
-    cursor += layout.h + 16;
+    cursor += h + 16;
   });
 }
 
 function setupCanvasMode() {
+  // 布局合一 (P1): 不再有流式/自由二元切换。两个入口都做"自动排列"，
+  // 组件按真实高度纵向排布，且每个组件始终可自由拖动/缩放。
+  const autoLayoutAll = () => {
+    autoLayout();
+    renderCanvas();
+    renderInspector();
+    applyCanvasMode($("canvas"));
+  };
   const modeBtn = $("layout-mode-btn");
   if (modeBtn) {
-    modeBtn.addEventListener("click", () => {
-      canvasMode = canvasMode === "flow" ? "freeform" : "flow";
-      if (canvasMode === "freeform") {
-        initializeFreeformLayouts();
-        const hint = $("canvas-drop-hint");
-        if (hint) {
-          hint.textContent = t("freeformHint");
-          hint.style.display = "block";
-          setTimeout(() => { hint.style.display = "none"; }, 3000);
-        }
-      }
-      renderCanvas();
-      renderInspector();
-      applyCanvasMode($("canvas"));
-    });
+    modeBtn.title = "自动纵向排列组件（真实高度、不重叠）";
+    modeBtn.addEventListener("click", autoLayoutAll);
   }
   const autoBtn = $("auto-layout-btn");
-  if (autoBtn) {
-    autoBtn.addEventListener("click", () => {
-      if (canvasMode !== "freeform") {
-        canvasMode = "freeform";
-      }
-      autoLayout();
-      renderCanvas();
-      applyCanvasMode($("canvas"));
-    });
-  }
+  if (autoBtn) autoBtn.addEventListener("click", autoLayoutAll);
   applyCanvasMode($("canvas"));
 }
 

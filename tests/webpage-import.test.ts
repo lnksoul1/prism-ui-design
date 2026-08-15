@@ -83,30 +83,31 @@ test("importClientUi opens the Prism dashboard shell as html_fragment regions", 
   const result = importClientUi(false);
   assert.equal(result.pageName, "Prism 客户端 UI");
   assert.ok(result.pageId.startsWith("page_"));
-  assert.ok(result.imported >= 5, `expected >= 5 region components, got ${result.imported}`);
+  assert.ok(result.imported >= 3, `expected >= 3 region components, got ${result.imported}`);
   const types = result.components.map((c) => c.type);
   assert.ok(types.every((t) => t === "html_fragment"), `all html_fragment: ${types}`);
   const regions = result.components.map((c) => String((c.props as { region?: string }).region ?? ""));
-  for (const expected of ["topbar", "toplib", "left", "canvas", "right"]) {
+  for (const expected of ["topbar", "toplib", "main"]) {
     assert.ok(regions.includes(expected), `expected region ${expected} in ${regions}`);
   }
-  // 忠实还原：topbar 含真实 logo，toplib 含 13 个 top-lib-tab
+  // 忠实还原：topbar 含真实 logo，toplib 含 13 个 top-lib-tab，
+  // main 保留三栏 flex 布局（left/canvas/right 同容器 → 并排显示）
   const toplib = result.components.find((c) => (c.props as { region?: string }).region === "toplib");
   const toplibHtml = String((toplib?.props as { html?: string }).html ?? "");
   const tabCount = (toplibHtml.match(/class="top-lib-tab"/g) || []).length;
   assert.equal(tabCount, 13, `expected 13 top-lib-tab, got ${tabCount}`);
   const topbar = result.components.find((c) => (c.props as { region?: string }).region === "topbar");
   assert.match(String((topbar?.props as { html?: string }).html ?? ""), /🔮 Prism/);
+  const main = result.components.find((c) => (c.props as { region?: string }).region === "main");
+  const mainHtml = String((main?.props as { html?: string }).html ?? "");
+  assert.ok(mainHtml.includes("main-layout"), "main region keeps the flex layout container");
+  assert.ok(mainHtml.includes("panel panel-left") && mainHtml.includes("panel panel-right"), "both side panels in main");
   // 聊天框已删除：不应再出现 prompt-input
-  assert.ok(!toplibHtml.includes("prompt-input") && !topbarHtmlIncludesPrompt(result), "no chat box fragment");
+  assert.ok(!JSON.stringify(result.components.map((c) => c.props)).includes('id="prompt-input"'), "no chat box fragment");
   const state = stateStore.getState();
   const currentPage = state.pages.find((p) => p.id === result.pageId);
   assert.equal(currentPage?.components.length, result.imported);
 });
-
-function topbarHtmlIncludesPrompt(result: { components: Array<{ props: Record<string, unknown> }> }): boolean {
-  return result.components.some((c) => String((c.props as { html?: string }).html ?? "").includes('id="prompt-input"'));
-}
 
 test("splitClientRegions parses region markers", () => {
   const html =

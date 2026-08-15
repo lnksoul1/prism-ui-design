@@ -46,8 +46,12 @@ function getSelectedComps() {
 }
 
 function selectComponent(id, additive) {
-  // 组件级重新选择时清除元素级选择（元素选择由 selectElement 管理）
+  // 组件级重新选择时清除元素级选择（元素选择由 selectElement 管理）；
+  // 点击同一片段的内层元素时保留元素选中（组件与元素同时选中）
   selectedElementPath = null;
+  if (typeof clearPrismFragElementSelection === "function" && prismFragElementSel && prismFragElementSel.compId !== id) {
+    clearPrismFragElementSelection();
+  }
   if (additive) {
     const idx = selectedIds.indexOf(id);
     if (idx >= 0) {
@@ -781,6 +785,84 @@ function renderInspectorProps(panel, comp) {
   }
   behaviorSection.appendChild(behaviorInfo);
   panel.appendChild(behaviorSection);
+
+  // 片段元素级编辑 (v2): html_fragment 内层选中元素 → 文本/样式调整
+  if (comp.type === "html_fragment") {
+    // 实时按 compId+path 解析元素（事件回调内再取，避免陈旧引用）
+    const currentFragElement = () => {
+      const host = document.querySelector(`.comp-wrapper[data-id="${CSS.escape(comp.id)}"] .prism-fragment`);
+      const root = host && host.shadowRoot ? host.shadowRoot.querySelector(".prism-fragment-root") : null;
+      return root && prismFragElementSel && prismFragElementSel.compId === comp.id
+        ? fragElementByPath(root, prismFragElementSel.path)
+        : null;
+    };
+    const selEl = currentFragElement();
+    if (selEl) {
+      const elemSection = el("div", "inspector-section");
+      elemSection.appendChild(el("div", "inspector-section-title", `元素 · ${selEl.tagName.toLowerCase()}`));
+      const commit = () => commitFragmentHtml(comp.id);
+
+      // 文字
+      if (selEl.childElementCount === 0) {
+        const txtRow = el("div", "prop-row");
+        txtRow.appendChild(el("div", "prop-label", t("behaviorMessage")));
+        const txt = el("input", "prop-text-input");
+        txt.value = selEl.textContent || "";
+        txt.addEventListener("change", () => {
+          const el = currentFragElement();
+          if (!el) return;
+          el.textContent = txt.value;
+          commit();
+        });
+        txtRow.appendChild(txt);
+        elemSection.appendChild(txtRow);
+      }
+
+      // 样式旋钮：背景色 / 文字色 / 字号 / 内边距 / 圆角
+      const styleRows = [
+        { label: "背景色", prop: "background-color", init: "" },
+        { label: "文字色", prop: "color", init: "" },
+        { label: "字号", prop: "font-size", init: "px" },
+        { label: "内边距", prop: "padding", init: "px" },
+        { label: "圆角", prop: "border-radius", init: "px" },
+      ];
+      styleRows.forEach(({ label, prop, init }) => {
+        const row = el("div", "prop-row");
+        row.appendChild(el("div", "prop-label", label));
+        const input = el("input", "prop-text-input");
+        const cur = selEl.style[prop] || "";
+        input.value = cur.replace(/px$/, "") + (cur ? "" : "");
+        input.placeholder = cur || "";
+        input.addEventListener("change", () => {
+          const el = currentFragElement();
+          if (!el) return;
+          const v = input.value.trim();
+          if (!v) {
+            el.style.removeProperty(prop);
+          } else {
+            el.style.setProperty(prop, /^-?[\d.]+$/.test(v) ? v + init : v);
+          }
+          commit();
+        });
+        row.appendChild(input);
+        elemSection.appendChild(row);
+      });
+
+      // 移除元素
+      const delRow = el("div", "prop-row");
+      const delBtn = el("button", "inspector-action-btn", "移除该元素");
+      delBtn.addEventListener("click", () => {
+        const el = currentFragElement();
+        if (el) el.remove();
+        clearPrismFragElementSelection();
+        commit();
+      });
+      delRow.appendChild(delBtn);
+      elemSection.appendChild(delRow);
+
+      panel.appendChild(elemSection);
+    }
+  }
 
   // Actions
   const actions = el("div", "inspector-actions");

@@ -1104,6 +1104,7 @@ function setupShadowInlineEditing(host, shadow) {
     if (!(t instanceof Element)) return;
     if (!t.closest("[data-editable='true']")) return;
     e.stopPropagation();
+    t.setAttribute("data-prism-editing", "1");
     t.contentEditable = "true";
     t.focus();
     try {
@@ -1121,20 +1122,21 @@ function setupShadowInlineEditing(host, shadow) {
     "blur",
     (e) => {
       const t = e.target;
-      if (!(t instanceof Element) || !t.hasAttribute("data-editable") || t.contentEditable !== "true") return;
+      if (!(t instanceof Element) || t.getAttribute("data-prism-editing") !== "1") return;
+      t.removeAttribute("data-prism-editing");
       t.contentEditable = "false";
       const wrapper = host.closest(".comp-wrapper");
       const compId = wrapper ? wrapper.dataset.id : null;
       if (!compId) return;
       const comp = getCompById(compId);
       if (!comp) return;
-      const updated = root.innerHTML;
+      const updated = cleanFragmentHtml(root.innerHTML);
       if (updated === comp.props.html) return;
-      send({
-        type: "update_component",
-        id: compId,
-        props: { ...(comp.props || {}), html: updated },
-      });
+      fetch(`/api/component/${encodeURIComponent(compId)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ props: { html: updated } }),
+      }).catch((err) => console.error("Fragment edit commit failed:", err));
     },
     true
   );
@@ -1150,8 +1152,117 @@ function renderHtmlFragment(props) {
   if (root) {
     markEditableInShadow(root);
     setupShadowInlineEditing(host, shadow);
+    setupFragmentElementSelection(host, root);
+  }
+  // 重绘后恢复元素选中高亮
+  const wrapperId = host.closest(".comp-wrapper")?.dataset?.id;
+  if (wrapperId && prismFragElementSel && prismFragElementSel.compId === wrapperId) {
+    const el = fragElementByPath(root, prismFragElementSel.path);
+    if (el) {
+      el.style.outline = "2px dashed var(--accent, #2383E2)";
+      el.style.outlineOffset = "2px";
+    }
   }
   return host;
+}
+
+// ===== 片段元素级编辑 (v2): 内层元素可选中并调整样式 =====
+
+let prismFragElementSel = null; // { compId, path: number[] }
+
+/** 计算元素在片段根下的路径（子索引链）。 */
+function fragElementPath(root, el) {
+  const path = [];
+  let cur = el;
+  while (cur && cur !== root) {
+    const parent = cur.parentElement;
+    if (!parent) return null;
+    path.unshift(Array.prototype.indexOf.call(parent.children, cur));
+    cur = parent;
+  }
+  return path.length ? path : null;
+}
+
+/** 按路径取回元素（重绘后仍可定位）。 */
+function fragElementByPath(root, path) {
+  let cur = root;
+  for (const idx of path || []) {
+    if (!cur || !cur.children || idx >= cur.children.length) return null;
+    cur = cur.children[idx];
+  }
+  return cur;
+}
+
+function clearPrismFragElementHighlight() {
+  if (prismFragElementSel) {
+    document.querySelectorAll(".prism-fragment").forEach((h) => {
+      const root = h.shadowRoot && h.shadowRoot.querySelector(".prism-fragment-root");
+      if (root) {
+        const el = fragElementByPath(root, prismFragElementSel.path);
+        if (el) el.style.outline = "";
+      }
+    });
+    prismFragElementSel = null;
+  }
+}
+
+function clearPrismFragElementSelection() {
+  clearPrismFragElementHighlight();
+}
+
+function selectPrismFragElement(compId, el, root) {
+  clearPrismFragElementHighlight();
+  const path = fragElementPath(root, el);
+  if (!path) return;
+  prismFragElementSel = { compId, path };
+  el.style.outline = "2px dashed var(--accent, #2383E2)";
+  el.style.outlineOffset = "2px";
+  if (typeof renderInspector === "function") renderInspector();
+}
+
+/** 片段根点击：内层元素 → 选中（高亮 + 检查器样式面板）；空白 → 取消元素选中。 */
+function setupFragmentElementSelection(host, root) {
+  const wrapperId = () => host.closest(".comp-wrapper")?.dataset?.id || null;
+  root.addEventListener("click", (e) => {
+    const compId = wrapperId();
+    if (!compId) return;
+    const t = e.target;
+    if (!(t instanceof Element) || t === root) {
+      if (prismFragElementSel && prismFragElementSel.compId === compId) {
+        clearPrismFragElementSelection();
+        if (typeof renderInspector === "function") renderInspector();
+      }
+      return;
+    }
+    if (t.contentEditable === "true") return;
+    selectPrismFragElement(compId, t, root);
+  });
+}
+
+/** 序列化前剥离编辑器注入的属性（data-editable/contenteditable），保持源码干净。 */
+function cleanFragmentHtml(html) {
+  return String(html)
+    .replace(/\s+data-editable="true"/g, "")
+    .replace(/\s+contenteditable="(?:true|false)"/g, "");
+}
+
+/** 把片段当前 HTML 序列化回组件（元素样式/文字改动提交）。
+ *  走 REST 而非 WS：WS 的乐观并发（base_revision）在导入等批量变更后
+ *  客户端修订号可能过期导致更新被拒；片段编辑无需并发检查。 */
+function commitFragmentHtml(compId) {
+  const host = document.querySelector(`.comp-wrapper[data-id="${CSS.escape(compId)}"] .prism-fragment`);
+  const root = host && host.shadowRoot ? host.shadowRoot.querySelector(".prism-fragment-root") : null;
+  if (!root) return;
+  const comp = getCompById(compId);
+  if (!comp) return;
+  const updated = cleanFragmentHtml(root.innerHTML);
+  if (updated === comp.props.html) return;
+  // 只提交 html（服务端 merge 保留 css/region），避免 130KB css 超 body 限制
+  fetch(`/api/component/${encodeURIComponent(compId)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ props: { html: updated } }),
+  }).catch((err) => console.error("Fragment commit failed:", err));
 }
 
 // ===== 画布绘制 (第一步: 预览画布直接绘制，统一坐标系) =====

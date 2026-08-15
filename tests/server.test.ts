@@ -261,7 +261,7 @@ test(
         components: Array<{ type: string }>;
       };
       assert.equal(clientImport.success, true);
-      assert.ok(clientImport.imported >= 5);
+      assert.ok(clientImport.imported >= 3);
       assert.equal(clientImport.pageName, "Prism 客户端 UI");
       // Provenance is recorded so the apply banner covers client-UI imports too
       const clientImports = (await (await fetch(`${base}/api/imports`)).json()) as {

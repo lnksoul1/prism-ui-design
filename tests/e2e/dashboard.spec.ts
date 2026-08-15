@@ -315,20 +315,32 @@ test("import wizard: client-UI source renders faithfully and applies back to cli
   });
   expect(faithful.logo).toBe(true);
   expect(faithful.maxTabs).toBe(13);
-  expect(faithful.shadowCount).toBeGreaterThanOrEqual(5);
+  expect(faithful.shadowCount).toBeGreaterThanOrEqual(3);
+
+  // 等待导入后的重绘批次稳定，再开始编辑（避免元素引用被重绘替换）
+  await page.waitForTimeout(800);
 
   // 编辑 shadow 内文本（双击 logo → 改字 → blur 提交到 props.html）
-  await page.evaluate(() => {
+  const editApplied = await page.evaluate(() => {
     const hosts = Array.from(document.querySelectorAll(".prism-fragment"));
-    const target = hosts.find((h) => h.shadowRoot && h.shadowRoot.innerHTML.includes("🔮 Prism"))!;
-    const root = target.shadowRoot!.querySelector(".prism-fragment-root")!;
+    const target = hosts.find((h) => h.shadowRoot && h.shadowRoot.querySelector(".prism-fragment-root .topbar, .prism-fragment-root .logo"));
+    if (!target) {
+      // 退化：按 innerHTML 查找含 logo 的片段
+      const alt = hosts.find((h) => h.shadowRoot && h.shadowRoot.innerHTML.includes("🔮 Prism"));
+      if (!alt) return "no-target";
+    }
+    const host = target || hosts.find((h) => h.shadowRoot && h.shadowRoot.innerHTML.includes("🔮 Prism"));
+    const root = host.shadowRoot.querySelector(".prism-fragment-root");
     const el = Array.from(root.querySelectorAll("span, a, div")).find(
-      (x) => x.childElementCount === 0 && x.textContent!.includes("Prism")
-    )!;
-    el.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+      (x) => x.childElementCount === 0 && x.textContent.includes("Prism")
+    );
+    if (!el) return "no-el";
+    el.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, composed: true }));
     el.textContent = "🔮 Prism E2E";
     el.dispatchEvent(new Event("blur", { bubbles: true }));
+    return el.isConnected ? "ok" : "detached";
   });
+  expect(editApplied).toBe("ok");
   await expect
     .poll(async () => {
       return page.evaluate(async () => {

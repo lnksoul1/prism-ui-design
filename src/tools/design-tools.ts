@@ -718,6 +718,21 @@ ${pageBgKeyframes}
     .badge { display: inline-block; padding: 0.25rem 0.75rem; border-radius: var(--radius-full, 9999px); font-size: var(--text-sm, 0.875rem); background: var(--color-primary, #6366F1); color: #fff; }
     .avatar { display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px; border-radius: var(--radius-full, 9999px); background: var(--color-primary, #6366F1); color: #fff; overflow: hidden; }
     .avatar img { width: 100%; height: 100%; object-fit: cover; }
+    /* 移动端响应式 (Phase 3.2): grids collapse to a single column on phones. */
+    @media (max-width: 480px) {
+      .card-grid--2col, .card-grid--3col, .card-grid--4col,
+      .feature-grid, .bento, .pricing__grid, .stats__grid {
+        grid-template-columns: 1fr !important;
+        flex-direction: column !important;
+      }
+      .navbar { flex-wrap: wrap; gap: 0.5rem; }
+      .hero { padding: 2rem 1rem; }
+      .hero h1 { font-size: 1.75rem; }
+      .footer { flex-direction: column; gap: 1rem; text-align: center; }
+      .footer__links a { margin: 0 0.75rem; }
+      .card { padding: 1rem; }
+      .table-wrap { overflow-x: auto; }
+    }
   </style>
 ${runtime.headScripts}
 </head>

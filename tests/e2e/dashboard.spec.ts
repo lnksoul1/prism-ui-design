@@ -1069,3 +1069,43 @@ test("performance instrumentation collects render stats with ?perf=1 (Phase 3.5)
 
   expect(errors).toEqual([]);
 });
+
+test("mobile platform preview collapses grids to a single column (Phase 3.2)", async ({ page }: { page: Page }) => {
+  const errors: string[] = [];
+  page.on("console", (msg) => {
+    if (msg.type() === "error" && !msg.text().includes("Failed to load resource")) errors.push(msg.text());
+  });
+  page.on("pageerror", (err) => errors.push(String(err)));
+
+  await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "domcontentloaded", timeout: 60000 });
+  await expect(page.locator(".topbar")).toBeVisible();
+
+  // Add a 3-column card grid via REST.
+  await page.evaluate(async () => {
+    await fetch("/api/component", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "card_grid",
+        variant: "3col",
+        props: { items: [{ title: "A" }, { title: "B" }, { title: "C" }] },
+      }),
+    });
+  });
+  const grid = page.locator(".comp-card-grid.cols-3");
+  await expect(grid).toBeVisible({ timeout: 10000 });
+
+  // Desktop: 3 columns.
+  const desktopCols = await grid.evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(" ").length);
+  expect(desktopCols).toBeGreaterThanOrEqual(2);
+
+  // Switch to the mobile platform → the canvas narrows to 375px and the
+  // media query collapses the grid to a single column.
+  await page.locator("#platform-select").selectOption("mobile-ios");
+  await expect(page.locator("#canvas")).toHaveClass(/device-mobile/);
+  await expect.poll(async () => {
+    return grid.evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(" ").filter((c) => c.trim() !== "").length);
+  }, { timeout: 10000 }).toBe(1);
+
+  expect(errors).toEqual([]);
+});

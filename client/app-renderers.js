@@ -344,7 +344,7 @@ function renderButton(props, variant) {
 }
 
 function renderStats(props) {
-  const container = el("div");
+  const container = el("div", "comp-stats");
   container.style.cssText = "display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:16px;padding:24px;border-radius:10px;";
   const items = props.items || [];
   items.forEach((item, i) => {
@@ -369,7 +369,7 @@ function renderStats(props) {
 }
 
 function renderPricing(props, variant) {
-  const grid = el("div");
+  const grid = el("div", "comp-pricing");
   grid.style.cssText = "display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;";
   const plans = props.plans || [];
   plans.forEach((plan, i) => {

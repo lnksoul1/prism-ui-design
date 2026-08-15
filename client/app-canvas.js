@@ -286,6 +286,10 @@ function applyPlatform(canvas) {
   const deviceClass = `device-${pf.device}`;
   canvas.classList.remove("device-desktop", "device-tablet", "device-mobile");
   canvas.classList.add(deviceClass);
+  // Phase 3.2: narrow-canvas marks the mobile preview so component grids
+  // collapse via container-scoped rules (media queries can't see the canvas
+  // width, only the viewport).
+  canvas.classList.toggle("narrow-canvas", pf.device === "mobile");
   const chrome = $("platform-chrome");
   if (chrome) {
     chrome.classList.remove("device-desktop", "device-tablet", "device-mobile");

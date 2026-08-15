@@ -759,6 +759,92 @@ body::after {
 .comp-card-grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
 .comp-card-grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
 .comp-card-grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
+
+/* ===== 移动端响应式 (Phase 3.2): grids collapse to a single column on the
+   mobile canvas preview (.narrow-canvas, container-scoped) and on exported
+   mobile pages (media query below). ===== */
+.canvas.narrow-canvas .comp-card-grid.cols-2,
+.canvas.narrow-canvas .comp-card-grid.cols-3,
+.canvas.narrow-canvas .comp-card-grid.cols-4,
+.canvas.narrow-canvas .comp-feature-grid,
+.canvas.narrow-canvas .comp-bento,
+.canvas.narrow-canvas .comp-pricing {
+  grid-template-columns: 1fr !important;
+}
+.canvas.narrow-canvas .comp-feature-list .comp-feature-item {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+.canvas.narrow-canvas .comp-stats,
+.canvas.narrow-canvas .comp-stats-grid {
+  grid-template-columns: repeat(2, 1fr) !important;
+}
+.canvas.narrow-canvas .comp-table {
+  overflow-x: auto;
+}
+.canvas.narrow-canvas .comp-table table {
+  min-width: 480px;
+}
+.canvas.narrow-canvas .comp-hero {
+  padding: 32px 16px;
+}
+.canvas.narrow-canvas .comp-hero h1 {
+  font-size: 24px;
+}
+.canvas.narrow-canvas .comp-navbar {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.canvas.narrow-canvas .comp-navbar .nav-links {
+  order: 3;
+  width: 100%;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* Exported pages: narrow viewports (phones) collapse the same grids. */
+@media (max-width: 480px) {
+  .comp-card-grid.cols-2,
+  .comp-card-grid.cols-3,
+  .comp-card-grid.cols-4,
+  .comp-feature-grid,
+  .comp-bento,
+  .comp-pricing {
+    grid-template-columns: 1fr !important;
+  }
+  .comp-feature-list .comp-feature-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .comp-stats,
+  .comp-stats-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  .comp-table {
+    overflow-x: auto;
+  }
+  .comp-table table {
+    min-width: 480px;
+  }
+  .comp-hero {
+    padding: 32px 16px;
+  }
+  .comp-hero h1 {
+    font-size: 24px;
+  }
+  .comp-navbar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .comp-navbar .nav-links {
+    order: 3;
+    width: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+}
 .comp-card {
   padding: 20px;
   border-radius: var(--radius);

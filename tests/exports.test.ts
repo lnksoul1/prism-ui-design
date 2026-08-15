@@ -98,3 +98,18 @@ test("CSS-injection attempts cannot break out of the export stylesheet (Phase 3.
   const code = exportDesign("html");
   assert.ok(!code.includes("</style><script>alert(7)"), "CSS breakout prevented in class attribute");
 });
+
+test("HTML export embeds mobile responsive rules (Phase 3.2)", () => {
+  stateStore.resetForTests();
+  stateStore.setProjectName("Responsive Test", "ai");
+  stateStore.addComponent("card_grid", "3col", {
+    items: [{ title: "A" }, { title: "B" }, { title: "C" }],
+  }, null, "ai");
+  stateStore.addComponent("navbar", "simple", { brand: "Brand" }, null, "ai");
+  stateStore.addComponent("hero", "centered", { title: "Hi" }, null, "ai");
+  const code = exportDesign("html");
+  assert.match(code, /@media \(max-width: 480px\)/);
+  assert.match(code, /\.card-grid--2col, \.card-grid--3col, \.card-grid--4col/);
+  assert.match(code, /grid-template-columns: 1fr !important/);
+  assert.match(code, /\.navbar \{ flex-wrap: wrap/);
+});

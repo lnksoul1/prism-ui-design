@@ -3179,6 +3179,46 @@ body.theme-dark .canvas-scroll-wrap {
   font-size: 12px;
   padding: 4px 6px;
 }
+
+/* ===== 动效时间轴 (Phase 3.1) ===== */
+.anim-timeline {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.anim-timeline-bar {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  position: relative;
+}
+.anim-timeline-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-light, #a78bfa));
+  border-radius: 4px;
+}
+.anim-timeline-play {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font);
+  transition: all 0.15s var(--ease);
+}
+.anim-timeline-play:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
 .inspector-delete-btn {
   width: 100%;
   padding: 8px;

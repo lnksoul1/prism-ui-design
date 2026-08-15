@@ -1109,3 +1109,58 @@ test("mobile platform preview collapses grids to a single column (Phase 3.2)", a
 
   expect(errors).toEqual([]);
 });
+
+test("animation timeline previews the entry animation on the selected component (Phase 3.1)", async ({ page }: { page: Page }) => {
+  const errors: string[] = [];
+  page.on("console", (msg) => {
+    if (msg.type() === "error" && !msg.text().includes("Failed to load resource")) errors.push(msg.text());
+  });
+  page.on("pageerror", (err) => errors.push(String(err)));
+
+  await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "domcontentloaded", timeout: 60000 });
+  await expect(page.locator(".topbar")).toBeVisible();
+
+  // Add a hero and select it so the inspector animation section is visible.
+  await page.evaluate(async () => {
+    await fetch("/api/component", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "hero", props: { title: "动效测试" } }),
+    });
+  });
+  const comp = page.locator(".comp-wrapper").first();
+  await expect(comp).toBeVisible({ timeout: 10000 });
+  await comp.click();
+  await expect(page.locator(".inspector-tabs")).toBeVisible();
+
+  // The animation section now includes the timeline controls.
+  await expect(page.locator(".anim-timeline")).toBeVisible();
+  await expect(page.locator(".anim-timeline-play")).toBeVisible();
+
+  // Choose an entry animation (fadeUp) via the entry select.
+  const entrySelect = page.locator("select.prop-select").first();
+  await entrySelect.selectOption("fadeUp");
+  await page.waitForTimeout(400);
+
+  // Verify the animation persisted on the component.
+  const anim = await page.evaluate(async () => {
+    const s = (await (await fetch("/api/state")).json()) as {
+      components: Array<{ animation?: { entry?: string } }>;
+    };
+    return s.components[0] && s.components[0].animation;
+  });
+  expect(anim?.entry).toBe("fadeUp");
+
+  // Replaying fills the timeline bar (width animates to 100% then resets).
+  await page.locator(".anim-timeline-play").click();
+  await expect.poll(async () => {
+    return page.evaluate(() => {
+      const fill = document.querySelector(".anim-timeline-fill");
+      if (!fill) return false;
+      const w = fill.style.width;
+      return w === "100%";
+    });
+  }, { timeout: 3000 }).toBe(true);
+
+  expect(errors).toEqual([]);
+});

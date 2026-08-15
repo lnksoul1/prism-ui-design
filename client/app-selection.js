@@ -579,6 +579,55 @@ function renderInspectorProps(panel, comp) {
   durGroup.appendChild(durInput);
   durRow.appendChild(durGroup);
   animSection.appendChild(durRow);
+
+  // ===== 动效时间轴 (Phase 3.1): visual timeline + live replay preview =====
+  const delayRow = el("div", "prop-row");
+  delayRow.appendChild(el("div", "prop-label", "延迟 (s)"));
+  const delayInput = el("input", "prop-num-input");
+  delayInput.type = "number";
+  delayInput.min = "0";
+  delayInput.max = "3";
+  delayInput.step = "0.1";
+  delayInput.value = String(anim.delay || 0);
+  delayInput.addEventListener("change", () => {
+    sendSetAnimation(comp.id, { delay: Math.max(0, parseFloat(delayInput.value) || 0) });
+  });
+  delayRow.appendChild(delayInput);
+  animSection.appendChild(delayRow);
+
+  const curveRow = el("div", "prop-row");
+  curveRow.appendChild(el("div", "prop-label", "缓动"));
+  const curveSelect = el("select", "prop-select");
+  const CURVES = [
+    ["ease-out", "ease-out"],
+    ["ease-in", "ease-in"],
+    ["ease-in-out", "ease-in-out"],
+    ["linear", "linear"],
+    ["spring", "spring (回弹)"],
+  ];
+  curveSelect.innerHTML = CURVES
+    .map(([v, label]) => `<option value="${v}" ${(anim.curve || "ease-out") === v ? "selected" : ""}>${label}</option>`)
+    .join("");
+  curveSelect.addEventListener("change", () => {
+    sendSetAnimation(comp.id, { curve: curveSelect.value });
+  });
+  curveRow.appendChild(curveSelect);
+  animSection.appendChild(curveRow);
+
+  // Timeline: a bar that fills over duration+delay when previewing, plus a
+  // replay button that re-runs the entry animation on the canvas wrapper.
+  const timelineWrap = el("div", "anim-timeline");
+  const timelineBar = el("div", "anim-timeline-bar");
+  timelineBar.appendChild(el("div", "anim-timeline-fill"));
+  const playBtn = el("button", "anim-timeline-play", "▶ 预览动效");
+  playBtn.type = "button";
+  playBtn.addEventListener("click", () => {
+    playComponentAnimation(comp.id, timelineBar);
+  });
+  timelineWrap.appendChild(timelineBar);
+  timelineWrap.appendChild(playBtn);
+  animSection.appendChild(timelineWrap);
+
   panel.appendChild(animSection);
 
   // Behavior (行为模型 P1): bind an interaction triggered in play mode
@@ -996,6 +1045,60 @@ async function renderInspectorCode(panel, comp) {
 
 function sendSetAnimation(id, patch) {
   send({ type: "set_animation", component_id: id, ...patch });
+}
+
+/**
+ * 动效时间轴 (Phase 3.1): replay the selected component's entry animation on
+ * the canvas wrapper while animating a timeline fill over duration + delay.
+ * The wrapper is re-rendered so the transition/keyframes start fresh.
+ */
+function playComponentAnimation(compId, timelineBar) {
+  const comp = getCompById(compId);
+  if (!comp || !comp.animation || !comp.animation.entry) {
+    showToastMsg("该组件暂无入场动效，请先选择一个入场动画", true);
+    return;
+  }
+  const anim = comp.animation;
+  const duration = anim.duration || 0.4;
+  const delay = anim.delay || 0;
+  const total = duration + delay;
+  const canvas = $("canvas");
+  if (!canvas) return;
+  const wrapper = canvas.querySelector(`.comp-wrapper[data-id="${CSS.escape(compId)}"]`);
+  if (!wrapper) return;
+
+  // Reset any in-flight timeline fill.
+  const fill = timelineBar ? timelineBar.querySelector(".anim-timeline-fill") : null;
+  if (fill) {
+    fill.style.transition = "none";
+    fill.style.width = "0%";
+  }
+  // Force reflow so the fill restarts from 0.
+  if (fill) {
+    void fill.offsetWidth;
+  }
+
+  // Re-render the wrapper to restart the animation (transition needs a fresh
+  // element state). Use silent re-render to avoid the enter animation double.
+  const fresh = renderComponent(comp);
+  if (fresh) {
+    if (fill) {
+      // Animate the timeline bar over the real duration (+ delay offset).
+      requestAnimationFrame(() => {
+        fill.style.transition = `width ${total}s linear ${delay}s`;
+        fill.style.width = "100%";
+      });
+      setTimeout(() => {
+        if (fill) {
+          fill.style.transition = "none";
+          fill.style.width = "0%";
+        }
+      }, (total + 0.2) * 1000);
+    }
+    wrapper.replaceWith(fresh);
+    // Re-apply selection highlight (replaceWith dropped it).
+    applyElementSelectionHighlight();
+  }
 }
 
 function renderLayerPanel() {

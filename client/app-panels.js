@@ -438,10 +438,15 @@ function renderPageSwitcher() {
 
   container.innerHTML = "";
   const currentId = currentState.currentPageId;
+  // Notion 风：侧栏页面用 emoji 做轻量图标
+  const PAGE_EMOJIS = ["📄", "🗂️", "📋", "📊", "🧭", "🔖", "📌", "🖼️"];
 
-  currentState.pages.forEach((page) => {
+  currentState.pages.forEach((page, idx) => {
     const tab = el("div", "page-tab" + (page.id === currentId ? " active" : ""));
     tab.dataset.pageId = page.id;
+
+    const icon = el("span", "page-icon", PAGE_EMOJIS[idx % PAGE_EMOJIS.length]);
+    tab.appendChild(icon);
 
     const name = el("span", "page-name", page.name || "未命名");
     tab.appendChild(name);

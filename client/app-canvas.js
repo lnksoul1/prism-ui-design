@@ -224,6 +224,11 @@ function syncMeasuredHeights(components) {
 function applyComponentDelta(ids) {
   const canvas = $("canvas");
   if (!canvas) return;
+  // 增量路径也必须保证布局坐标（布局合一 P1）：模板应用时组件逐个到达，
+  // 若跳过此步会形成「首个组件绝对定位、其余流式」的混合状态导致重叠。
+  if (canvasMode === "freeform") {
+    ensureFreeformLayouts();
+  }
   const all = getCurrentComponents();
 
   // Top-level component ids: children render inside their parent wrapper, so

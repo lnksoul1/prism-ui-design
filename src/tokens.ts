@@ -15,10 +15,8 @@ import {
   hexToHsl,
   hslToHex,
   generateHarmony,
-  generateNeutralGrays,
   normalizeHex,
   isValidHex,
-  adjustLightness,
 } from "./utils/color.js";
 
 export type TokenCategory =
@@ -109,7 +107,7 @@ export const SHADOW_SYSTEM_PRESETS: Record<
 /**
  * Generate the neutral default token set (Prism 无风格预设：这是每次应用
  * 设计系统前的中性基础，品牌设计系统再在其上覆盖颜色/圆角/阴影/字体)。
- * `baseColor` 覆盖主色；缺省用中性蓝灰。
+ * `baseColor` 覆盖主色；缺省用 Notion 蓝（vibe-hub.org/style-notion）。
  */
 export function generateStyleTokens(
   baseColor?: string
@@ -118,27 +116,27 @@ export function generateStyleTokens(
   if (baseColor && isValidHex(baseColor)) {
     baseHex = normalizeHex(baseColor);
   } else {
-    baseHex = hslToHex({ h: 220, s: 45, l: 50 });
+    // Notion 蓝 #2383E2 ≈ hsl(210, 73%, 51%)
+    baseHex = hslToHex({ h: 210, s: 73, l: 51 });
   }
 
   const baseHsl = hexToHsl(baseHex);
   const harmonyColors = generateHarmony(baseHsl, "monochromatic");
-  const neutralHsls = generateNeutralGrays(baseHsl, 11);
 
-  // Colors — 中性默认
+  // Colors — Notion 风中性默认（暖灰画布 + 白色内容页 + 墨色文字）
   const colors: Record<string, string> = {
     "color-primary": hslToHex(harmonyColors[1]),
     "color-primary-dark": hslToHex(harmonyColors[0]),
     "color-primary-light": hslToHex(harmonyColors[2]),
     "color-accent": hslToHex(harmonyColors[3]),
-    "color-bg": "#FFFFFF",
-    "color-surface": "#F7F8FA",
-    "color-text": "#1A1A2E",
-    "color-text-muted": hslToHex(neutralHsls[5]),
-    "color-border": hslToHex(adjustLightness(neutralHsls[8], -5)),
-    "color-success": "#22C55E",
-    "color-warning": "#F59E0B",
-    "color-error": "#EF4444",
+    "color-bg": "#F7F7F5",
+    "color-surface": "#FFFFFF",
+    "color-text": "#37352F",
+    "color-text-muted": "#6B6B6B",
+    "color-border": "#E8E8E6",
+    "color-success": "#4AA367",
+    "color-warning": "#C99800",
+    "color-error": "#E03E3E",
   };
 
   // Typography — 中性默认

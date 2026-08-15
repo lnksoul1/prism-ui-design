@@ -1,75 +1,78 @@
 /* ===================================================================
    PRISM STUDIO — Real-Time Design Dashboard
-   Aesthetic: Modern Minimal Glassmorphism — neutral slate ink, frosted
-   white glass, hairline borders, one restrained violet accent, a soft
-   desaturated ambient wash. Outfit + Inter + JetBrains Mono.
+   Aesthetic: Notion Style (vibe-hub.org/style-notion) — warm gray canvas
+   #F7F7F5, white content sheets, ink #37352F, 1px hairline dividers,
+   grayscale text hierarchy, restrained blue accent, emoji lightweight
+   icons, context actions on hover. System UI font stack.
    =================================================================== */
 
 
 /* ===== Reset ===== */
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
-/* ===== Design Tokens — Modern Minimal Glassmorphism ===== */
+/* ===== Design Tokens — Notion Style (light) ===== */
 :root {
-  /* Backgrounds — translucent white glass over a soft neutral wash */
-  --bg: #F5F6F8;
-  --bg-elevated: rgba(255, 255, 255, 0.6);
-  --surface: rgba(255, 255, 255, 0.55);
-  --surface-hover: rgba(255, 255, 255, 0.74);
-  --surface-glass: rgba(255, 255, 255, 0.6);
-  --surface-glass-strong: rgba(255, 255, 255, 0.82);
-  --border: rgba(15, 23, 42, 0.08);
-  --border-soft: rgba(15, 23, 42, 0.05);
-  --border-strong: rgba(15, 23, 42, 0.14);
-  --border-accent: rgba(124, 58, 237, 0.32);
+  /* Backgrounds — warm gray canvas with white content sheets */
+  --bg: #F7F7F5;
+  --bg-elevated: #FFFFFF;
+  --surface: #FFFFFF;
+  --surface-hover: #F1F1EF;
+  --surface-glass: #FFFFFF;
+  --surface-glass-strong: #FFFFFF;
 
-  /* Text — neutral slate ink, WCAG AAA on frosted surface */
-  --text: #0F172A;
-  --text-muted: #52606D;
-  --text-dim: #94A3B8;
+  /* Hairline dividers — 1px ink-based, strength by content complexity */
+  --border: rgba(55, 53, 47, 0.13);
+  --border-soft: rgba(55, 53, 47, 0.07);
+  --border-strong: rgba(55, 53, 47, 0.22);
+  --border-accent: rgba(35, 131, 226, 0.4);
 
-  /* Brand accent — a single restrained violet */
-  --accent: #7C3AED;
-  --accent-light: #A78BFA;
-  --accent-bright: #6D28D9;
-  --accent-bg: rgba(124, 58, 237, 0.08);
-  --accent-glow: rgba(124, 58, 237, 0.16);
-  --spectrum-1: #7C3AED;
-  --spectrum-2: #6D28D9;
-  --spectrum-3: #6366F1;
-  --spectrum-4: #38BDF8;
+  /* Text — Notion ink with grayscale hierarchy */
+  --text: #37352F;
+  --text-muted: #6B6B6B;
+  --text-dim: #9B9B9B;
+
+  /* Brand accent — restrained Notion blue, used sparingly */
+  --accent: #2383E2;
+  --accent-light: #5BA3E8;
+  --accent-bright: #1C6FBF;
+  --accent-bg: rgba(35, 131, 226, 0.09);
+  --accent-glow: rgba(35, 131, 226, 0.18);
+  --spectrum-1: #2383E2;
+  --spectrum-2: #1C6FBF;
+  --spectrum-3: #4A97E8;
+  --spectrum-4: #57A3E8;
 
   /* Status */
-  --success: #10B981;
-  --success-bg: rgba(16, 185, 129, 0.1);
-  --warning: #F59E0B;
-  --danger: #EF4444;
+  --success: #4AA367;
+  --success-bg: rgba(74, 163, 103, 0.12);
+  --warning: #C99800;
+  --danger: #E03E3E;
 
   /* Sources */
-  --ai-color: #7C3AED;
-  --user-color: #10B981;
+  --ai-color: #2383E2;
+  --user-color: #4AA367;
 
-  /* Geometry — 12px rounded (glassmorphism spec) */
-  --radius: 14px;
-  --radius-sm: 10px;
-  --radius-lg: 20px;
+  /* Geometry — small radii, Notion-like */
+  --radius: 8px;
+  --radius-sm: 5px;
+  --radius-lg: 12px;
 
-  /* Typography — Outfit (display) + Inter (body) + JetBrains Mono */
-  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
-  --font-display: 'Outfit', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  --mono: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+  /* Typography — system UI stack (Notion spec) */
+  --font: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Apple Color Emoji', sans-serif;
+  --font-display: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
+  --mono: ui-monospace, 'SF Mono', 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
 
-  /* Glass blur tokens */
+  /* Glass blur tokens (kept for compatibility; surfaces are flat) */
   --blur-glass: blur(20px) saturate(140%);
   --blur-light: blur(14px) saturate(130%);
   --blur-heavy: blur(28px) saturate(150%);
 
-  /* Shadows — neutral, soft, never sharp */
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
-  --shadow-md: 0 4px 16px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.03);
-  --shadow-lg: 0 12px 40px rgba(15, 23, 42, 0.1), 0 4px 12px rgba(15, 23, 42, 0.04);
+  /* Shadows — light, popover-style only */
+  --shadow-sm: 0 1px 2px rgba(55, 53, 47, 0.08);
+  --shadow-md: 0 4px 16px rgba(55, 53, 47, 0.09), 0 1px 3px rgba(55, 53, 47, 0.04);
+  --shadow-lg: 0 12px 40px rgba(55, 53, 47, 0.13), 0 4px 12px rgba(55, 53, 47, 0.06);
   --shadow-glow: 0 0 0 4px var(--accent-glow);
-  --shadow-glass: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 8px 32px rgba(15, 23, 42, 0.06);
+  --shadow-glass: inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 8px 32px rgba(55, 53, 47, 0.05);
 
   /* Transitions */
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
@@ -94,26 +97,24 @@ body {
   letter-spacing: -0.01em;
 }
 
-/* Ambient wash backdrop — a faint, desaturated glow behind the glass */
+/* Ambient wash backdrop — a faint neutral vignette (Notion: flat canvas) */
 body::before {
   content: '';
   position: fixed;
   inset: 0;
   background:
-    radial-gradient(ellipse 720px 520px at 8% -8%, rgba(124, 58, 237, 0.07), transparent 65%),
-    radial-gradient(ellipse 620px 460px at 92% 6%, rgba(99, 102, 241, 0.05), transparent 65%),
-    radial-gradient(ellipse 820px 560px at 50% 108%, rgba(56, 189, 248, 0.04), transparent 70%);
+    radial-gradient(ellipse 900px 600px at 50% -10%, rgba(55, 53, 47, 0.022), transparent 60%);
   pointer-events: none;
   z-index: 0;
 }
 
-/* Subtle grain overlay — adds tactile depth to glass */
+/* Subtle grain overlay — removed for the clean Notion look */
 body::after {
   content: '';
   position: fixed;
   inset: 0;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
-  opacity: 0.02;
+  opacity: 0;
   pointer-events: none;
   z-index: 1;
   mix-blend-mode: overlay;
@@ -139,13 +140,17 @@ body::after {
 .logo {
   font-family: var(--font-display);
   font-size: 15px;
-  font-weight: 800;
-  background: linear-gradient(120deg, var(--spectrum-1), var(--spectrum-2) 45%, var(--spectrum-4));
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  font-weight: 700;
+  color: var(--text);
+  background: none;
+  -webkit-background-clip: initial;
+  background-clip: initial;
+  -webkit-text-fill-color: currentColor;
   letter-spacing: -0.02em;
   line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 .project-name {
   font-size: 13px;
@@ -343,8 +348,7 @@ body::after {
   flex: 1;
   overflow-y: auto;
   padding: 28px;
-  background:
-    repeating-conic-gradient(rgba(99, 102, 241, 0.025) 0% 25%, transparent 0% 50%) 50% / 22px 22px;
+  background: var(--bg); /* 暖灰画布，Notion 风 */
   display: flex;
   flex-direction: column;
   position: relative;
@@ -551,8 +555,8 @@ body::after {
   min-height: 100%;
   flex: 1;
   transition: max-width 0.4s var(--ease);
-  background-color: var(--bg);
-  background-image: radial-gradient(circle, var(--border) 1px, transparent 1px);
+  background-color: var(--surface); /* 白色内容页，躺在灰桌上 */
+  background-image: radial-gradient(circle, var(--border-soft) 1px, transparent 1px);
   background-size: 22px 22px;
 }
 /* Device widths */
@@ -1131,12 +1135,10 @@ body::after {
    TOOLBAR & CONTROLS
    ================================================================= */
 
-/* Toolbar Buttons */
+/* Toolbar Buttons — Notion: flat white, hairline border, hover only */
 .toolbar-btn {
-  background: rgba(255, 255, 255, 0.35);
-  backdrop-filter: var(--blur-light);
-  -webkit-backdrop-filter: var(--blur-light);
-  border: 1px solid transparent;
+  background: var(--surface);
+  border: 1px solid var(--border);
   color: var(--text-muted);
   border-radius: var(--radius-sm);
   padding: 6px 11px;
@@ -1148,13 +1150,13 @@ body::after {
   align-items: center;
   gap: 4px;
   font-weight: 500;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  box-shadow: none;
 }
 .toolbar-btn:hover:not(:disabled) {
   background: var(--surface-hover);
   border-color: var(--border-accent);
   color: var(--accent-bright);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 4px 12px rgba(99, 102, 241, 0.12);
+  box-shadow: none;
 }
 .toolbar-btn:disabled {
   opacity: 0.4;
@@ -1163,9 +1165,7 @@ body::after {
 
 /* Theme Toggle */
 .theme-toggle {
-  background: rgba(255, 255, 255, 0.35);
-  backdrop-filter: var(--blur-light);
-  -webkit-backdrop-filter: var(--blur-light);
+  background: var(--surface);
   border: 1px solid var(--border);
   color: var(--text-muted);
   border-radius: var(--radius-sm);
@@ -1178,7 +1178,7 @@ body::after {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  box-shadow: none;
 }
 .theme-toggle:hover {
   background: var(--surface-hover);
@@ -1318,7 +1318,7 @@ body::after {
   gap: 4px;
   padding: 10px 12px;
   border-bottom: 1px solid var(--border);
-  background: rgba(0, 0, 0, 0.15);
+  background: var(--surface-hover);
   flex-shrink: 0;
 }
 .page-tabs {
@@ -1344,6 +1344,7 @@ body::after {
   white-space: nowrap;
   transition: all 0.2s var(--ease);
 }
+.page-icon { font-size: 12px; line-height: 1; }
 .page-tab:hover { background: rgba(255, 255, 255, 0.06); color: var(--text); }
 .page-tab.active {
   background: var(--accent-bg);
@@ -2426,7 +2427,7 @@ body::after {
   color: var(--accent-bright);
   flex-shrink: 0;
 }
-.lib-item .lib-tag.entry { background: rgba(139, 92, 246, 0.12); color: var(--accent-bright); }
+.lib-item .lib-tag.entry { background: var(--accent-bg); color: var(--accent-bright); }
 .lib-item .lib-tag.hover { background: rgba(6, 182, 212, 0.12); color: var(--spectrum-4); }
 
 /* Library Item — Icon + Text layout (used by design library JS) */
@@ -2519,8 +2520,8 @@ body::after {
 }
 .top-lib-tab:hover { background: var(--surface-hover); color: var(--text); }
 .top-lib-tab.active {
-  background: var(--accent);
-  color: #fff;
+  background: var(--accent-bg);
+  color: var(--accent);
 }
 .top-lib-strip {
   padding: 6px 12px 10px;
@@ -3053,7 +3054,7 @@ body::after {
 .canvas-scroll-wrap.drag-over {
   background:
     linear-gradient(var(--bg), var(--bg)),
-    repeating-conic-gradient(rgba(139, 92, 246, 0.04) 0% 25%, transparent 0% 50%) 50% / 20px 20px;
+    repeating-conic-gradient(rgba(55, 53, 47, 0.03) 0% 25%, transparent 0% 50%) 50% / 20px 20px;
   outline: 2px dashed var(--accent);
   outline-offset: -4px;
 }
@@ -3101,50 +3102,48 @@ body::after {
    THEME MODE — Dark override
    ================================================================= */
 body.theme-dark {
-  --bg: #0F172A;
-  --bg-elevated: rgba(30, 41, 59, 0.55);
-  --surface: rgba(30, 41, 59, 0.5);
-  --surface-hover: rgba(51, 65, 85, 0.6);
-  --surface-glass: rgba(15, 23, 42, 0.6);
-  --surface-glass-strong: rgba(15, 23, 42, 0.82);
-  --border: rgba(255, 255, 255, 0.08);
-  --border-soft: rgba(148, 163, 184, 0.14);
-  --border-strong: rgba(148, 163, 184, 0.24);
-  --border-accent: rgba(167, 139, 250, 0.4);
-  --text: #E2E8F0;
-  --text-muted: #94A3B8;
-  --text-dim: #64748B;
-  --accent: #A78BFA;
-  --accent-light: #C4B5FD;
-  --accent-bright: #DDD6FE;
-  --accent-bg: rgba(167, 139, 250, 0.12);
-  --accent-glow: rgba(167, 139, 250, 0.22);
-  --success-bg: rgba(52, 211, 153, 0.14);
+  --bg: #191919;
+  --bg-elevated: #202020;
+  --surface: #202020;
+  --surface-hover: #2A2A2A;
+  --surface-glass: #1F1F1F;
+  --surface-glass-strong: #292929;
+  --border: rgba(255, 255, 255, 0.09);
+  --border-soft: rgba(255, 255, 255, 0.05);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --border-accent: rgba(83, 155, 245, 0.4);
+  --text: rgba(255, 255, 255, 0.9);
+  --text-muted: rgba(255, 255, 255, 0.55);
+  --text-dim: rgba(255, 255, 255, 0.35);
+  --accent: #529CCA;
+  --accent-light: #7AB8E8;
+  --accent-bright: #8BC3EF;
+  --accent-bg: rgba(82, 156, 202, 0.14);
+  --accent-glow: rgba(82, 156, 202, 0.22);
+  --success-bg: rgba(74, 163, 103, 0.16);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.2);
   --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.5), 0 4px 12px rgba(0, 0, 0, 0.3);
-  --shadow-glass: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 8px 32px rgba(0, 0, 0, 0.4);
+  --shadow-glass: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 8px 32px rgba(0, 0, 0, 0.4);
 }
 body.theme-dark .canvas {
   background: transparent;
 }
 body.theme-dark::before {
   background:
-    radial-gradient(ellipse 720px 520px at 8% -8%, rgba(124, 58, 237, 0.12), transparent 65%),
-    radial-gradient(ellipse 620px 460px at 92% 6%, rgba(99, 102, 241, 0.08), transparent 65%),
-    radial-gradient(ellipse 820px 560px at 50% 108%, rgba(56, 189, 248, 0.05), transparent 70%);
+    radial-gradient(ellipse 900px 600px at 50% -10%, rgba(255, 255, 255, 0.02), transparent 60%);
 }
-/* Dark glass controls — translucent dark glass instead of white glass */
+/* Dark controls — flat ink surfaces instead of white glass */
 body.theme-dark .toolbar-btn,
 body.theme-dark .theme-toggle {
-  background: rgba(255, 255, 255, 0.06);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  background: var(--surface);
+  box-shadow: none;
 }
 body.theme-dark .toolbar-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.12);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 4px 12px rgba(99, 102, 241, 0.2);
+  background: var(--surface-hover);
+  box-shadow: none;
 }
-body.theme-dark .theme-toggle:hover { background: rgba(255, 255, 255, 0.12); }
+body.theme-dark .theme-toggle:hover { background: var(--surface-hover); }
 body.theme-dark .prompt-chip {
   background: rgba(255, 255, 255, 0.06);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
@@ -3157,7 +3156,7 @@ body.theme-dark .prompt-input:focus {
   background: rgba(255, 255, 255, 0.12);
 }
 body.theme-dark .canvas-scroll-wrap {
-  background: repeating-conic-gradient(rgba(129, 140, 248, 0.04) 0% 25%, transparent 0% 50%) 50% / 22px 22px;
+  background: var(--bg);
 }
 
 /* =================================================================
@@ -3751,7 +3750,7 @@ body.theme-dark .canvas-scroll-wrap {
   border-radius: inherit;
   opacity: 0;
   pointer-events: none;
-  background: radial-gradient(circle at 50% 50%, rgba(139, 92, 246, 0.22), transparent 65%);
+  background: radial-gradient(circle at 50% 50%, rgba(35, 131, 226, 0.18), transparent 65%);
   transition: opacity 0.4s var(--ease);
 }
 .comp-wrapper.anim-hover-spotlight:hover::after { opacity: 1; }
@@ -4920,7 +4919,7 @@ body[data-theme="dark"] .canvas-editor-wrap {
   padding: 8px 10px;
   border: 1px solid var(--border-accent);
   border-radius: var(--radius-sm);
-  background: rgba(124, 58, 237, 0.05);
+  background: var(--accent-bg);
   animation: suggest-in 0.25s var(--ease);
 }
 @keyframes suggest-in {
@@ -5497,7 +5496,7 @@ body[data-theme="dark"] .canvas-editor-wrap {
   line-height: 1.5;
 }
 .apply-result-hint code {
-  background: rgba(139, 92, 246, 0.12);
+  background: var(--accent-bg);
   padding: 1px 5px;
   border-radius: 4px;
   font-size: 10.5px;

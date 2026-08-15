@@ -288,26 +288,26 @@ export interface FontPairingData {
 }
 
 export const FONT_PAIRINGS: FontPairingData[] = [
-  // Minimal / Clean
+  // Minimal / Clean — Notion 风：系统 UI 字体栈
   {
     style: "minimal",
     display: {
-      name: "Inter",
-      family: "Inter, system-ui, sans-serif",
+      name: "System UI",
+      family: "ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif",
       category: "sans-serif",
       weights: [400, 500, 600, 700],
       fallback: "system-ui, sans-serif",
     },
     body: {
-      name: "Inter",
-      family: "Inter, system-ui, sans-serif",
+      name: "System UI",
+      family: "ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif",
       category: "sans-serif",
       weights: [400, 500, 600],
       fallback: "system-ui, sans-serif",
     },
     notes: [
-      "Inter provides a neutral, highly legible system across headings and body",
-      "Inter provides neutral, highly legible body text",
+      "System UI stack keeps the interface light and text-first, as in Notion",
+      "System UI provides neutral, highly legible body text",
       "Works well with generous whitespace and a restrained color palette",
     ],
   },

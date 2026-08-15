@@ -45,8 +45,8 @@ test("writebackTokens rewrites :root vars and keeps a backup", () => {
   assert.ok(updated.includes(`--accent: ${expectedAccent};`), "accent token written");
   const backup = readFileSync(result.backup!, "utf-8");
   // The backup must preserve the dashboard's own (pre-writeback) values —
-  // currently the modern-minimal glass palette.
-  assert.ok(backup.includes("--bg: #F5F6F8;"), "backup preserves the original dashboard value");
+  // currently the Notion-style palette (vibe-hub.org/style-notion).
+  assert.ok(backup.includes("--bg: #F7F7F5;"), "backup preserves the original dashboard value");
   assert.ok(!backup.includes(`--accent: ${expectedAccent};`), "backup is the untouched original");
   // Unrelated variables survive the rewrite
   assert.match(updated, /--ease:/);

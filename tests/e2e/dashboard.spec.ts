@@ -199,8 +199,9 @@ test("inspect code tab and brand design systems work from the dashboard", async 
   await runPrompt(page, "应用 SaaS 模板");
   await expect(page.locator(".comp-wrapper").first()).toBeVisible({ timeout: 10000 });
 
-  // Inspect: select the first component and open the Code tab
-  await page.locator(".comp-wrapper").first().click();
+  // Inspect: select a component via the layer tree (deterministic — the
+  // canvas ruler can overlap the topmost component and intercept clicks)
+  await page.locator("#layer-tree .layer-item").first().locator(".layer-name").click();
   await expect(page.locator(".inspector-tabs")).toBeVisible();
   await page.locator(".inspector-tab").filter({ hasText: "代码" }).click();
   await expect(page.locator(".inspector-code")).toContainText("<", { timeout: 5000 });

@@ -110,7 +110,7 @@ export function registerProjectsRoutes(): express.Router {
     const result = importClientUi(clear_existing === true);
     stateStore.setProjectName("Prism 客户端", "ai");
     stateStore.setStyle("minimal", "ai");
-    applyStyleTokenSet(stateStore, "#7C3AED", "ai");
+    applyStyleTokenSet(stateStore, "#2383E2", "ai");
     stateStore.switchPage(result.pageId, "ai");
     await recordProductImport(result.pageId, "client", "Prism 客户端界面", result.imported);
     res.json({ success: true, ...result, page_id: result.pageId, imported: result.imported });

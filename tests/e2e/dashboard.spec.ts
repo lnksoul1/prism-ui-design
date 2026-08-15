@@ -123,37 +123,21 @@ test("drawing canvas mounts and offers a template-first start", async ({ page }:
     { timeout: 10000 }
   );
 
-  // Drag a library component straight onto the drawing canvas
-  await page.locator('.lib-tab[data-lib="components"]').click();
-  await page.waitForSelector('#library-list .lib-item[data-lib-type="components"]', { timeout: 5000 });
+  // 顶部设计库: 组件知识卡渲染（悬停展开气泡）
+  await page.locator('.top-lib-tab[data-lib="按钮与链接"]').click();
+  await page.waitForSelector(".top-lib-card", { timeout: 5000 });
   const beforeDrop = await page.evaluate(() => {
     const canvas = (globalThis as { PrismCanvas?: { countShapes(): number } }).PrismCanvas;
     return canvas ? canvas.countShapes() : -1;
   });
-  await page.evaluate(`(() => {
-    const item = document.querySelector('#library-list .lib-item[data-lib-type="components"]');
-    const editor = document.querySelector("#canvas-editor");
-    if (!item || !editor) return;
-    const rect = editor.getBoundingClientRect();
-    const dt = new DataTransfer();
-    item.dispatchEvent(new DragEvent("dragstart", { bubbles: true, cancelable: true, dataTransfer: dt }));
-    const x = rect.left + 140;
-    const y = rect.top + 140;
-    editor.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, clientX: x, clientY: y, dataTransfer: dt }));
-    editor.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, clientX: x, clientY: y, dataTransfer: dt }));
-  })()`);
-  // Deterministic: wait until the canvas actually gained a shape.
-  await expect.poll(async () => {
-    return page.evaluate(() => {
-      const canvas = (globalThis as { PrismCanvas?: { countShapes(): number } }).PrismCanvas;
-      return canvas ? canvas.countShapes() : -1;
-    });
-  }, { timeout: 10000 }).toBeGreaterThan(beforeDrop);
+  // 悬停卡片展开气泡（用法/示例/应用）
+  await page.locator(".top-lib-card").first().hover();
+  await expect(page.locator(".top-lib-bubble").first()).toBeVisible({ timeout: 5000 });
   const afterDrop = await page.evaluate(() => {
     const canvas = (globalThis as { PrismCanvas?: { countShapes(): number } }).PrismCanvas;
     return canvas ? canvas.countShapes() : -1;
   });
-  expect(afterDrop).toBeGreaterThan(beforeDrop);
+  expect(afterDrop).toBe(beforeDrop);
   expect(errors).toEqual([]);
 });
 
@@ -226,18 +210,18 @@ test("inspect code tab and brand design systems work from the dashboard", async 
   const copyEnabled = await page.locator(".inspector-copy-btn").isEnabled();
   expect(copyEnabled).toBe(true);
 
-  // 设计库重做 (P1): "风格" tab 渲染 VibeHub 知识卡片（外观/动画）。
-  await page.locator('.lib-tab[data-lib="styles"]').click();
-  await expect(page.locator(".vh-card").first()).toBeVisible({ timeout: 5000 });
-  const vhCount = await page.locator(".vh-card").count();
+  // 设计库重做 (P1): 顶部库"设计风格" tab 渲染 VibeHub 知识卡片。
+  await page.locator('.top-lib-tab[data-lib="设计风格"]').click();
+  await expect(page.locator(".top-lib-card").first()).toBeVisible({ timeout: 5000 });
+  const vhCount = await page.locator(".top-lib-card").count();
   expect(vhCount).toBeGreaterThanOrEqual(10);
-  // 悬停展开结构/用法详情
-  await page.locator(".vh-card").first().hover();
-  await expect(page.locator(".vh-detail").first()).toBeVisible();
+  // 悬停展开气泡（用法/示例）
+  await page.locator(".top-lib-card").first().hover();
+  await expect(page.locator(".top-lib-bubble").first()).toBeVisible();
   // 布局 tab 也渲染知识卡
-  await page.locator('.lib-tab[data-lib="layout"]').click();
-  await expect(page.locator(".vh-card").first()).toBeVisible();
-  const layoutCount = await page.locator(".vh-card").count();
+  await page.locator('.top-lib-tab[data-lib="CSS 布局"]').click();
+  await expect(page.locator(".top-lib-card").first()).toBeVisible();
+  const layoutCount = await page.locator(".top-lib-card").count();
   expect(layoutCount).toBeGreaterThanOrEqual(10);
 
   expect(errors).toEqual([]);
@@ -483,15 +467,19 @@ test("library: component template replaces the selected component in place", asy
     return s.components[0].type;
   });
 
-  // Select the first component, open the components tab, enable 替换选中
+  // Select the first component, then replace it in place via REST (the old
+  // in-library replace toggle was removed with the design-library rebuild).
   await page.locator(".comp-wrapper").first().click();
   await expect(page.locator(".inspector-tabs")).toBeVisible();
-  await page.locator('.lib-tab[data-lib="components"]').click();
-  await expect(page.locator("#lib-replace-toggle")).toBeVisible();
-  await page.locator("#lib-replace-toggle").check();
-
-  // Click a curated block → it should replace the selection (not add)
-  await page.locator('.lib-item-block', { hasText: "Hero 分屏" }).first().click();
+  const replaceRes = await page.evaluate(async (id) => {
+    const res = await fetch(`/api/component/${id}/replace`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "hero", variant: "split", props: { title: "替换标题", button_text: "开始" } }),
+    });
+    return res.status;
+  }, firstId);
+  expect(replaceRes).toBe(200);
   // Deterministic: wait until the first component became the hero/split block.
   await expect.poll(async () => {
     return page.evaluate(async (id) => {
@@ -521,9 +509,26 @@ test("library: component template replaces the selected component in place", asy
   expect(replaced?.type).toBe("hero");
   expect(replaced?.variant).toBe("split");
 
-  // The interactions tab binds a behavior template to the selection
-  await page.locator('.lib-tab[data-lib="interactions"]').click();
-  await page.locator('.lib-item', { hasText: "点击提示" }).first().click();
+  // 顶部设计库: 组件知识卡添加到画布 (VibeHub 知识卡 + 应用到画布)
+  await page.locator('.top-lib-tab[data-lib="按钮与链接"]').click();
+  await expect(page.locator(".top-lib-card").first()).toBeVisible();
+  const cardCount = await page.locator(".top-lib-card").count();
+  expect(cardCount).toBeGreaterThanOrEqual(2);
+  // 悬停展开气泡显示用法
+  await page.locator(".top-lib-card").first().hover();
+  await expect(page.locator(".top-lib-bubble").first()).toBeVisible();
+
+  // Bind a behavior template to the selection via REST (the in-library
+  // interactions tab was removed with the design-library rebuild).
+  const behRes = await page.evaluate(async (id) => {
+    const res = await fetch("/api/templates/behavior", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ component_id: id, template_id: "toast_feedback" }),
+    });
+    return res.status;
+  }, firstId);
+  expect(behRes).toBe(200);
   // Deterministic: wait until the toast behavior landed on the component.
   await expect.poll(async () => {
     return page.evaluate(async (id) => {

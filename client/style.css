@@ -2487,6 +2487,118 @@ body::after {
   margin: 4px 0 2px;
 }
 
+/* ===== 顶部设计库 (P1): 13 tab + 悬停展开气泡 ===== */
+.top-library {
+  position: relative;
+  z-index: 60;
+  background: var(--surface-glass);
+  backdrop-filter: var(--blur-light);
+  -webkit-backdrop-filter: var(--blur-light);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.top-lib-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 4px 12px;
+  overflow-x: auto;
+}
+.top-lib-tab {
+  flex-shrink: 0;
+  padding: 4px 12px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font);
+  transition: all 0.15s var(--ease);
+}
+.top-lib-tab:hover { background: var(--surface-hover); color: var(--text); }
+.top-lib-tab.active {
+  background: var(--accent);
+  color: #fff;
+}
+.top-lib-strip {
+  padding: 6px 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+  border-top: 1px solid var(--border);
+}
+.top-lib-group {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  padding: 4px 2px 2px;
+}
+.top-lib-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.top-lib-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  cursor: default;
+  transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
+}
+.top-lib-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+.top-lib-name-box { min-width: 0; }
+.top-lib-name { font-size: 12px; font-weight: 700; color: var(--text); white-space: nowrap; }
+.top-lib-slug { font-size: 10px; color: var(--text-muted); font-family: var(--mono); }
+
+/* 悬停向下展开的气泡 */
+.top-lib-bubble {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 320px;
+  max-height: 380px;
+  overflow-y: auto;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16);
+  z-index: 70;
+}
+.top-lib-card:hover .top-lib-bubble { display: block; }
+.top-lib-example { margin-top: 6px; }
+.tl-example-box {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px;
+  overflow: hidden;
+}
+@keyframes tlBounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+/* 主布局让出顶部库的高度 */
+.main-layout {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+}
+
 /* ===== 重建设计库 (P1): VibeHub 知识卡片 ===== */
 .lib-group-count {
   float: right;

@@ -795,176 +795,208 @@ const LIBRARY_TEMPLATES = [
 let currentLibraryTab = "components";
 
 function setupDesignLibrary() {
-  const libTabs = document.querySelectorAll(".lib-tab");
-  libTabs.forEach((tab) => {
-    tab.addEventListener("click", () => {
-      libTabs.forEach((t) => t.classList.remove("active"));
-      tab.classList.add("active");
-      currentLibraryTab = tab.dataset.lib;
-      renderLibraryList();
-    });
-  });
-
-  renderLibraryList();
+  setupTopLibrary();
   setupCanvasDropZone();
 }
 
-function renderLibraryList() {
-  const list = $("library-list");
-  if (!list) return;
-  list.innerHTML = "";
+// ===== 顶部设计库 (P1): 13 知识分类 tab + 悬停展开气泡卡片 =====
 
-  let items = [];
-  if (currentLibraryTab === "animations") items = LIBRARY_ANIMATIONS;
-  else if (currentLibraryTab === "interactions") items = LIBRARY_INTERACTIONS;
-  else if (currentLibraryTab === "templates") items = LIBRARY_TEMPLATES;
-  else if (currentLibraryTab === "components") {
-    // 组件 tab：原可拖拽组件列表 + VibeHub 组件知识卡（结构/示例/用法）。
-    items = LIBRARY_COMPONENTS;
-    renderVibeHubLibrary("components", { afterFirst: true });
-  }
-  else if (currentLibraryTab === "layout" || currentLibraryTab === "appearance" ||
-           currentLibraryTab === "animation" || currentLibraryTab === "styles") {
-    renderVibeHubLibrary(currentLibraryTab);
-    return;
-  }
-  else if (currentLibraryTab === "designSystems") {
-    renderDesignSystems();
-    return;
-  }
+/** 设计风格 tab = 外观 + 动画 + 鼠标（VibeHub 设计风格 24）。 */
+const TOP_STYLE_GROUPS = ["外观", "动画", "鼠标"];
 
-  if (items.length === 0) {
-    list.innerHTML = `<div class="library-empty">${t("libraryLoading")}</div>`;
-    return;
-  }
+let topLibraryActive = null;
 
-  // 模板快速变更: components tab gets a 替换选中 toggle + curated block group.
-  if (currentLibraryTab === "components") {
-    const replaceRow = el("div", "lib-replace-row");
-    const label = el("label", "lib-replace-toggle");
-    const checkbox = el("input", "");
-    checkbox.type = "checkbox";
-    checkbox.id = "lib-replace-toggle";
-    checkbox.checked = libraryReplaceMode;
-    checkbox.addEventListener("change", () => {
-      libraryReplaceMode = checkbox.checked;
+function setupTopLibrary() {
+  const tabs = document.querySelectorAll(".top-lib-tab");
+  tabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      tabs.forEach((t) => t.classList.remove("active"));
+      tab.classList.add("active");
+      topLibraryActive = tab.dataset.lib;
+      renderTopLibraryStrip(topLibraryActive);
     });
-    label.appendChild(checkbox);
-    label.appendChild(document.createTextNode(t("replaceSelected")));
-    label.title = t("replaceSelectedHint");
-    replaceRow.appendChild(label);
-    list.appendChild(replaceRow);
-
-    // Curated component blocks (组件模板) — replace or add via /api/templates/component
-    const blockHeader = el("div", "lib-group-header", "组件模板");
-    blockHeader.title = t("replaceSelectedHint");
-    list.appendChild(blockHeader);
-    LIBRARY_BLOCKS.forEach((block) => {
-      const elBlock = el("div", "lib-item lib-item-block");
-      elBlock.draggable = true;
-      elBlock.dataset.libType = "blocks";
-      elBlock.dataset.itemId = block.id;
-      const iconEl = el("span", "lib-item-icon", block.icon);
-      iconEl.style.color = "var(--accent)";
-      elBlock.appendChild(iconEl);
-      const textEl = el("div", "lib-item-text");
-      textEl.appendChild(el("div", "lib-item-name", block.name));
-      textEl.appendChild(el("div", "lib-item-desc", block.desc));
-      elBlock.appendChild(textEl);
-      elBlock.addEventListener("dragstart", (e) => {
-        e.stopPropagation();
-        e.dataTransfer.effectAllowed = "copy";
-        try { e.dataTransfer.setData("text/plain", JSON.stringify({ libType: "blocks", item: block })); } catch (err) {}
-        elBlock.classList.add("dragging");
-      });
-      elBlock.addEventListener("dragend", () => {
-        elBlock.classList.remove("dragging");
-        const hint = $("canvas-drop-hint");
-        if (hint) hint.style.display = "none";
-      });
-      elBlock.addEventListener("click", () => handleLibraryItemClick(block));
-      list.appendChild(elBlock);
-    });
-    const paletteHeader = el("div", "lib-group-header", t("libComponents"));
-    list.appendChild(paletteHeader);
-  }
-
-  // 交互模板 hint
-  if (currentLibraryTab === "interactions") {
-    const hintRow = el("div", "lib-group-header");
-    hintRow.textContent = t("libInteractionsHint");
-    list.appendChild(hintRow);
-  }
-
-  if (currentLibraryTab === "templates") {
-    const saveItem = el("div", "lib-item lib-item-save");
-    const saveIcon = el("span", "lib-item-icon", "▣");
-    saveIcon.style.color = "var(--accent)";
-    saveItem.appendChild(saveIcon);
-    const saveText = el("div", "lib-item-text");
-    saveText.appendChild(el("div", "lib-item-name", t("saveTemplate")));
-    saveText.appendChild(el("div", "lib-item-desc", "保存当前设计为模板"));
-    saveItem.appendChild(saveText);
-    saveItem.addEventListener("click", saveCurrentAsTemplate);
-    list.appendChild(saveItem);
-  }
-
-  items.forEach((item) => {
-    const elItem = el("div", "lib-item");
-    elItem.draggable = true;
-    elItem.dataset.libType = currentLibraryTab;
-    elItem.dataset.itemId = item.id;
-    if (item.variant) elItem.dataset.variant = item.variant;
-    if (item.entry) elItem.dataset.entry = item.entry;
-    if (item.hover) elItem.dataset.hover = item.hover;
-    if (item.duration) elItem.dataset.duration = String(item.duration);
-
-    // Icon
-    const iconEl = el("span", "lib-item-icon", item.icon || "•");
-    iconEl.style.color = item.color || "var(--accent)";
-    elItem.appendChild(iconEl);
-
-    // Text
-    const textEl = el("div", "lib-item-text");
-    textEl.appendChild(el("div", "lib-item-name", item.name));
-    if (item.desc) textEl.appendChild(el("div", "lib-item-desc", item.desc));
-    elItem.appendChild(textEl);
-
-    // Drag start
-    elItem.addEventListener("dragstart", (e) => {
-      e.stopPropagation();
-      e.dataTransfer.effectAllowed = "copy";
-      try { e.dataTransfer.setData("text/plain", JSON.stringify({ libType: currentLibraryTab, item: item })); } catch (err) {}
-      elItem.classList.add("dragging");
-    });
-
-    elItem.addEventListener("dragend", () => {
-      elItem.classList.remove("dragging");
-      const hint = $("canvas-drop-hint");
-      if (hint) hint.style.display = "none";
-    });
-
-    // Hover preview
-    elItem.addEventListener("mouseenter", (e) => {
-      showLibraryPreview(elItem, item);
-    });
-    elItem.addEventListener("mouseleave", () => {
-      hideLibraryPreview();
-    });
-
-    // Click to apply (for styles) or add (for components/animations)
-    elItem.addEventListener("click", () => {
-      handleLibraryItemClick(item);
-    });
-
-    list.appendChild(elItem);
   });
-
-  // Saved templates are appended asynchronously
-  if (currentLibraryTab === "templates") {
-    renderSavedTemplates();
+  // 默认激活第一个 tab
+  if (tabs.length > 0) {
+    tabs[0].classList.add("active");
+    topLibraryActive = tabs[0].dataset.lib;
+    renderTopLibraryStrip(topLibraryActive);
   }
 }
+
+/** 渲染顶部库的分类术语卡片条（横向滚动）。 */
+function renderTopLibraryStrip(category) {
+  const strip = $("top-lib-strip");
+  if (!strip) return;
+  strip.innerHTML = "";
+  const data = window.VIBE_HUB_TERMS;
+  if (!data || !data.grouped) {
+    strip.innerHTML = `<div class="library-empty">${t("dsError")}</div>`;
+    return;
+  }
+  const groups = category === "设计风格" ? TOP_STYLE_GROUPS : [category];
+  groups.forEach((groupName) => {
+    const terms = data.grouped[groupName] || [];
+    if (terms.length === 0) return;
+    const header = el("div", "top-lib-group", groupName);
+    strip.appendChild(header);
+    const row = el("div", "top-lib-row");
+    terms.forEach((term) => row.appendChild(buildTopLibCard(term)));
+    strip.appendChild(row);
+  });
+}
+
+/** 构建单个术语卡片：悬停向下展开气泡（用法 + 图片示例 + 应用）。 */
+function buildTopLibCard(term) {
+  const card = el("div", "top-lib-card");
+  const iconEl = el("span", "vh-icon", term.zh.slice(0, 1));
+  const nameBox = el("div", "top-lib-name-box");
+  nameBox.appendChild(el("div", "top-lib-name", term.zh));
+  nameBox.appendChild(el("div", "top-lib-slug", term.slug));
+  card.appendChild(iconEl);
+  card.appendChild(nameBox);
+
+  // 气泡层（向下展开）：定义 + 用法 + 图片示例 + 应用按钮
+  const bubble = el("div", "top-lib-bubble");
+  if (term.youSay) bubble.appendChild(el("div", "vh-yousay", `“${term.youSay}”`));
+  if (term.definition) bubble.appendChild(el("div", "vh-def", term.definition));
+  const example = el("div", "top-lib-example");
+  example.appendChild(buildTermExample(term));
+  bubble.appendChild(example);
+  if (term.usage) {
+    const u = el("div", "vh-usage");
+    u.appendChild(el("div", "vh-section-label", "什么时候用"));
+    u.appendChild(el("div", "vh-text", term.usage));
+    bubble.appendChild(u);
+  }
+  if (term.avoid) {
+    const av = el("div", "vh-avoid");
+    av.appendChild(el("div", "vh-section-label", "什么时候不用"));
+    av.appendChild(el("div", "vh-text", term.avoid));
+    bubble.appendChild(av);
+  }
+  if (term.aiPrompt) {
+    const ai = el("div", "vh-ai");
+    ai.appendChild(el("div", "vh-section-label", "告诉 AI"));
+    ai.appendChild(el("div", "vh-text", term.aiPrompt));
+    bubble.appendChild(ai);
+  }
+  const action = vibeTermAction(term);
+  if (action) {
+    const applyBtn = el("button", "vh-apply", "＋ 添加到画布");
+    applyBtn.type = "button";
+    applyBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      addComponentViaAPI(action);
+    });
+    bubble.appendChild(applyBtn);
+  }
+  card.appendChild(bubble);
+  return card;
+}
+
+/**
+ * 迷你视觉示例：按术语 slug 渲染一个可交互的 CSS 小样，
+ * 直观展示该术语长什么样（图片示例的轻量替代）。
+ */
+function buildTermExample(term) {
+  const box = el("div", "tl-example-box");
+  const s = term.slug;
+  if (s === "gradient") {
+    box.style.cssText = "height:54px;border-radius:8px;background:linear-gradient(135deg,#6366f1,#ec4899,#22d3ee);";
+  } else if (s === "border-radius" || s === "corner-feel") {
+    box.style.cssText = "height:54px;border-radius:14px;background:var(--accent-bg,rgba(124,58,237,.14));display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--accent);";
+    box.textContent = "圆角 14px";
+  } else if (s === "shadow") {
+    box.style.cssText = "height:54px;border-radius:8px;background:var(--surface);box-shadow:0 10px 24px rgba(0,0,0,.18);display:flex;align-items:center;justify-content:center;font-size:11px;";
+    box.textContent = "阴影层级";
+  } else if (s === "backdrop-blur") {
+    box.style.cssText = "height:54px;border-radius:8px;background:linear-gradient(135deg,#6366f1,#06b6d4);display:flex;align-items:center;justify-content:center;";
+    const glass = el("div");
+    glass.style.cssText = "width:70%;height:26px;border-radius:6px;background:rgba(255,255,255,.45);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);";
+    box.appendChild(glass);
+  } else if (s === "opacity") {
+    box.style.cssText = "height:54px;border-radius:8px;background:var(--accent);opacity:.45;display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;";
+    box.textContent = "45% 透明度";
+  } else if (s === "dark-mode") {
+    box.style.cssText = "height:54px;border-radius:8px;background:#0f1115;color:#f4f4f5;display:flex;align-items:center;justify-content:center;font-size:11px;";
+    box.textContent = "深色模式";
+  } else if (s === "divider") {
+    box.style.cssText = "height:54px;display:flex;align-items:center;gap:10px;";
+    box.appendChild(el("span", null, "左"));
+    const line = el("span");
+    line.style.cssText = "flex:1;height:1px;background:var(--border-strong);";
+    box.appendChild(line);
+    box.appendChild(el("span", null, "右"));
+  } else if (s === "design-token") {
+    box.style.cssText = "height:54px;border-radius:8px;background:var(--surface);display:flex;align-items:center;justify-content:center;gap:6px;font-size:10px;";
+    ["--primary", "--radius", "--space"].forEach((tk) => {
+      const chip = el("span");
+      chip.style.cssText = "padding:2px 6px;border:1px solid var(--border);border-radius:4px;font-family:var(--mono);";
+      chip.textContent = tk;
+      box.appendChild(chip);
+    });
+  } else if (s === "flex") {
+    box.style.cssText = "height:54px;display:flex;align-items:center;justify-content:center;gap:6px;";
+    [1, 2, 3].forEach(() => {
+      const b = el("span");
+      b.style.cssText = "width:22px;height:22px;border-radius:5px;background:var(--accent);";
+      box.appendChild(b);
+    });
+  } else if (s === "grid") {
+    box.style.cssText = "height:54px;display:grid;grid-template-columns:repeat(3,1fr);gap:4px;";
+    [1, 2, 3, 4, 5, 6].forEach(() => {
+      const b = el("span");
+      b.style.cssText = "border-radius:4px;background:var(--accent-bg,rgba(124,58,237,.16));";
+      box.appendChild(b);
+    });
+  } else if (s === "space" || s === "margin" || s === "padding") {
+    box.style.cssText = "height:54px;display:flex;align-items:center;justify-content:center;";
+    const inner = el("div");
+    inner.style.cssText = "width:70%;height:34px;border:2px dashed var(--accent);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;";
+    inner.textContent = s;
+    box.appendChild(inner);
+  } else if (s === "animation" || s === "transition" || s === "easing" || s === "spring") {
+    box.style.cssText = "height:54px;display:flex;align-items:center;justify-content:center;";
+    const ball = el("span");
+    ball.style.cssText = "width:26px;height:26px;border-radius:50%;background:var(--accent);animation:tlBounce 1.2s ease-in-out infinite;";
+    box.appendChild(ball);
+  } else if (s === "hover") {
+    box.style.cssText = "height:54px;display:flex;align-items:center;justify-content:center;";
+    const btn = el("span");
+    btn.style.cssText = "padding:6px 14px;border-radius:6px;background:var(--accent);color:#fff;font-size:11px;transition:transform .15s,box-shadow .15s;";
+    btn.textContent = "悬停我";
+    btn.addEventListener("mouseenter", () => { btn.style.transform = "translateY(-2px)"; btn.style.boxShadow = "0 6px 14px rgba(99,102,241,.4)"; });
+    btn.addEventListener("mouseleave", () => { btn.style.transform = ""; btn.style.boxShadow = ""; });
+    box.appendChild(btn);
+  } else if (s === "focus") {
+    box.style.cssText = "height:54px;display:flex;align-items:center;justify-content:center;";
+    const inp = el("span");
+    inp.style.cssText = "padding:5px 10px;border:2px solid var(--border);border-radius:6px;font-size:11px;";
+    inp.textContent = "聚焦状态";
+    inp.addEventListener("mouseenter", () => { inp.style.borderColor = "var(--accent)"; inp.style.boxShadow = "0 0 0 3px var(--accent-bg,rgba(124,58,237,.2))"; });
+    inp.addEventListener("mouseleave", () => { inp.style.borderColor = ""; inp.style.boxShadow = ""; });
+    box.appendChild(inp);
+  } else if (["button", "link", "input", "card", "tag", "badge", "avatar", "table", "list", "alert", "tooltip", "modal", "progress", "skeleton", "switch", "checkbox", "radio", "slider", "select", "tabs", "collapse", "timeline", "carousel", "breadcrumb", "pagination", "steps", "dropdown", "navbar", "footer", "hero", "cta", "pricing", "faq", "search", "menu", "statistic", "empty", "image", "icon", "quote", "spinner", "drawer", "toast", "notification", "form", "upload", "tree", "popover", "popconfirm", "anchor", "back-top", "descriptions", "segmented", "file", "video", "chat-ui", "filter", "chart", "result", "user-voice", "header", "banner", "social-proof", "typography", "serif-sans", "text-truncate"].includes(s)) {
+    box.style.cssText = "height:54px;border-radius:8px;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;gap:8px;";
+    const icon = el("span");
+    icon.style.cssText = "width:24px;height:24px;border-radius:6px;background:linear-gradient(135deg,var(--accent),#a78bfa);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;";
+    icon.textContent = term.zh.slice(0, 1);
+    box.appendChild(icon);
+    box.appendChild(el("span", null, term.zh));
+  } else {
+    box.style.cssText = "height:54px;border-radius:8px;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--text-muted);";
+    box.textContent = term.zh;
+  }
+  return box;
+}
+
+// 兼容旧引用：renderLibraryList 不再使用（顶部库替代），保留空实现避免调用报错。
+function renderLibraryList() {
+  const strip = $("top-lib-strip");
+  if (strip && topLibraryActive) renderTopLibraryStrip(topLibraryActive);
+}
+
 
 // ===== 重建设计库 (P1): VibeHub 知识卡片 =====
 

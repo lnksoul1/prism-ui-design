@@ -44,6 +44,26 @@
   </div>
 </header>
 
+<!-- 顶部设计库 (P1): 13 个知识分类 tab，悬停向下展开气泡卡片 -->
+<div class="top-library" id="top-library">
+  <div class="top-lib-tabs" id="top-lib-tabs">
+    <button class="top-lib-tab" data-lib="按钮与链接">按钮与链接</button>
+    <button class="top-lib-tab" data-lib="表单">表单</button>
+    <button class="top-lib-tab" data-lib="内容展示">内容展示</button>
+    <button class="top-lib-tab" data-lib="弹窗与提示">弹窗与提示</button>
+    <button class="top-lib-tab" data-lib="导航">导航</button>
+    <button class="top-lib-tab" data-lib="官网区块">官网区块</button>
+    <button class="top-lib-tab" data-lib="页面布局">页面布局</button>
+    <button class="top-lib-tab" data-lib="CSS 布局">CSS 布局</button>
+    <button class="top-lib-tab" data-lib="文字">文字</button>
+    <button class="top-lib-tab" data-lib="外观">外观</button>
+    <button class="top-lib-tab" data-lib="动画">动画</button>
+    <button class="top-lib-tab" data-lib="鼠标">鼠标</button>
+    <button class="top-lib-tab" data-lib="设计风格">设计风格</button>
+  </div>
+  <div class="top-lib-strip" id="top-lib-strip"></div>
+</div>
+
 <!-- Main Layout: 3 columns -->
 <div class="main-layout">
 
@@ -62,27 +82,12 @@
         <div class="layer-empty">组件图层将显示在这里</div>
       </div>
     </div>
-    <!-- Tools: Library / Versions / Comments -->
+    <!-- Tools: Versions / Comments -->
     <div class="tools-tabs">
-      <button class="tool-tab active" data-tool="library" data-i18n="library">设计库</button>
-      <button class="tool-tab" data-tool="versions" data-i18n="versions">版本</button>
+      <button class="tool-tab active" data-tool="versions" data-i18n="versions">版本</button>
       <button class="tool-tab" data-tool="comments" data-i18n="comments">评论</button>
     </div>
-    <div class="tool-pane active" id="pane-library">
-      <div class="library-tabs">
-        <button class="lib-tab active" data-lib="components" title="组件（按钮/表单/内容展示/弹窗/导航/官网区块）" data-i18n="libComponents">组件</button>        <button class="lib-tab" data-lib="layout" title="布局（CSS 布局/页面布局）" data-i18n="libLayout">布局</button>
-        <button class="lib-tab" data-lib="appearance" title="外观（圆角/阴影/渐变/毛玻璃/深色模式/设计令牌）" data-i18n="libAppearance">外观</button>
-        <button class="lib-tab" data-lib="animation" title="动效（过渡/动画/缓动/悬停/聚焦）" data-i18n="libAnimation">动效</button>
-        <button class="lib-tab" data-lib="interactions" title="交互模板" data-i18n="libInteractions">交互</button>
-        <button class="lib-tab" data-lib="styles" title="设计风格（VibeHub 风格知识）" data-i18n="libStyles">风格</button>
-        <button class="lib-tab" data-lib="templates" title="模板库" data-i18n="libTemplates">模板</button>
-      </div>
-      <input type="text" class="tool-search" id="library-search" data-i18n-placeholder="searchLibrary" placeholder="搜索组件/布局/外观/动效...">
-      <div class="library-list" id="library-list">
-        <div class="library-empty">加载中...</div>
-      </div>
-    </div>
-    <div class="tool-pane" id="pane-versions">
+    <div class="tool-pane active" id="pane-versions">
       <button class="toolbar-btn version-create" id="version-create-btn" data-i18n="createVersion">+ 新建版本</button>
       <div class="version-list" id="version-list"><div class="tool-empty" data-i18n="versionEmpty">暂无版本</div></div>
     </div>

@@ -447,6 +447,14 @@
 
 <div class="prism-toast" id="prism-toast" style="display:none"></div>
 
-<script src="app.js"></script>
+<!-- Split client modules — loaded in dependency order (global-scope scripts) -->
+<script src="app-core.js"></script>
+<script src="app-ws.js"></script>
+<script src="app-canvas.js"></script>
+<script src="app-selection.js"></script>
+<script src="app-renderers.js"></script>
+<script src="app-panels.js"></script>
+<script src="app-import.js"></script>
+<script src="app-canvas-editor.js"></script>
 </body>
 </html>

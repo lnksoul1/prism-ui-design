@@ -33,6 +33,8 @@ let currentExportFormat = "html";
 let conflictCheckInterval = null;
 let selectedComponentId = null;
 let selectedIds = [];
+// 元素级编辑 P1: 组件内部被选中的元素路径（如 "title" / "items.0.title"）。
+let selectedElementPath = null;
 let canvasZoom = 100;
 // 默认自由模式：组件可任意移动/缩放（定位核心"精确自由调整"）。
 // "流式"切换按钮保留，作为自动纵向排列的选项。
@@ -350,6 +352,34 @@ const I18N = {
     appliedError: "应用失败",
     rolledBack: "已回滚：{file}",
     rollbackNone: "没有可回滚的备份",
+    // 背景编辑 P1 (page background)
+    pageBackground: "页面背景",
+    pageBackgroundHint: "作用于整个画布，导出时应用到页面 body",
+    bgCustom: "自定义",
+    bgColor: "颜色",
+    bgGradient: "渐变",
+    bgImageUrl: "图片 URL",
+    bgApplyColor: "应用颜色",
+    bgClear: "清除背景",
+    bgCustomHint: "渐变请输入 CSS linear-gradient()，图片粘贴图片 URL 后回车",
+    toastBgApplied: "页面背景已应用",
+    toastBgCleared: "页面背景已清除",
+    bgAdvanced: "渐变/图片",
+    // 元素级编辑 P1 (element panel)
+    elementTitle: "元素 · {path}",
+    elementTitleHint: "组件内部元素：可为文字/按钮绑定独立交互，或转换为按钮/链接",
+    elementKind: "类型",
+    kindText: "文本",
+    kindButton: "按钮",
+    kindLink: "链接",
+    elementBack: "↩ 返回组件编辑",
+    // 画布交互 / 模板 (canvas & templates)
+    canvasBehaviorBound: "已绑定交互（播放模式点击触发）",
+    canvasBehaviorBoundN: "已为 {n} 个形状绑定交互",
+    addComponentAnimFirst: "请先添加组件，再应用动效",
+    templateReplaced: "已替换选中组件（位置保持不变）",
+    templateAdded: "已添加组件模板",
+    templateReplaceDone: "已替换选中组件",
   },
   en: {
     connected: "Connected",
@@ -626,6 +656,34 @@ const I18N = {
     appliedError: "Apply failed",
     rolledBack: "Rolled back: {file}",
     rollbackNone: "No backup to roll back",
+    // Page background P1
+    pageBackground: "Page background",
+    pageBackgroundHint: "Applies to the whole canvas; exported to the page body",
+    bgCustom: "Custom",
+    bgColor: "Color",
+    bgGradient: "Gradient",
+    bgImageUrl: "Image URL",
+    bgApplyColor: "Apply color",
+    bgClear: "Clear background",
+    bgCustomHint: "For gradients enter a CSS linear-gradient(); for images paste an image URL and press Enter",
+    toastBgApplied: "Page background applied",
+    toastBgCleared: "Page background cleared",
+    bgAdvanced: "Gradient/Image",
+    // Element-level editing P1
+    elementTitle: "Element · {path}",
+    elementTitleHint: "Inner element of a component: bind its own interaction, or promote to button/link",
+    elementKind: "Type",
+    kindText: "Text",
+    kindButton: "Button",
+    kindLink: "Link",
+    elementBack: "↩ Back to component",
+    // Canvas & templates
+    canvasBehaviorBound: "Interaction bound (triggers in play mode)",
+    canvasBehaviorBoundN: "Bound interactions to {n} shapes",
+    addComponentAnimFirst: "Add a component first, then apply the animation",
+    templateReplaced: "Replaced the selected component (position kept)",
+    templateAdded: "Component template added",
+    templateReplaceDone: "Selected component replaced",
   },
 };
 
@@ -928,11 +986,12 @@ function handleChange(change) {
     case "reorder_component":
     case "duplicateComponent":
     case "setBehavior":
-      renderCanvas();
+      // 细粒度变更：静默重绘，避免入场动画重放闪烁
+      renderCanvas({ silent: true });
       renderLayerPanel();
       break;
     case "setAnimation":
-      renderCanvas();
+      renderCanvas({ silent: true });
       break;
     case "clearAll":
       renderAll();
@@ -941,7 +1000,7 @@ function handleChange(change) {
     case "undo":
     case "redo":
       updateUndoRedoButtons();
-      renderCanvas();
+      renderCanvas({ silent: true });
       break;
     // New: page management
     case "addPage":
@@ -1070,9 +1129,12 @@ function examplePromptText(p) {
   return p[uiLang] || p.zh;
 }
 
-function renderCanvas() {
+function renderCanvas(opts) {
   const canvas = $("canvas");
   const meta = $("canvas-meta");
+  // 静默重绘（silent）：抑制入场动画重放，避免改一个字整页闪烁。
+  const silent = !!(opts && opts.silent);
+  canvas.classList.toggle("no-reenter", silent);
 
   const components = getCurrentComponents();
 
@@ -1201,11 +1263,13 @@ function renderCanvas() {
     meta.textContent = "0 个组件";
     // Apply platform class even on placeholder
     applyPlatform(canvas);
+    applyPageBackground(canvas);
     return;
   }
 
   canvas.innerHTML = "";
   applyPlatform(canvas);
+  applyPageBackground(canvas);
   const count = countComponents(components);
   meta.textContent = `${count} 个组件`;
 
@@ -1220,6 +1284,8 @@ function renderCanvas() {
   // 标尺/参考线跟随画布尺寸刷新
   renderRulers();
   renderGuides();
+  // 元素级编辑 P1: 重绘后恢复内部元素高亮
+  applyElementSelectionHighlight();
 }
 
 /**
@@ -1313,6 +1379,109 @@ function applyStyleProps(wrapper, props) {
   }
 }
 
+// ===== 背景编辑 P1 (page background) =====
+
+/**
+ * 页面背景预设库：一键应用的颜色 / 渐变 / 图案 / 图片 / 动画背景。
+ * value 直接作为 CSS background 值使用。
+ */
+const PAGE_BACKGROUND_PRESETS = [
+  // 纯色
+  { id: "color_white", type: "color", name: "纯白", value: "#ffffff" },
+  { id: "color_snow", type: "color", name: "雪白", value: "#f8fafc" },
+  { id: "color_smoke", type: "color", name: "烟灰", value: "#f1f5f9" },
+  { id: "color_slate", type: "color", name: "石板灰", value: "#334155" },
+  { id: "color_ink", type: "color", name: "墨黑", value: "#0b0a0f" },
+  { id: "color_navy", type: "color", name: "藏青", value: "#0f172a" },
+  { id: "color_cream", type: "color", name: "奶油", value: "#fdf6ec" },
+  { id: "color_mint", type: "color", name: "薄荷", value: "#ecfdf5" },
+  // 渐变
+  { id: "grad_sunset", type: "gradient", name: "日落", value: "linear-gradient(135deg, #f97316 0%, #ec4899 50%, #8b5cf6 100%)" },
+  { id: "grad_ocean", type: "gradient", name: "海洋", value: "linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%)" },
+  { id: "grad_aurora", type: "gradient", name: "极光", value: "linear-gradient(135deg, #10b981 0%, #22d3ee 50%, #6366f1 100%)" },
+  { id: "grad_berry", type: "gradient", name: "浆果", value: "linear-gradient(135deg, #f43f5e 0%, #a855f7 100%)" },
+  { id: "grad_midnight", type: "gradient", name: "午夜", value: "linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%)" },
+  { id: "grad_gold", type: "gradient", name: "鎏金", value: "linear-gradient(135deg, #f59e0b 0%, #fde68a 100%)" },
+  // 图案
+  { id: "pat_dots", type: "pattern", name: "圆点", value: "radial-gradient(circle, rgba(100,116,139,0.35) 1px, transparent 1px) 0 0 / 22px 22px, #f8fafc" },
+  { id: "pat_grid", type: "pattern", name: "网格", value: "linear-gradient(rgba(100,116,139,0.18) 1px, transparent 1px) 0 0 / 24px 24px, linear-gradient(90deg, rgba(100,116,139,0.18) 1px, transparent 1px) 0 0 / 24px 24px, #f8fafc" },
+  { id: "pat_stripes", type: "pattern", name: "斜纹", value: "repeating-linear-gradient(45deg, rgba(99,102,241,0.12) 0 10px, transparent 10px 20px), #f8fafc" },
+  { id: "pat_checker", type: "pattern", name: "棋盘", value: "conic-gradient(rgba(15,23,42,0.12) 25%, transparent 0 50%, rgba(15,23,42,0.12) 0 75%, transparent 0) 0 0 / 24px 24px, #f8fafc" },
+  { id: "pat_dark_grid", type: "pattern", name: "暗色网格", value: "linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px) 0 0 / 28px 28px, linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px) 0 0 / 28px 28px, #0b0a0f" },
+  // 动画
+  { id: "anim_aurora", type: "animation", name: "流光极光", value: "linear-gradient(135deg, #6366f1, #ec4899, #22d3ee, #6366f1) 0 0 / 300% 300%", animation: "aurora" },
+  { id: "anim_shift", type: "animation", name: "渐变流动", value: "linear-gradient(135deg, #0ea5e9, #8b5cf6, #f43f5e, #0ea5e9) 0 0 / 300% 300%", animation: "gradientShift" },
+  { id: "anim_pulse", type: "animation", name: "呼吸光晕", value: "radial-gradient(circle at 50% 40%, #6366f1, #0f172a 70%)", animation: "pulse" },
+];
+
+/** 页面背景动画 keyframes（客户端预览用）。 */
+const PAGE_BACKGROUND_ANIM_CSS = {
+  aurora: "@keyframes prismBgAurora { 0% { background-position: 0% 50%; filter: hue-rotate(0deg); } 50% { background-position: 100% 50%; filter: hue-rotate(45deg); } 100% { background-position: 0% 50%; filter: hue-rotate(0deg); } }",
+  gradientShift: "@keyframes prismBgShift { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }",
+  pulse: "@keyframes prismBgPulse { 0%, 100% { opacity: 0.85; } 50% { opacity: 1; } }",
+};
+
+let pageBgAnimStyleEl = null;
+
+/** 将页面背景应用到画布容器（预览）。 */
+function applyPageBackground(canvas) {
+  if (!canvas) return;
+  const bg = currentState && currentState.pageBackground;
+  if (!bg) {
+    canvas.style.background = "";
+    canvas.style.animation = "";
+    if (pageBgAnimStyleEl) {
+      pageBgAnimStyleEl.remove();
+      pageBgAnimStyleEl = null;
+    }
+    return;
+  }
+  canvas.style.background = bg.value;
+  if (bg.type === "animation") {
+    const name = cssAnimName(bg.animation);
+    if (!pageBgAnimStyleEl) {
+      pageBgAnimStyleEl = document.createElement("style");
+      pageBgAnimStyleEl.id = "page-bg-anim";
+      document.head.appendChild(pageBgAnimStyleEl);
+    }
+    pageBgAnimStyleEl.textContent = PAGE_BACKGROUND_ANIM_CSS[bg.animation] || PAGE_BACKGROUND_ANIM_CSS.gradientShift;
+    canvas.style.animation = `${name} 18s ease-in-out infinite alternate`;
+  } else {
+    canvas.style.animation = "";
+    if (pageBgAnimStyleEl) {
+      pageBgAnimStyleEl.remove();
+      pageBgAnimStyleEl = null;
+    }
+  }
+}
+
+function cssAnimName(animation) {
+  const map = { aurora: "prismBgAurora", gradientShift: "prismBgShift", pulse: "prismBgPulse" };
+  return map[animation] || "prismBgShift";
+}
+
+/** 保存页面背景（null 清除）。 */
+function savePageBackground(background) {
+  fetch("/api/page-background", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ background }),
+  })
+    .then((r) => (r.ok ? r.json() : Promise.reject(new Error("HTTP " + r.status))))
+    .then(() => {
+      if (currentState) {
+        if (background) currentState.pageBackground = background;
+        else delete currentState.pageBackground;
+      }
+      applyPageBackground($("canvas"));
+      showToastMsg(background ? t("toastBgApplied") : t("toastBgCleared"));
+    })
+    .catch((err) => {
+      console.error("Set page background failed:", err);
+      showToastMsg(t("dsError"), true);
+    });
+}
+
 function renderComponent(comp) {
   const wrapper = el("div", "comp-wrapper");
   wrapper.dataset.id = comp.id;
@@ -1326,9 +1495,14 @@ function renderComponent(comp) {
     if (e.target.closest("[contenteditable='true']")) return;
     // 子组件点击不再冒泡到父组件：否则选中的是父组件，内部组成部分无法调整。
     e.stopPropagation();
-    // Play mode: dispatch the bound behavior (行为模型 P1), with a legacy
-    // fallback to page links saved by older versions.
+    // Play mode: dispatch the bound behavior — first element-level (元素级
+    // 编辑 P1: 内部文字/按钮的独立交互), falling back to component-level.
     if (playMode) {
+      const elBehavior = elementBehaviorAt(e.target, comp);
+      if (elBehavior) {
+        dispatchElementBehavior(elBehavior);
+        return;
+      }
       if (hasClickableBehavior(comp)) {
         dispatchBehavior(comp);
       } else {
@@ -1340,6 +1514,15 @@ function renderComponent(comp) {
         }
       }
       return;
+    }
+    // 元素级编辑 P1: 单击组件内部元素（文字/按钮）→ 选中该元素而非整个组件。
+    const innerEl = e.target.closest("[data-element='true']");
+    if (innerEl && innerEl.closest(".comp-wrapper") === wrapper) {
+      const path = innerEl.getAttribute("data-prop");
+      if (path) {
+        selectElement(comp.id, path);
+        return;
+      }
     }
     selectComponent(comp.id, e.shiftKey);
   });
@@ -1380,7 +1563,10 @@ function renderComponent(comp) {
 
   // Render the actual component
   const content = renderComponentContent(comp);
-  if (content) wrapper.appendChild(content);
+  if (content) {
+    applyElementMetaStyles(content, comp);
+    wrapper.appendChild(content);
+  }
 
   // Freeform layout: absolute positioning + drag/resize
   if (canvasMode === "freeform" && comp.layout) {
@@ -1433,6 +1619,9 @@ function attachFreeformDrag(wrapper, compId) {
     if (e.target.closest("[contenteditable='true']")) return;
     // 内联编辑文字：mousedown 不启动拖动，否则双击编辑会被打断。
     if (e.target.closest("[data-editable='true']")) return;
+    // 元素级编辑 P1: 内部元素（文字/按钮）mousedown 不启动组件拖动，
+    // 让元素的 click 处理器完成元素选中/交互。
+    if (e.target.closest("[data-element='true']")) return;
     // 子组件拦截：点击落在内部子组件上时，不启动父组件拖动、不选中父，
     // 让子组件自己的 click 处理器接管（否则 mousedown 冒泡会选中父组件）。
     const inner = e.target.closest(".comp-wrapper");
@@ -2051,6 +2240,8 @@ function getSelectedComps() {
 }
 
 function selectComponent(id, additive) {
+  // 组件级重新选择时清除元素级选择（元素选择由 selectElement 管理）
+  selectedElementPath = null;
   if (additive) {
     const idx = selectedIds.indexOf(id);
     if (idx >= 0) {
@@ -2078,10 +2269,67 @@ function selectComponent(id, additive) {
   renderSelectionToolbar();
 }
 
+// ===== 元素级编辑 P1 (inner-element selection) =====
+
+/**
+ * Select an inner element (by its prop path) of a component. The component
+ * stays selected (so layout/drag still works); the element gets a distinct
+ * highlight and the inspector shows an element panel (type promotion +
+ * per-element behavior).
+ */
+function selectElement(compId, path) {
+  selectedComponentId = compId;
+  selectedIds = [compId];
+  selectedElementPath = path || null;
+  document.querySelectorAll(".comp-wrapper.selected").forEach((w) => w.classList.remove("selected"));
+  const wrapper = document.querySelector(`.comp-wrapper[data-id="${CSS.escape(compId)}"]`);
+  if (wrapper) wrapper.classList.add("selected");
+  applyElementSelectionHighlight();
+  renderInspector();
+  renderLayerPanel();
+  renderComments();
+  renderSelectionToolbar();
+}
+
+/** Remove element-level selection, keeping the component selected. */
+function clearElementSelection() {
+  selectedElementPath = null;
+  applyElementSelectionHighlight();
+  renderInspector();
+}
+
+/** Highlight the currently selected inner element (if any). */
+function applyElementSelectionHighlight() {
+  document.querySelectorAll(".element-selected").forEach((w) => w.classList.remove("element-selected"));
+  if (!selectedComponentId || !selectedElementPath) return;
+  const wrapper = document.querySelector(`.comp-wrapper[data-id="${CSS.escape(selectedComponentId)}"]`);
+  if (!wrapper) return;
+  const elm = wrapper.querySelector(`[data-prop="${CSS.escape(selectedElementPath)}"]`);
+  if (elm) elm.classList.add("element-selected");
+}
+
+/** Find the element-level behavior bound to the clicked inner element. */
+function elementBehaviorAt(target, comp) {
+  if (!comp || !comp.elementMeta) return null;
+  const innerEl = target.closest("[data-element='true']");
+  if (!innerEl) return null;
+  const path = innerEl.getAttribute("data-prop");
+  if (!path) return null;
+  const meta = comp.elementMeta[path];
+  return meta && meta.behavior && meta.behavior.type ? meta.behavior : null;
+}
+
+/** Dispatch an element-level behavior (same semantics as component behavior). */
+function dispatchElementBehavior(behavior) {
+  dispatchBehavior({ behavior });
+}
+
 function deselectAll() {
   selectedComponentId = null;
   selectedIds = [];
+  selectedElementPath = null;
   document.querySelectorAll(".comp-wrapper.selected").forEach((w) => w.classList.remove("selected"));
+  document.querySelectorAll(".element-selected").forEach((w) => w.classList.remove("element-selected"));
   renderInspector();
   renderLayerPanel();
   renderSelectionToolbar();
@@ -2193,12 +2441,8 @@ function renderInspector() {
   const comp = getSelectedComp();
 
   if (!comp) {
-    panel.innerHTML = `
-      <div class="inspector-empty">
-        <div class="inspector-empty-icon">◈</div>
-    <p>${t("inspectorEmpty")}</p>
-    <p class="inspector-empty-hint">${t("inspectorEmptyHint")}</p>
-      </div>`;
+    // 未选中组件时：显示页面背景编辑面板（背景编辑 P1）
+    renderPageBackgroundPanel(panel);
     return;
   }
 
@@ -2227,6 +2471,106 @@ function renderInspector() {
   });
 }
 
+// ===== 背景编辑 P1 (page background panel) =====
+
+/** 渲染页面背景编辑面板（未选中组件时显示在检查器中）。 */
+function renderPageBackgroundPanel(panel) {
+  panel.innerHTML = "";
+  const bg = (currentState && currentState.pageBackground) || null;
+
+  const header = el("div", "inspector-section");
+  header.appendChild(el("div", "inspector-section-title", t("pageBackground")));
+  const idLine = el("div", "inspector-id", t("pageBackgroundHint"));
+  idLine.style.opacity = "0.7";
+  header.appendChild(idLine);
+  panel.appendChild(header);
+
+  // 预设分类网格
+  const presets = el("div", "bg-preset-grid");
+  PAGE_BACKGROUND_PRESETS.forEach((preset) => {
+    const item = el("div", "bg-preset" + (bg && bg.value === preset.value ? " active" : ""));
+    item.dataset.bgId = preset.id;
+    const swatch = el("div", "bg-preset-swatch");
+    swatch.style.background = preset.value;
+    if (preset.type === "animation") swatch.classList.add("bg-preset-anim");
+    item.appendChild(swatch);
+    item.appendChild(el("div", "bg-preset-name", preset.name));
+    item.addEventListener("click", () => {
+      savePageBackground({
+        type: preset.type,
+        value: preset.value,
+        animation: preset.animation,
+      });
+    });
+    presets.appendChild(item);
+  });
+  panel.appendChild(presets);
+
+  // 自定义区
+  const custom = el("div", "inspector-section");
+  custom.appendChild(el("div", "inspector-section-title", t("bgCustom")));
+
+  // 纯色输入
+  const colorRow = el("div", "prop-row");
+  colorRow.appendChild(el("div", "prop-label", t("bgColor")));
+  const colorInput = el("input", "prop-text-input");
+  colorInput.value = (bg && bg.type === "color" ? bg.value : "") || "#f8fafc";
+  colorInput.spellcheck = false;
+  colorInput.addEventListener("change", () => {
+    const v = colorInput.value.trim();
+    if (v) savePageBackground({ type: "color", value: v });
+  });
+  colorRow.appendChild(colorInput);
+  custom.appendChild(colorRow);
+
+  // 渐变输入
+  const gradRow = el("div", "prop-row");
+  gradRow.appendChild(el("div", "prop-label", t("bgGradient")));
+  const gradInput = el("input", "prop-text-input");
+  gradInput.value = (bg && bg.type === "gradient" ? bg.value : "") || "linear-gradient(135deg, #6366f1, #22d3ee)";
+  gradInput.spellcheck = false;
+  gradInput.addEventListener("change", () => {
+    const v = gradInput.value.trim();
+    if (v) savePageBackground({ type: "gradient", value: v });
+  });
+  gradRow.appendChild(gradInput);
+  custom.appendChild(gradRow);
+
+  // 图片 URL 输入
+  const imgRow = el("div", "prop-row");
+  imgRow.appendChild(el("div", "prop-label", t("bgImageUrl")));
+  const imgInput = el("input", "prop-text-input");
+  imgInput.value = (bg && bg.type === "image" ? bg.value : "") || "";
+  imgInput.placeholder = "https://…/bg.jpg";
+  imgInput.spellcheck = false;
+  imgInput.addEventListener("change", () => {
+    const v = imgInput.value.trim();
+    if (v) savePageBackground({ type: "image", value: `url('${v}') center/cover no-repeat` });
+  });
+  imgRow.appendChild(imgInput);
+  custom.appendChild(imgRow);
+
+  // 操作按钮
+  const actions = el("div", "inspector-actions");
+  const applyBtn = el("button", "inspector-action-btn", t("bgApplyColor"));
+  applyBtn.addEventListener("click", () => {
+    savePageBackground({ type: "color", value: colorInput.value.trim() || "#f8fafc" });
+  });
+  actions.appendChild(applyBtn);
+  const clearBtn = el("button", "inspector-delete-btn", t("bgClear"));
+  clearBtn.addEventListener("click", () => {
+    savePageBackground(null);
+    colorInput.value = "";
+  });
+  actions.appendChild(clearBtn);
+  custom.appendChild(actions);
+  panel.appendChild(custom);
+
+  // 提示
+  const hint = el("div", "inspector-hint", t("bgCustomHint"));
+  panel.appendChild(hint);
+}
+
 function renderInspectorProps(panel, comp) {
   const props = comp.props || {};
 
@@ -2245,6 +2589,12 @@ function renderInspectorProps(panel, comp) {
     header.appendChild(pathLine);
   }
   panel.appendChild(header);
+
+  // 元素级编辑 P1: 当组件内部某个元素被选中时，显示该元素的编辑面板
+  // （类型提升 文本/按钮/链接 + 元素级行为绑定）。
+  if (selectedElementPath && selectedComponentId === comp.id) {
+    renderElementPanel(panel, comp, selectedElementPath);
+  }
 
   // Appearance (Pixso-style fill / text / radius) — always available.
   const appearance = el("div", "inspector-section");
@@ -2273,6 +2623,27 @@ function renderInspectorProps(panel, comp) {
   };
   addAppearanceColor(t("fill"), "bg");
   addAppearanceColor(t("textColor"), "color");
+  // 组件背景增强 (背景编辑 P1): 渐变 / 图片可写入 props.bg（CSS background 值）
+  const bgAdvanced = el("div", "prop-row");
+  bgAdvanced.appendChild(el("div", "prop-label", t("bgAdvanced")));
+  const bgAdvancedInput = el("input", "prop-text-input");
+  bgAdvancedInput.value = (props.bg_gradient || props.bg_image) || "";
+  bgAdvancedInput.placeholder = "linear-gradient(...) 或图片 URL";
+  bgAdvancedInput.spellcheck = false;
+  bgAdvancedInput.addEventListener("change", () => {
+    const v = bgAdvancedInput.value.trim();
+    if (!v) {
+      sendUpdateComponent(comp.id, { bg_gradient: "", bg_image: "", bg: "" });
+      return;
+    }
+    if (/^https?:\/\/|^data:|^\//i.test(v)) {
+      sendUpdateComponent(comp.id, { bg_gradient: "", bg_image: v, bg: `url('${v}') center/cover no-repeat` });
+    } else {
+      sendUpdateComponent(comp.id, { bg_gradient: v, bg_image: "", bg: v });
+    }
+  });
+  bgAdvanced.appendChild(bgAdvancedInput);
+  appearance.appendChild(bgAdvanced);
   const radiusRow = el("div", "prop-row");
   radiusRow.appendChild(el("div", "prop-label", t("radius")));
   const radiusInput = el("input", "prop-text-input");
@@ -2303,7 +2674,7 @@ function renderInspectorProps(panel, comp) {
         const next = { ...(comp.layout || { x: 0, y: 0, w: 0, h: 0 }), [key]: value };
         comp.layout = next;
         sendUpdateComponent(comp.id, {}, { [key]: value });
-        renderCanvas();
+        renderCanvas({ silent: true });
       });
       row.appendChild(input);
       layoutSection.appendChild(row);
@@ -2445,7 +2816,7 @@ function renderInspectorProps(panel, comp) {
         comp.behavior = next || undefined;
         fetchInitialState();
         renderInspector();
-        renderCanvas();
+        renderCanvas({ silent: true });
       })
       .catch((err) => {
         console.error("Set behavior failed:", err);
@@ -2569,6 +2940,207 @@ function renderInspectorProps(panel, comp) {
   });
   actions.appendChild(delBtn);
   panel.appendChild(actions);
+}
+
+// ===== 元素级编辑 P1 (element inspector panel) =====
+
+const ELEMENT_BEHAVIOR_TYPES = [
+  ["", t("behaviorNone")],
+  ["navigate", t("behaviorNavigate")],
+  ["link", t("behaviorLink")],
+  ["toggle", t("behaviorToggle")],
+  ["toast", t("behaviorToast")],
+  ["submit", t("behaviorSubmit")],
+  ["prompt", t("behaviorPrompt")],
+];
+
+function saveElementMeta(path, meta) {
+  const comp = getSelectedComp();
+  if (!comp) return;
+  fetch(`/api/component/${encodeURIComponent(comp.id)}/element-meta`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path, ...meta }),
+  })
+    .then((r) => (r.ok ? r.json() : Promise.reject(new Error("HTTP " + r.status))))
+    .then(() => {
+      comp.elementMeta = comp.elementMeta || {};
+      if (meta.behavior !== undefined) {
+        if (meta.behavior === null) {
+          if (comp.elementMeta[path]) delete comp.elementMeta[path].behavior;
+        } else {
+          comp.elementMeta[path] = { ...(comp.elementMeta[path] || {}), behavior: meta.behavior };
+        }
+      }
+      if (meta.kind !== undefined) {
+        if (meta.kind === null) {
+          if (comp.elementMeta[path]) delete comp.elementMeta[path].kind;
+        } else {
+          comp.elementMeta[path] = { ...(comp.elementMeta[path] || {}), kind: meta.kind };
+        }
+      }
+      if (comp.elementMeta[path] && Object.keys(comp.elementMeta[path]).length === 0) {
+        delete comp.elementMeta[path];
+      }
+      if (Object.keys(comp.elementMeta).length === 0) delete comp.elementMeta;
+      fetchInitialState();
+      renderInspector();
+      renderCanvas({ silent: true });
+    })
+    .catch((err) => {
+      console.error("Set element meta failed:", err);
+      showToastMsg(t("dsError"), true);
+    });
+}
+
+/** 元素级编辑 P1: inspector section for the selected inner element. */
+function renderElementPanel(panel, comp, path) {
+  const meta = (comp.elementMeta && comp.elementMeta[path]) || {};
+  const section = el("div", "inspector-section el-element-section");
+  const title = el("div", "el-element-title", t("elementTitle", { path }));
+  title.title = t("elementTitleHint");
+  section.appendChild(title);
+
+  // 类型提升: 文本 / 按钮 / 链接
+  const kindRow = el("div", "prop-row");
+  kindRow.appendChild(el("div", "prop-label", t("elementKind")));
+  const kindGroup = el("div", "el-kind-group");
+  [["text", t("kindText")], ["button", t("kindButton")], ["link", t("kindLink")]].forEach(([kind, label]) => {
+    const btn = el("button", "el-kind-option" + (meta.kind === kind ? " active" : ""), label);
+    btn.type = "button";
+    btn.addEventListener("click", () => {
+      saveElementMeta(path, { kind: kind === "text" ? null : kind });
+    });
+    kindGroup.appendChild(btn);
+  });
+  kindRow.appendChild(kindGroup);
+  section.appendChild(kindRow);
+
+  // 元素级行为绑定（播放模式点击该元素触发）
+  const behavior = meta.behavior || null;
+  const pages = (currentState && currentState.pages) || [];
+  const otherPages = pages.filter((p) => p.id !== (currentState && currentState.currentPageId));
+  const allComponents = findAllComponents(getCurrentComponents());
+
+  const behaviorTypeSelect = el("select", "el-prop-select");
+  behaviorTypeSelect.innerHTML = ELEMENT_BEHAVIOR_TYPES
+    .map(([value, label]) => `<option value="${value}" ${behavior && behavior.type === value ? "selected" : ""}>${label}</option>`)
+    .join("");
+  const behaviorTypeRow = el("div", "prop-row");
+  behaviorTypeRow.appendChild(el("div", "prop-label", t("behavior")));
+  behaviorTypeRow.appendChild(behaviorTypeSelect);
+  section.appendChild(behaviorTypeRow);
+
+  const paramsWrap = el("div", "behavior-params");
+  section.appendChild(paramsWrap);
+
+  const renderParams = () => {
+    paramsWrap.innerHTML = "";
+    const type = behaviorTypeSelect.value;
+    if (!type) return;
+    if (type === "navigate") {
+      const row = el("div", "prop-row");
+      row.appendChild(el("div", "prop-label", t("behaviorNavigate")));
+      const select = el("select", "el-prop-select");
+      select.innerHTML =
+        `<option value="">${t("playLinkPlaceholder")}</option>` +
+        otherPages
+          .map((p) => `<option value="${p.id}" ${behavior && behavior.page_id === p.id ? "selected" : ""}>${p.name}</option>`)
+          .join("");
+      select.addEventListener("change", () => {
+        saveElementMeta(path, { behavior: select.value ? { type: "navigate", page_id: select.value } : null });
+      });
+      row.appendChild(select);
+      paramsWrap.appendChild(row);
+    } else if (type === "link") {
+      const row = el("div", "prop-row");
+      row.appendChild(el("div", "prop-label", t("behaviorUrl")));
+      const input = el("input", "el-prop-text-input");
+      input.value = (behavior && behavior.url) || "";
+      input.placeholder = "https://…";
+      input.spellcheck = false;
+      input.addEventListener("change", () => {
+        const url = input.value.trim();
+        saveElementMeta(path, { behavior: url ? { type: "link", url, new_tab: true } : null });
+      });
+      row.appendChild(input);
+      paramsWrap.appendChild(row);
+    } else if (type === "toggle") {
+      const row = el("div", "prop-row");
+      row.appendChild(el("div", "prop-label", t("behaviorTarget")));
+      const select = el("select", "el-prop-select");
+      select.innerHTML =
+        `<option value="">${t("behaviorTarget")}…</option>` +
+        allComponents
+          .filter((c) => c.id !== comp.id)
+          .map((c) => `<option value="${c.id}" ${behavior && behavior.target_component_id === c.id ? "selected" : ""}>${c.type} · ${c.id.slice(-6)}</option>`)
+          .join("");
+      select.addEventListener("change", () => {
+        saveElementMeta(path, { behavior: select.value ? { type: "toggle", target_component_id: select.value } : null });
+      });
+      row.appendChild(select);
+      paramsWrap.appendChild(row);
+    } else if (type === "toast") {
+      const row = el("div", "prop-row");
+      row.appendChild(el("div", "prop-label", t("behaviorMessage")));
+      const input = el("input", "el-prop-text-input");
+      input.value = (behavior && behavior.message) || "";
+      input.placeholder = t("behaviorToastDefault");
+      input.addEventListener("change", () => {
+        const message = input.value.trim();
+        saveElementMeta(path, { behavior: message ? { type: "toast", message } : null });
+      });
+      row.appendChild(input);
+      paramsWrap.appendChild(row);
+    } else if (type === "submit") {
+      const hint = el("div", "inspector-hint", t("behaviorPlayHint") + " · " + t("behaviorSubmitted"));
+      paramsWrap.appendChild(hint);
+    } else if (type === "prompt") {
+      const row = el("div", "prop-row");
+      row.appendChild(el("div", "prop-label", t("behaviorPromptText")));
+      const input = el("input", "el-prop-text-input");
+      input.value = (behavior && behavior.prompt) || "";
+      input.placeholder = t("promptPlaceholder");
+      input.addEventListener("change", () => {
+        const prompt = input.value.trim();
+        saveElementMeta(path, { behavior: prompt ? { type: "prompt", prompt } : null });
+      });
+      row.appendChild(input);
+      paramsWrap.appendChild(row);
+    }
+  };
+
+  behaviorTypeSelect.addEventListener("change", () => {
+    const type = behaviorTypeSelect.value;
+    if (!type) {
+      saveElementMeta(path, { behavior: null });
+      paramsWrap.innerHTML = "";
+      return;
+    }
+    const base = behavior && behavior.type === type ? behavior : { type };
+    saveElementMeta(path, { behavior: base });
+    renderParams();
+  });
+  renderParams();
+
+  if (behavior) {
+    const info = el("div", "el-link-info");
+    const label = ELEMENT_BEHAVIOR_TYPES.find(([v]) => v === behavior.type);
+    info.textContent = `${label ? label[1] : behavior.type} · ${t("behaviorPlayHint")}`;
+    section.appendChild(info);
+  }
+
+  // 取消元素选择：回到组件级
+  const backBtn = el("button", "el-clear-element", t("elementBack"));
+  backBtn.type = "button";
+  backBtn.addEventListener("click", () => {
+    selectedElementPath = null;
+    applyElementSelectionHighlight();
+    renderInspector();
+  });
+  section.appendChild(backBtn);
+
+  panel.appendChild(section);
 }
 
 let inspectorCodeFormat = "html";
@@ -2957,6 +3529,38 @@ function clearDragIndicators(scope) {
   over.forEach((w) => w.classList.remove("drag-over"));
 }
 
+// ===== 元素级编辑 P1 (element styles) =====
+
+/**
+ * Apply per-element metadata (type promotion + play-mode affordance) to the
+ * rendered inner elements of a component. `comp.elementMeta` is keyed by the
+ * element's prop path (e.g. "title", "items.0.title").
+ */
+function applyElementMetaStyles(content, comp) {
+  if (!content || !comp) return;
+  // 归一化：所有可内联编辑的文字元素同时也是可单独选中的元素。
+  content.querySelectorAll("[data-editable='true']").forEach((elm) => {
+    if (!elm.hasAttribute("data-element")) elm.setAttribute("data-element", "true");
+  });
+  if (!comp.elementMeta) return;
+  const els = content.querySelectorAll("[data-element='true']");
+  els.forEach((elm) => {
+    const path = elm.getAttribute("data-prop");
+    if (!path) return;
+    const meta = comp.elementMeta[path];
+    if (!meta) return;
+    if (meta.kind === "button") {
+      elm.classList.add("el-kind-btn");
+    } else if (meta.kind === "link") {
+      elm.classList.add("el-kind-link");
+    }
+    if (meta.behavior && meta.behavior.type) {
+      elm.classList.add("el-play-linked");
+      elm.title = t("behaviorPlayHint");
+    }
+  });
+}
+
 function renderComponentContent(comp) {
   const props = comp.props || {};
   const variant = comp.variant || "";
@@ -3065,7 +3669,19 @@ function editableText(tag, className, text, prop) {
   const e = el(tag, className, text);
   e.setAttribute("data-editable", "true");
   e.setAttribute("data-prop", prop);
+  e.setAttribute("data-element", "true"); // 元素级编辑 P1: 内部元素可单独选中
   e.draggable = false; // Prevent drag interference with editing
+  return e;
+}
+
+// 元素级编辑 P1: 标记一个内部元素为可单独选中（按钮/链接等非文本元素）。
+function markElement(e, prop) {
+  if (!e) return e;
+  if (prop) {
+    e.setAttribute("data-prop", prop);
+    e.setAttribute("data-element", "true");
+  }
+  e.draggable = false;
   return e;
 }
 
@@ -3088,7 +3704,7 @@ function renderHero(props, variant) {
     content.appendChild(editableText("p", null, props.subtitle, "subtitle"));
   }
   if (props.button_text) {
-    const btn = el("div", "btn", props.button_text);
+    const btn = editableText("div", "btn", props.button_text, "button_text");
     content.appendChild(btn);
   }
   div.appendChild(content);
@@ -3168,16 +3784,16 @@ function renderCard(props, variant) {
   }
 
   if (props.title) {
-    card.appendChild(el("div", "card-title", props.title));
+    card.appendChild(markElement(el("div", "card-title", props.title), "title"));
   }
   if (props.description || props.desc) {
-    card.appendChild(el("div", "card-desc", props.description || props.desc));
+    card.appendChild(markElement(el("div", "card-desc", props.description || props.desc), "description"));
   }
   if (props.price) {
-    card.appendChild(el("div", "card-price", props.price));
+    card.appendChild(markElement(el("div", "card-price", props.price), "price"));
   }
   if (props.button_text) {
-    const btn = el("div", "btn", props.button_text);
+    const btn = editableText("div", "btn", props.button_text, "button_text");
     btn.style.cssText = "padding:6px 16px;font-size:12px;border-radius:6px;margin-top:8px;display:inline-block;";
     card.appendChild(btn);
   }
@@ -3190,7 +3806,7 @@ function renderCta(props, variant) {
   if (props.title) cta.appendChild(editableText("h2", null, props.title, "title"));
   if (props.subtitle || props.text) cta.appendChild(editableText("p", null, props.subtitle || props.text, "subtitle"));
   if (props.button_text) {
-    const btn = el("div", "btn", props.button_text);
+    const btn = editableText("div", "btn", props.button_text, "button_text");
     cta.appendChild(btn);
   }
   return cta;
@@ -3199,12 +3815,12 @@ function renderCta(props, variant) {
 function renderFooter(props) {
   const footer = el("div", "comp-footer");
   const text = props.text || props.copyright || "© 2024 All rights reserved.";
-  footer.appendChild(el("p", null, text));
+  footer.appendChild(markElement(el("p", null, text), "text"));
   if (props.links && Array.isArray(props.links)) {
     const linksDiv = el("div");
     linksDiv.style.cssText = "display:flex;gap:16px;justify-content:center;margin-top:8px;";
-    props.links.forEach((link) => {
-      linksDiv.appendChild(el("span", null, typeof link === "string" ? link : (link.label || "")));
+    props.links.forEach((link, i) => {
+      linksDiv.appendChild(markElement(el("span", null, typeof link === "string" ? link : (link.label || "")), `links.${i}`));
     });
     footer.appendChild(linksDiv);
   }
@@ -3236,7 +3852,7 @@ function renderFeatureList(props) {
 }
 
 function renderButton(props, variant) {
-  const btn = el("div", "comp-button", props.text || props.label || "Button");
+  const btn = editableText("div", "comp-button", props.text || props.label || "Button", "text");
   if (variant === "secondary") {
     btn.style.background = "transparent";
     btn.style.border = "2px solid currentColor";
@@ -3324,8 +3940,8 @@ function renderTestimonial(props) {
     author.appendChild(avatar);
   }
   const info = el("div");
-  if (props.author) info.appendChild(el("div", "card-title", props.author));
-  if (props.role) info.appendChild(el("div", "card-desc", props.role));
+  if (props.author) info.appendChild(markElement(el("div", "card-title", props.author), "author"));
+  if (props.role) info.appendChild(markElement(el("div", "card-desc", props.role), "role"));
   author.appendChild(info);
   container.appendChild(author);
   return container;
@@ -3335,12 +3951,12 @@ function renderBanner(props) {
   const banner = el("div");
   banner.style.cssText = "padding:16px 24px;border-radius:8px;text-align:center;";
   if (props.text) {
-    const text = el("span", null, props.text);
+    const text = markElement(el("span", null, props.text), "text");
     text.style.fontSize = "14px";
     banner.appendChild(text);
   }
   if (props.button_text) {
-    const btn = el("span", "btn", props.button_text);
+    const btn = editableText("span", "btn", props.button_text, "button_text");
     btn.style.cssText = "margin-left:12px;padding:4px 12px;font-size:12px;border-radius:4px;";
     banner.appendChild(btn);
   }
@@ -3360,12 +3976,12 @@ function renderTimeline(props) {
     const content = el("div");
     content.style.flex = "1";
     if (item.date) {
-      const date = el("div", "card-desc", item.date);
+      const date = markElement(el("div", "card-desc", item.date), `items.${i}.date`);
       date.style.fontFamily = "var(--mono)";
       content.appendChild(date);
     }
-    if (item.title) content.appendChild(el("div", "card-title", item.title));
-    if (item.description) content.appendChild(el("div", "card-desc", item.description));
+    if (item.title) content.appendChild(markElement(el("div", "card-title", item.title), `items.${i}.title`));
+    if (item.description) content.appendChild(markElement(el("div", "card-desc", item.description), `items.${i}.description`));
     entry.appendChild(content);
     timeline.appendChild(entry);
   });
@@ -3376,15 +3992,15 @@ function renderFaq(props) {
   const container = el("div");
   container.style.cssText = "padding:24px;display:flex;flex-direction:column;gap:8px;";
   const items = props.items || [];
-  items.forEach((item) => {
+  items.forEach((item, i) => {
     const qa = el("div");
     qa.style.cssText = "padding:12px;border-radius:8px;";
     if (item.question) {
-      const q = el("div", "card-title", item.question);
+      const q = markElement(el("div", "card-title", item.question), `items.${i}.question`);
       q.style.marginBottom = "4px";
       qa.appendChild(q);
     }
-    if (item.answer) qa.appendChild(el("div", "card-desc", item.answer));
+    if (item.answer) qa.appendChild(markElement(el("div", "card-desc", item.answer), `items.${i}.answer`));
     container.appendChild(qa);
   });
   return container;
@@ -3394,11 +4010,11 @@ function renderForm(props) {
   const form = el("div");
   form.style.cssText = "padding:24px;border-radius:10px;";
   const fields = props.fields || [];
-  fields.forEach((field) => {
+  fields.forEach((field, i) => {
     const wrapper = el("div");
     wrapper.style.cssText = "margin-bottom:12px;";
     if (field.label) {
-      const label = el("label", null, field.label);
+      const label = markElement(el("label", null, field.label), `fields.${i}.label`);
       label.style.cssText = "display:block;font-size:12px;margin-bottom:4px;";
       wrapper.appendChild(label);
     }
@@ -3444,7 +4060,7 @@ function renderTabs(props) {
   } else {
     items.forEach((item, i) => {
       const label = typeof item === "string" ? item : (item.label || item.title || `Tab ${i + 1}`);
-      const tabBtn = el("button", "tab-item" + (i === 0 ? " active" : ""), label);
+      const tabBtn = markElement(el("button", "tab-item" + (i === 0 ? " active" : ""), label), `items.${i}.label`);
       const body = typeof item === "string" ? item : (item.content || item.body || "");
       tabBtn.addEventListener("click", () => {
         nav.querySelectorAll(".tab-item").forEach((t) => t.classList.remove("active"));
@@ -6450,7 +7066,7 @@ function handleLibraryItemClick(item) {
     if (components.length === 0) {
       const hint = $("canvas-drop-hint");
       if (hint) {
-        hint.textContent = "请先添加组件，再应用动效";
+        hint.textContent = t("addComponentAnimFirst");
         hint.style.display = "block";
         setTimeout(() => { hint.style.display = "none"; hint.textContent = "释放以添加到画布"; }, 2000);
       }
@@ -6485,11 +7101,11 @@ async function applyComponentTemplateViaAPI(item, targetId) {
       return;
     }
     const data = await response.json();
-    if (data.mode === "replaced") showToastMsg("已替换选中组件（位置保持不变）");
-    else showToastMsg("已添加组件模板");
+    if (data.mode === "replaced") showToastMsg(t("templateReplaced"));
+    else showToastMsg(t("templateAdded"));
   } catch (err) {
     console.error("Failed to apply component template:", err);
-    showToastMsg("模板应用失败", true);
+    showToastMsg(t("dsError"), true);
   }
 }
 
@@ -6507,9 +7123,9 @@ async function replaceComponentViaAPI(id, item) {
     });
     if (!response.ok) {
       console.error("Failed to replace component:", response.status);
-      showToastMsg("替换失败", true);
+      showToastMsg(t("dsError"), true);
     } else {
-      showToastMsg("已替换选中组件");
+      showToastMsg(t("templateReplaceDone"));
     }
   } catch (err) {
     console.error("Failed to replace component:", err);
@@ -7293,7 +7909,7 @@ function setupCanvasBehavior() {
     });
     hide();
     if (applied > 0) {
-      showToastMsg(applied === 1 ? "已绑定交互（播放模式点击触发）" : `已为 ${applied} 个形状绑定交互`);
+      showToastMsg(applied === 1 ? t("canvasBehaviorBound") : t("canvasBehaviorBoundN", { n: applied }));
       saveCurrentCanvas(false);
     }
   };

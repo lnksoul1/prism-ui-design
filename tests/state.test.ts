@@ -307,6 +307,75 @@ test("setBehavior binds and clears an interaction, unknown ids fail", () => {
   assert.equal(stateStore.setBehavior("comp_nope", { type: "toast", message: "hi" }, "user"), false);
 });
 
+test("setElementMeta binds element-level behavior and kind, clears them, unknown ids fail", () => {
+  const comp = stateStore.addComponent("hero", undefined, { title: "Hi", button_text: "Go" }, null, "ai");
+  // Bind element-level behavior + type promotion on "title"
+  assert.equal(
+    stateStore.setElementMeta(comp.id, "title", { behavior: { type: "toast", message: "你好" }, kind: "button" }, "user"),
+    true
+  );
+  const node = stateStore.getState().components[0];
+  assert.deepEqual(node.elementMeta, {
+    title: { behavior: { type: "toast", message: "你好" }, kind: "button" },
+  });
+
+  // Update kind only keeps the behavior
+  assert.equal(stateStore.setElementMeta(comp.id, "title", { kind: "link" }, "user"), true);
+  assert.deepEqual(stateStore.getState().components[0].elementMeta, {
+    title: { behavior: { type: "toast", message: "你好" }, kind: "link" },
+  });
+
+  // Clearing with null removes the whole entry (and the map when empty)
+  assert.equal(stateStore.setElementMeta(comp.id, "title", null, "user"), true);
+  assert.equal(stateStore.getState().components[0].elementMeta, undefined);
+
+  // Invalid kind / behavior types are rejected (treated as cleared fields)
+  stateStore.setElementMeta(comp.id, "button_text", { kind: "banner" as never, behavior: { type: "teleport" as never } }, "user");
+  assert.equal(stateStore.getState().components[0].elementMeta, undefined);
+
+  // Empty path / unknown component fail
+  assert.equal(stateStore.setElementMeta(comp.id, "", { kind: "button" }, "user"), false);
+  assert.equal(stateStore.setElementMeta("comp_nope", "title", { kind: "button" }, "user"), false);
+
+  // Undo restores the metadata
+  stateStore.setElementMeta(comp.id, "title", { kind: "button" }, "user");
+  assert.equal(stateStore.undo(), true);
+  assert.equal(stateStore.getState().components[0].elementMeta, undefined);
+});
+
+test("setPageBackground sets, clears, and undoes the page background", () => {
+  // Set a gradient background
+  assert.equal(
+    stateStore.setPageBackground(
+      { type: "gradient", value: "linear-gradient(135deg, #6366f1, #22d3ee)" },
+      "user"
+    ),
+    true
+  );
+  assert.deepEqual(stateStore.getState().pageBackground, {
+    type: "gradient",
+    value: "linear-gradient(135deg, #6366f1, #22d3ee)",
+  });
+
+  // Animated preset carries animation name + params
+  stateStore.setPageBackground(
+    { type: "animation", value: "linear-gradient(135deg, #6366f1, #ec4899) 0 0 / 300% 300%", animation: "aurora", params: { speed: 18 } },
+    "user"
+  );
+  assert.equal(stateStore.getState().pageBackground?.type, "animation");
+  assert.equal(stateStore.getState().pageBackground?.animation, "aurora");
+  assert.deepEqual(stateStore.getState().pageBackground?.params, { speed: 18 });
+
+  // Clearing with null removes it
+  assert.equal(stateStore.setPageBackground(null, "user"), true);
+  assert.equal(stateStore.getState().pageBackground, undefined);
+
+  // Undo restores the background
+  stateStore.setPageBackground({ type: "color", value: "#0f172a" }, "user");
+  assert.equal(stateStore.undo(), true);
+  assert.equal(stateStore.getState().pageBackground, undefined);
+});
+
 test("alignComponents aligns and distributes freeform layouts", () => {
   const a = stateStore.addComponent("button", undefined, {}, null, "ai");
   const b = stateStore.addComponent("card", undefined, {}, null, "ai");

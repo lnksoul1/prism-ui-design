@@ -191,6 +191,44 @@ test("applyClientMessage mutates state and reports failures", () => {
   });
   assert.equal(behMissing.ok, false);
 
+  // 元素级编辑 P1: set_element_meta binds per-element behavior / kind
+  const elMeta = applyClientMessage({
+    type: "set_element_meta",
+    component_id: node.id,
+    path: "title",
+    behavior: { type: "toast", message: "元素提示" },
+    kind: "button",
+  });
+  assert.equal(elMeta.ok, true);
+  assert.deepEqual(stateStore.getState().components.find((c) => c.id === node.id)?.elementMeta, {
+    title: { behavior: { type: "toast", message: "元素提示" }, kind: "button" },
+  });
+  const elMetaClear = applyClientMessage({
+    type: "set_element_meta",
+    component_id: node.id,
+    path: "title",
+  });
+  assert.equal(elMetaClear.ok, true);
+  assert.equal(stateStore.getState().components.find((c) => c.id === node.id)?.elementMeta, undefined);
+  const elMetaMissing = applyClientMessage({
+    type: "set_element_meta",
+    component_id: "comp_nope",
+    path: "title",
+    kind: "link",
+  });
+  assert.equal(elMetaMissing.ok, false);
+
+  // 背景编辑 P1: set_page_background binds a page-level background
+  const pageBg = applyClientMessage({
+    type: "set_page_background",
+    background: { type: "gradient", value: "linear-gradient(135deg, #6366f1, #22d3ee)" },
+  });
+  assert.equal(pageBg.ok, true);
+  assert.equal(stateStore.getState().pageBackground?.type, "gradient");
+  const pageBgClear = applyClientMessage({ type: "set_page_background", background: null });
+  assert.equal(pageBgClear.ok, true);
+  assert.equal(stateStore.getState().pageBackground, undefined);
+
   const renamed = applyClientMessage({ type: "rename_component", id: node.id, name: "主按钮" });
   assert.equal(renamed.ok, true);
   assert.equal(stateStore.getState().components.find((c) => c.id === node.id)?.name, "主按钮");

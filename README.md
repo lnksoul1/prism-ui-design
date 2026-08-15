@@ -301,6 +301,17 @@ and behavior templates, and an HTTP + WebSocket integration chain
 (**446 tests passing**), plus an optional Playwright browser smoke
 (`npm run test:e2e`).
 
+### Git hooks
+
+A pre-push hook runs lint + unit tests before every push to keep `main` green.
+Install it once per clone:
+
+```bash
+npm run hooks:install   # git config core.hooksPath .githooks
+```
+
+Bypass temporarily with `git push --no-verify`.
+
 ## Templates, versions, semantics & style guides
 
 - **Templates** (`design_save_template` / `design_load_template`): persist any

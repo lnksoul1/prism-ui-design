@@ -9,7 +9,7 @@
  */
 
 import { z } from "zod";
-import { stateStore, type AlignMode, type AnimationDef, type ComponentBehavior, type ComponentLayout, type ZOrderMode } from "../state.js";
+import { stateStore, type AlignMode, type AnimationDef, type ComponentBehavior, type ComponentLayout, type ElementMeta, type PageBackground, type ZOrderMode } from "../state.js";
 import { applyStyleTokenSet } from "../tokens.js";
 import { applyStyleGuide } from "../style-guides.js";
 import { executeUserPrompt, type PromptExecutionResult } from "../prompt-executor.js";
@@ -216,6 +216,19 @@ export function setAnimation(componentId: string, animation: AnimationDef, sourc
 
 export function setBehavior(componentId: string, behavior: ComponentBehavior | null, source: MutationSource = "user"): boolean {
   return stateStore.setBehavior(componentId, behavior, source);
+}
+
+export function setElementMeta(
+  componentId: string,
+  path: string,
+  meta: { behavior?: ComponentBehavior | null; kind?: ElementMeta["kind"] | null } | null,
+  source: MutationSource = "user"
+): boolean {
+  return stateStore.setElementMeta(componentId, path, meta, source);
+}
+
+export function setPageBackground(background: PageBackground | null, source: MutationSource = "user"): boolean {
+  return stateStore.setPageBackground(background, source);
 }
 
 export function alignComponents(ids: string[], mode: AlignMode, source: MutationSource = "user"): boolean {
@@ -487,6 +500,36 @@ export const wsMessageSchema = z.discriminatedUnion("type", [
       .nullable(),
   }),
   z.strictObject({
+    type: z.literal("set_element_meta"),
+    component_id: z.string().min(1),
+    path: z.string().min(1),
+    behavior: z
+      .object({
+        type: z.enum(["navigate", "link", "toggle", "toast", "submit", "prompt"]),
+        page_id: z.string().optional(),
+        url: z.string().optional(),
+        new_tab: z.boolean().optional(),
+        target_component_id: z.string().optional(),
+        message: z.string().optional(),
+        form_id: z.string().optional(),
+        prompt: z.string().optional(),
+      })
+      .nullable()
+      .optional(),
+    kind: z.enum(["text", "button", "link"]).nullable().optional(),
+  }),
+  z.strictObject({
+    type: z.literal("set_page_background"),
+    background: z
+      .object({
+        type: z.enum(["color", "gradient", "image", "pattern", "animation"]),
+        value: z.string().min(1),
+        animation: z.string().optional(),
+        params: z.record(z.union([z.string(), z.number()])).optional(),
+      })
+      .nullable(),
+  }),
+  z.strictObject({
     type: z.literal("align_components"),
     ids: z.array(z.string().min(1)).min(2),
     mode: z.enum(["left", "center_x", "right", "top", "center_y", "bottom", "distribute_x", "distribute_y"]),
@@ -605,6 +648,20 @@ export function applyClientMessage(msg: WsClientMessage): { ok: boolean; detail:
     case "set_behavior": {
       const ok = setBehavior(msg.component_id, msg.behavior, "user");
       return { ok, detail: ok ? `behavior ${msg.component_id}` : `component ${msg.component_id} not found` };
+    }
+    case "set_element_meta": {
+      // 语义：字段 undefined → 保留原值；字段 null → 清除该字段；
+      // behavior 与 kind 都未提供 → 清除整个条目。
+      const meta =
+        msg.behavior === undefined && msg.kind === undefined
+          ? null
+          : { behavior: msg.behavior, kind: msg.kind };
+      const ok = setElementMeta(msg.component_id, msg.path, meta, "user");
+      return { ok, detail: ok ? `element meta ${msg.component_id}#${msg.path}` : `component ${msg.component_id} not found` };
+    }
+    case "set_page_background": {
+      const ok = setPageBackground(msg.background, "user");
+      return { ok, detail: ok ? `page background ${msg.background ? msg.background.type : "cleared"}` : "page background failed" };
     }
     case "align_components": {
       const ok = alignComponents(msg.ids, msg.mode, "user");

@@ -32,6 +32,31 @@ export interface ComponentNode {
   animation?: AnimationDef;
   /** Product definition v2 — 行为模型: any component can carry an interaction. */
   behavior?: ComponentBehavior;
+  /**
+   * 元素级编辑 (P1): per-inner-element metadata keyed by the element's prop
+   * path (e.g. "title", "button_text", "items.0.title"). Lets inner rendered
+   * text/buttons of library components carry their own interaction behavior
+   * and a promoted type (text → button / link) without being separate nodes.
+   */
+  elementMeta?: Record<string, ElementMeta>;
+}
+
+/**
+ * 元素级元数据 (P1): bound to an inner element of a rendered component via
+ * its prop path, not to a separate child node.
+ */
+export interface ElementMeta {
+  /** Interaction triggered in play mode when that exact element is clicked. */
+  behavior?: ComponentBehavior;
+  /** Type promotion: render the element as a button / link / plain text. */
+  kind?: "text" | "button" | "link";
+}
+
+export const ELEMENT_KINDS = ["text", "button", "link"] as const;
+export type ElementKind = (typeof ELEMENT_KINDS)[number];
+
+export function isElementKind(value: string): value is ElementKind {
+  return (ELEMENT_KINDS as readonly string[]).includes(value);
 }
 
 /**
@@ -193,6 +218,24 @@ export interface DesignState {
   reactBits?: Record<string, { name: string; variant: string; props?: Record<string, unknown> }>;
   /** Upgrade plan U4: export runtime level (minimal | standard | full). */
   exportRuntime?: "minimal" | "standard" | "full";
+  /** 背景编辑 (P1): 页面级背景（颜色/渐变/图片/图案/动画预设）。 */
+  pageBackground?: PageBackground;
+}
+
+/**
+ * 背景编辑 (P1): 页面级背景定义。`value` 是可直接用于 CSS `background` 的
+ * 值（如 "#f3f4f6"、"linear-gradient(...)"、"url(...) center/cover"）。
+ * `animation` 可携带额外的动画预设（如 aurora 流光 / grid 网格漂移）。
+ */
+export interface PageBackground {
+  /** 类型: color | gradient | image | pattern | animation */
+  type: "color" | "gradient" | "image" | "pattern" | "animation";
+  /** CSS background 值 */
+  value: string;
+  /** 动画预设名（type === "animation" 时使用；否则用于导出时附加动效） */
+  animation?: string;
+  /** 附加参数（渐变角度、图片覆盖方式等），导出/预览时可选读取 */
+  params?: Record<string, string | number>;
 }
 
 /** Lenis smooth scroll configuration (upgrade plan U1). */
@@ -307,6 +350,8 @@ type StoredState = {
   reactBits?: Record<string, { name: string; variant: string; props?: Record<string, unknown> }>;
   /** Upgrade plan U4: export runtime level (minimal | standard | full). */
   exportRuntime?: "minimal" | "standard" | "full";
+  /** 背景编辑 (P1): 页面级背景（颜色/渐变/图片/图案/动画预设）。 */
+  pageBackground?: PageBackground;
 };
 
 class DesignStateStore extends EventEmitter {
@@ -769,6 +814,8 @@ class DesignStateStore extends EventEmitter {
     node.variant = patch.variant;
     node.props = JSON.parse(JSON.stringify(patch.props)) as Record<string, unknown>;
     node.children = [];
+    // 组件定义被替换后，旧路径的元素级元数据不再有意义。
+    delete node.elementMeta;
     if (patch.behavior !== undefined) {
       if (patch.behavior && isBehaviorType(patch.behavior.type)) {
         node.behavior = { ...patch.behavior };
@@ -819,8 +866,97 @@ class DesignStateStore extends EventEmitter {
     return true;
   }
 
-  // ===== Scroll (upgrade plan U1: Lenis integration) =====
+  /**
+   * Set or clear element-level metadata (元素级编辑 P1) for an inner element
+   * identified by its prop path. Pass `null` (or an entry without any valid
+   * fields) to remove the metadata for that path. Undoable like any mutation.
+   */
+  setElementMeta(
+    componentId: string,
+    path: string,
+    meta: { behavior?: ComponentBehavior | null; kind?: ElementKind | null } | null,
+    source: "ai" | "user" = "user"
+  ): boolean {
+    const node = this.findComponent(componentId);
+    if (!node) return false;
+    if (!path) return false;
+    if (!node.elementMeta) node.elementMeta = {};
+    const existing = node.elementMeta[path];
+    // meta === null removes the whole entry (e.g. clearing element selection).
+    if (!meta) {
+      delete node.elementMeta[path];
+    } else {
+      const next: ElementMeta = { ...(existing || {}) };
+      if (meta.behavior !== undefined) {
+        if (meta.behavior && isBehaviorType(meta.behavior.type)) {
+          next.behavior = { ...meta.behavior };
+        } else {
+          delete next.behavior;
+        }
+      }
+      if (meta.kind !== undefined) {
+        if (meta.kind && isElementKind(meta.kind)) {
+          next.kind = meta.kind;
+        } else {
+          delete next.kind;
+        }
+      }
+      if (Object.keys(next).length === 0) {
+        delete node.elementMeta[path];
+      } else {
+        node.elementMeta[path] = next;
+      }
+    }
+    if (Object.keys(node.elementMeta).length === 0) delete node.elementMeta;
+    this.logActivity(
+      "set_element_meta",
+      node.type,
+      `${node.type} 元素 "${path}" ${meta ? "已配置" : "已清除"}`,
+      source
+    );
+    this.commit({ type: "setElementMeta", componentId, path, meta: meta || null });
+    return true;
+  }
 
+  // ===== Page background (背景编辑 P1) =====
+
+  /**
+   * Set or clear the page-level background (背景编辑 P1). Pass `null` to
+   * remove it and fall back to the design tokens. Undoable like any mutation.
+   */
+  setPageBackground(background: PageBackground | null, source: "ai" | "user" = "user"): boolean {
+    if (background) {
+      this.state.pageBackground = {
+        type: background.type,
+        value: background.value,
+        ...(background.animation ? { animation: background.animation } : {}),
+        ...(background.params && Object.keys(background.params).length > 0
+          ? { params: { ...background.params } }
+          : {}),
+      };
+    } else {
+      delete this.state.pageBackground;
+    }
+    this.logActivity(
+      "set_page_background",
+      "page",
+      background ? `页面背景 → ${background.type}${background.animation ? " / " + background.animation : ""}` : "页面背景已清除",
+      source
+    );
+    this.commit({
+      type: "setPageBackground",
+      background: this.state.pageBackground ? JSON.parse(JSON.stringify(this.state.pageBackground)) : null,
+    });
+    return true;
+  }
+
+  getPageBackground(): PageBackground | null {
+    return this.state.pageBackground
+      ? JSON.parse(JSON.stringify(this.state.pageBackground))
+      : null;
+  }
+
+  // ===== Scroll (upgrade plan U1: Lenis integration) =====
   setScroll(mode: ScrollConfig["mode"], options: ScrollConfig["options"], source: "ai" | "user" = "ai"): void {
     this.state.scroll = {
       mode,
@@ -1343,6 +1479,7 @@ class DesignStateStore extends EventEmitter {
     this.state.vantaBackgrounds = undefined;
     this.state.reactBits = undefined;
     this.state.exportRuntime = "standard";
+    this.state.pageBackground = undefined;
 
     this.logActivity("clear_all", "system", "Cleared all design state", source);
     this.commit({ type: "clearAll" });
@@ -1424,6 +1561,10 @@ class DesignStateStore extends EventEmitter {
         snapshot.exportRuntime === "minimal" || snapshot.exportRuntime === "full"
           ? snapshot.exportRuntime
           : "standard",
+      pageBackground:
+        snapshot.pageBackground && typeof snapshot.pageBackground === "object"
+          ? JSON.parse(JSON.stringify(snapshot.pageBackground))
+          : undefined,
     };
 
     // Reset undo/redo history and pending prompt to the restored baseline.
@@ -1488,6 +1629,7 @@ class DesignStateStore extends EventEmitter {
       vantaBackgrounds: undefined,
       reactBits: undefined,
       exportRuntime: "standard",
+      pageBackground: undefined,
     };
     this.history = [JSON.parse(JSON.stringify(this.state))];
     this.historyIndex = 0;

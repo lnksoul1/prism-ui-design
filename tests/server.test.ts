@@ -1296,6 +1296,194 @@ test(
 );
 
 test(
+  "element-meta REST endpoint binds per-element behavior and kind promotion",
+  { timeout: 60000 },
+  async () => {
+    const port = await getFreePort();
+    const child = spawn(process.execPath, [SERVER_ENTRY], {
+      cwd: path.resolve(__dirname, "..", ".."),
+      env: {
+        ...process.env,
+        DASHBOARD_PORT: String(port),
+        PRISM_PROJECT_DIR: path.join(os.tmpdir(), `prism-element-server-${Date.now()}`),
+        PRISM_AUTOIMPORT: "off",
+        PRISM_AUTOLOAD: "off",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let logs = "";
+    child.stderr?.on("data", (d) => (logs += d.toString()));
+    const base = `http://127.0.0.1:${port}`;
+    const headers = { "Content-Type": "application/json" };
+
+    try {
+      await waitForHealth(`${base}/health`, 20000);
+
+      const addRes = await fetch(`${base}/api/component`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ type: "hero", props: { title: "你好", button_text: "开始" } }),
+      });
+      const added = (await addRes.json()) as { id: string };
+
+      // Bind element behavior + type promotion on "title"
+      const setRes = await fetch(`${base}/api/component/${added.id}/element-meta`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ path: "title", behavior: { type: "toast", message: "元素点击" }, kind: "button" }),
+      });
+      assert.equal(setRes.status, 200);
+      const state = (await (await fetch(`${base}/api/state`)).json()) as {
+        components: Array<{ id: string; elementMeta?: Record<string, unknown> }>;
+      };
+      assert.deepEqual(state.components[0].elementMeta, {
+        title: { behavior: { type: "toast", message: "元素点击" }, kind: "button" },
+      });
+
+      // Clearing both fields removes the entry
+      const clearRes = await fetch(`${base}/api/component/${added.id}/element-meta`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ path: "title", behavior: null, kind: null }),
+      });
+      assert.equal(clearRes.status, 200);
+      const after = (await (await fetch(`${base}/api/state`)).json()) as {
+        components: Array<{ elementMeta?: unknown }>;
+      };
+      assert.equal(after.components[0].elementMeta, undefined);
+
+      // Malformed body / unknown component / empty path rejected
+      const badRes = await fetch(`${base}/api/component/${added.id}/element-meta`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ path: "title", kind: "banner" }),
+      });
+      assert.equal(badRes.status, 400);
+
+      const noPathRes = await fetch(`${base}/api/component/${added.id}/element-meta`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ behavior: { type: "toast", message: "x" } }),
+      });
+      assert.equal(noPathRes.status, 400);
+
+      const missingRes = await fetch(`${base}/api/component/comp_nope/element-meta`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ path: "title", kind: "link" }),
+      });
+      assert.equal(missingRes.status, 404);
+    } catch (error) {
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}\n--- server logs ---\n${logs}`,
+        { cause: error }
+      );
+    } finally {
+      child.kill();
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(() => {
+          child.kill("SIGKILL");
+          resolve();
+        }, 3000);
+        child.once("exit", () => {
+          clearTimeout(timer);
+          resolve();
+        });
+      });
+    }
+  }
+);
+
+test(
+  "page-background REST endpoints set and clear the page background",
+  { timeout: 60000 },
+  async () => {
+    const port = await getFreePort();
+    const child = spawn(process.execPath, [SERVER_ENTRY], {
+      cwd: path.resolve(__dirname, "..", ".."),
+      env: {
+        ...process.env,
+        DASHBOARD_PORT: String(port),
+        PRISM_PROJECT_DIR: path.join(os.tmpdir(), `prism-pagebg-server-${Date.now()}`),
+        PRISM_AUTOIMPORT: "off",
+        PRISM_AUTOLOAD: "off",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let logs = "";
+    child.stderr?.on("data", (d) => (logs += d.toString()));
+    const base = `http://127.0.0.1:${port}`;
+    const headers = { "Content-Type": "application/json" };
+
+    try {
+      await waitForHealth(`${base}/health`, 20000);
+
+      // Set an animated gradient background
+      const setRes = await fetch(`${base}/api/page-background`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({
+          background: {
+            type: "animation",
+            value: "linear-gradient(135deg, #6366f1, #ec4899) 0 0 / 300% 300%",
+            animation: "aurora",
+          },
+        }),
+      });
+      assert.equal(setRes.status, 200);
+      const state = (await (await fetch(`${base}/api/state`)).json()) as {
+        pageBackground?: { type: string; animation?: string; value: string };
+      };
+      assert.equal(state.pageBackground?.type, "animation");
+      assert.equal(state.pageBackground?.animation, "aurora");
+
+      // GET returns the background
+      const getRes = await fetch(`${base}/api/page-background`);
+      const getData = (await getRes.json()) as { background: { type: string } | null };
+      assert.equal(getRes.status, 200);
+      assert.equal(getData.background?.type, "animation");
+
+      // Clear with null
+      const clearRes = await fetch(`${base}/api/page-background`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ background: null }),
+      });
+      assert.equal(clearRes.status, 200);
+      const after = (await (await fetch(`${base}/api/state`)).json()) as {
+        pageBackground?: unknown;
+      };
+      assert.equal(after.pageBackground, undefined);
+
+      // Malformed body rejected
+      const badRes = await fetch(`${base}/api/page-background`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ background: { type: "color" } }),
+      });
+      assert.equal(badRes.status, 400);
+    } catch (error) {
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}\n--- server logs ---\n${logs}`,
+        { cause: error }
+      );
+    } finally {
+      child.kill();
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(() => {
+          child.kill("SIGKILL");
+          resolve();
+        }, 3000);
+        child.once("exit", () => {
+          clearTimeout(timer);
+          resolve();
+        });
+      });
+    }
+  }
+);
+
+test(
   "template REST endpoints: catalog, component blocks add/replace, behavior templates",
   { timeout: 60000 },
   async () => {

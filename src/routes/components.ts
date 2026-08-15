@@ -153,6 +153,48 @@ export function registerComponentsRoutes(): express.Router {
     res.json({ success: true, id, behavior: behavior || null });
   }));
 
+  // API: Set or clear element-level metadata (元素级编辑 P1): bind an
+  // interaction to an inner element (by its prop path) and/or promote its
+  // type (text → button / link). Pass behavior/kind as null to clear them.
+  router.put("/api/component/:id/element-meta", asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { path, behavior, kind } = req.body || {};
+    if (typeof path !== "string" || !path) {
+      throw new HttpError(400, "path (string) is required");
+    }
+    if (behavior !== undefined && behavior !== null && (typeof behavior !== "object" || typeof behavior.type !== "string")) {
+      throw new HttpError(400, "behavior must be an object with a type, or null");
+    }
+    if (kind !== undefined && kind !== null && !["text", "button", "link"].includes(kind)) {
+      throw new HttpError(400, "kind must be 'text' | 'button' | 'link' | null");
+    }
+    const meta = { behavior, kind };
+    const ok = designService.setElementMeta(id, path, meta as never, "user");
+    if (!ok) {
+      throw new HttpError(404, `Component ${id} not found`);
+    }
+    res.json({ success: true, id, path, behavior: behavior ?? null, kind: kind ?? null });
+  }));
+
+  // API: Set or clear the page-level background (背景编辑 P1):
+  // body: { background: { type, value, animation?, params? } | null }
+  router.put("/api/page-background", asyncHandler(async (req, res) => {
+    const background = (req.body || {}).background;
+    if (background !== null && (typeof background !== "object" || typeof background.type !== "string" || typeof background.value !== "string")) {
+      throw new HttpError(400, "background must be an object with type + value, or null");
+    }
+    const ok = designService.setPageBackground(background as never, "user");
+    if (!ok) {
+      throw new HttpError(500, "page background update failed");
+    }
+    res.json({ success: true, background: background || null });
+  }));
+
+  // API: Get the current page background
+  router.get("/api/page-background", asyncHandler(async (_req, res) => {
+    res.json({ success: true, background: stateStore.getPageBackground() });
+  }));
+
   // API: Align / distribute multiple components (精确编辑 P0, freeform)
   router.post("/api/align", asyncHandler(async (req, res) => {
     const { ids, mode } = req.body || {};

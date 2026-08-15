@@ -741,3 +741,141 @@ test("child component is selectable and adjustable via the inspector", async ({ 
   }
   expect(errors).toEqual([]);
 });
+
+test("element-level editing: select inner text, promote to button, bind behavior", async ({ page }: { page: Page }) => {
+  const errors: string[] = [];
+  const badResponses: string[] = [];
+  page.on("console", (msg) => {
+    if (msg.type() === "error" && !msg.text().includes("Failed to load resource")) errors.push(msg.text());
+  });
+  page.on("pageerror", (err) => errors.push(String(err)));
+  page.on("response", (res) => {
+    if (res.status() >= 400) badResponses.push(`${res.status()} ${res.url()}`);
+  });
+
+  await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "domcontentloaded", timeout: 60000 });
+  await expect(page.locator(".topbar")).toBeVisible();
+
+  // Build a hero with title + button via the REST API.
+  const heroId = await page.evaluate(async () => {
+    const res = await fetch("/api/component", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "hero", props: { title: "元素级标题", subtitle: "副标题", button_text: "立即开始" } }),
+    });
+    return ((await res.json()) as { id: string }).id;
+  });
+  await page.waitForTimeout(800);
+
+  // 1. Single-click the inner title → element panel appears (not just component).
+  const heroTitle = page.locator('.comp-hero h1[data-prop="title"]');
+  await expect(heroTitle).toBeVisible();
+  await heroTitle.click();
+  await expect(page.locator(".el-element-title")).toBeVisible();
+  await expect(page.locator(".el-kind-option").first()).toBeVisible();
+
+  // 2. Promote the title to a button → kind persisted + rendered class.
+  await page.locator(".el-kind-option", { hasText: "按钮" }).click();
+  await page.waitForTimeout(600);
+  const kindState = await page.evaluate(async (id) => {
+    const s = (await (await fetch("/api/state")).json()) as {
+      components: Array<{ id: string; elementMeta?: Record<string, { kind?: string }> }>;
+    };
+    return s.components.find((c) => c.id === id)?.elementMeta?.title?.kind;
+  }, heroId);
+  expect(kindState).toBe("button");
+  await expect(page.locator('.comp-hero h1[data-prop="title"].el-kind-btn')).toBeVisible();
+
+  // 3. Bind a toast behavior to the element → persisted elementMeta.
+  const elSelect = page.locator("select.el-prop-select").first();
+  await elSelect.selectOption("toast");
+  await page.waitForTimeout(600);
+  const behaviorState = await page.evaluate(async (id) => {
+    const s = (await (await fetch("/api/state")).json()) as {
+      components: Array<{ id: string; elementMeta?: Record<string, { behavior?: { type: string } }> }>;
+    };
+    return s.components.find((c) => c.id === id)?.elementMeta?.title?.behavior;
+  }, heroId);
+  expect(behaviorState?.type).toBe("toast");
+  await expect(page.locator(".el-link-info")).toBeVisible();
+
+  // 4. Play mode: clicking the element triggers the element-level toast.
+  await page.locator("#play-btn").click();
+  await heroTitle.click();
+  await expect(page.locator("#prism-toast")).toContainText("操作成功", { timeout: 5000 });
+  await page.keyboard.press("Escape");
+
+  // 5. Clear element selection via the back button.
+  await heroTitle.click();
+  await page.locator(".el-clear-element").click();
+  await expect(page.locator(".el-element-title")).toBeHidden();
+
+  if (badResponses.length > 0) {
+    errors.push("HTTP >= 400: " + badResponses.join(" | "));
+  }
+  expect(errors).toEqual([]);
+});
+
+test("page background editor applies presets and custom values to the canvas", async ({ page }: { page: Page }) => {
+  const errors: string[] = [];
+  const badResponses: string[] = [];
+  page.on("console", (msg) => {
+    if (msg.type() === "error" && !msg.text().includes("Failed to load resource")) errors.push(msg.text());
+  });
+  page.on("pageerror", (err) => errors.push(String(err)));
+  page.on("response", (res) => {
+    if (res.status() >= 400) badResponses.push(`${res.status()} ${res.url()}`);
+  });
+
+  await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "domcontentloaded", timeout: 60000 });
+  await expect(page.locator(".topbar")).toBeVisible();
+
+  // With nothing selected, the inspector shows the page-background panel.
+  await expect(page.locator(".inspector-section-title", { hasText: "页面背景" })).toBeVisible();
+  await expect(page.locator(".bg-preset").first()).toBeVisible();
+
+  // Click the "海洋" gradient preset → applied to the canvas + persisted.
+  await page.locator(".bg-preset", { hasText: "海洋" }).click();
+  await page.waitForTimeout(600);
+  const state = await page.evaluate(async () => {
+    const s = (await (await fetch("/api/state")).json()) as {
+      pageBackground?: { type: string; value: string };
+    };
+    return s.pageBackground || null;
+  });
+  expect(state?.type).toBe("gradient");
+  expect(state?.value).toContain("linear-gradient");
+  const canvasBg = await page.evaluate(() => {
+    const canvas = document.getElementById("canvas");
+    return canvas ? canvas.style.background : "";
+  });
+  expect(canvasBg).toContain("linear-gradient");
+
+  // Custom color input applies too.
+  await page.locator(".prop-text-input").first().fill("#0f172a");
+  await page.locator(".inspector-action-btn", { hasText: "应用颜色" }).click();
+  await page.waitForTimeout(600);
+  const colorState = await page.evaluate(async () => {
+    const s = (await (await fetch("/api/state")).json()) as {
+      pageBackground?: { type: string; value: string };
+    };
+    return s.pageBackground?.value;
+  });
+  expect(colorState).toBe("#0f172a");
+
+  // Clear removes it.
+  await page.locator(".inspector-delete-btn", { hasText: "清除背景" }).click();
+  await page.waitForTimeout(600);
+  const cleared = await page.evaluate(async () => {
+    const s = (await (await fetch("/api/state")).json()) as {
+      pageBackground?: unknown;
+    };
+    return s.pageBackground === undefined;
+  });
+  expect(cleared).toBe(true);
+
+  if (badResponses.length > 0) {
+    errors.push("HTTP >= 400: " + badResponses.join(" | "));
+  }
+  expect(errors).toEqual([]);
+});

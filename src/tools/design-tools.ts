@@ -32,6 +32,47 @@ function escapeHTML(str: string): string {
     .replace(/"/g, "&quot;");
 }
 
+/** Escape a CSS value (used inside style blocks, not attributes). */
+function escapeCSS(value: string): string {
+  return String(value).replace(/<\s*\/\s*style/gi, "<\\/style");
+}
+
+/** Sanitize a user-provided identifier for use as a CSS animation name. */
+function cssIdent(value: string | undefined): string {
+  const sanitized = String(value || "prismBgFlow").replace(/[^a-zA-Z0-9_-]/g, "");
+  return sanitized || "prismBgFlow";
+}
+
+/** Built-in page-background animation keyframes (背景编辑 P1). */
+function pageBackgroundAnimationCSS(name: string | undefined): string {
+  const id = cssIdent(name);
+  switch (id) {
+    case "aurora":
+      return `    @keyframes ${id} {
+      0% { background-position: 0% 50%; filter: hue-rotate(0deg); }
+      50% { background-position: 100% 50%; filter: hue-rotate(45deg); }
+      100% { background-position: 0% 50%; filter: hue-rotate(0deg); }
+    }`;
+    case "gradientShift":
+      return `    @keyframes ${id} {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }`;
+    case "pulse":
+      return `    @keyframes ${id} {
+      0%, 100% { opacity: 0.85; }
+      50% { opacity: 1; }
+    }`;
+    default:
+      return `    @keyframes ${id} {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }`;
+  }
+}
+
 function tokensToCSSVariables(tokens: DesignTokens): string {
   const lines: string[] = ["  :root {"];
   (
@@ -588,6 +629,17 @@ function exportToHTML(state: DesignState, components: ComponentNode[] = state.co
     .map((c) => `  ${componentToHTML(c)}`)
     .join("\n");
 
+  // 背景编辑 P1: 页面背景覆盖默认 body 背景（颜色/渐变/图片/图案/动画）。
+  const bodyBg = state.pageBackground
+    ? `background: ${escapeCSS(state.pageBackground.value)};`
+    : "background: var(--color-bg, #ffffff);";
+  const pageBgKeyframes = state.pageBackground && state.pageBackground.type === "animation"
+    ? pageBackgroundAnimationCSS(state.pageBackground.animation)
+    : "";
+  const pageBgBodyExtra = state.pageBackground && state.pageBackground.type === "animation"
+    ? ` animation: ${cssIdent(state.pageBackground.animation || "prismBgFlow")} 18s ease-in-out infinite alternate;`
+    : "";
+
   return `<!DOCTYPE html>
 <html lang="zh">
 <head>
@@ -597,7 +649,8 @@ function exportToHTML(state: DesignState, components: ComponentNode[] = state.co
   <style>
 ${cssVars}
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: var(--font-body, sans-serif); background: var(--color-bg, #ffffff); color: var(--color-text, #1a1a1a); line-height: var(--line-height-normal, 1.5); }
+    body { font-family: var(--font-body, sans-serif); ${bodyBg} color: var(--color-text, #1a1a1a); line-height: var(--line-height-normal, 1.5);${pageBgBodyExtra} }
+${pageBgKeyframes}
     .navbar { display: flex; justify-content: space-between; align-items: center; padding: 1rem 2rem; background: var(--color-surface, #fff); border-bottom: 1px solid var(--color-border, #e5e5e5); }
     .navbar__brand { font-family: var(--font-display, sans-serif); font-weight: 700; font-size: var(--text-lg, 1.25rem); }
     .navbar__links a { margin-left: 1.5rem; text-decoration: none; color: var(--color-text, #333); }

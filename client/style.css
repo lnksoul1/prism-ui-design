@@ -600,6 +600,10 @@ body::after {
   position: relative;
   animation: compEnter 0.45s var(--ease-out);
 }
+/* 静默重绘：细粒度变更（改文字/颜色/行为等）不重放入场动画，避免闪烁 */
+.canvas.no-reenter .comp-wrapper {
+  animation: none !important;
+}
 .comp-wrapper:hover .comp-overlay {
   opacity: 1;
   transform: translateY(0);
@@ -2717,6 +2721,196 @@ body.theme-dark .canvas-scroll-wrap {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
   border-radius: var(--radius-sm);
+}
+
+/* ===== 元素级编辑 P1 (inner-element selection) ===== */
+
+/* 选中的内部元素：更细的虚线高亮，与组件选中区分 */
+.element-selected {
+  outline: 2px dashed var(--spectrum-2, #3B82F6) !important;
+  outline-offset: 1px;
+  border-radius: 2px;
+  position: relative;
+}
+.element-selected::after {
+  content: "◈";
+  position: absolute;
+  top: -14px;
+  right: -6px;
+  font-size: 10px;
+  color: var(--spectrum-2, #3B82F6);
+  background: var(--surface, #fff);
+  border: 1px solid var(--border-strong, #ddd);
+  border-radius: 4px;
+  padding: 0 3px;
+  line-height: 14px;
+  z-index: 5;
+}
+
+/* 类型提升：文本 → 按钮 / 链接 */
+.el-kind-btn {
+  display: inline-block;
+  padding: 8px 20px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: var(--radius);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease);
+  box-shadow: var(--shadow-glow, 0 4px 14px rgba(124, 58, 237, 0.35));
+}
+.el-kind-btn:hover {
+  transform: translateY(-1px);
+}
+.el-kind-link {
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+  transition: opacity 0.15s var(--ease);
+}
+.el-kind-link:hover {
+  opacity: 0.8;
+}
+
+/* 元素级行为：播放模式下可点击 */
+.el-play-linked {
+  cursor: pointer;
+}
+
+/* 元素面板（检查器内） */
+.el-element-section {
+  border-top: 1px dashed var(--border-strong);
+}
+.el-element-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--spectrum-2, #3B82F6);
+  font-family: var(--mono);
+  margin-bottom: 6px;
+  word-break: break-all;
+}
+.el-kind-group {
+  display: flex;
+  gap: 6px;
+}
+.el-kind-option {
+  flex: 1;
+  padding: 4px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font);
+  transition: all 0.15s var(--ease);
+}
+.el-kind-option:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.el-kind-option.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.el-prop-select {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  font-family: var(--font);
+}
+.el-prop-text-input {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  font-family: var(--font);
+}
+.el-link-info {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--spectrum-2, #3B82F6);
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+}
+.el-clear-element {
+  margin-top: 8px;
+  width: 100%;
+  padding: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  font-family: var(--font);
+}
+.el-clear-element:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ===== 背景编辑 P1 (page background presets) ===== */
+@keyframes prismBgShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.bg-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding: 10px 12px;
+}
+.bg-preset {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 4px;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.15s var(--ease);
+  background: var(--surface);
+}
+.bg-preset:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+.bg-preset.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+.bg-preset-swatch {
+  height: 44px;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  border: 1px solid var(--border);
+}
+.bg-preset-swatch.bg-preset-anim {
+  background-size: 300% 300% !important;
+  animation: prismBgShift 4s ease-in-out infinite alternate;
+}
+.bg-preset-name {
+  font-size: 10px;
+  color: var(--text-muted);
+  padding: 3px 0 1px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .inspector-tabs {

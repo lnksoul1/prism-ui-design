@@ -1315,6 +1315,8 @@ Examples:
 
 // ===== Tool: design_add_component =====
 
+import { describeComponentProps } from "../component-schemas.js";
+
 export function registerDesignAddComponentTool(server: McpServer): void {
   server.registerTool(
     "design_add_component",
@@ -1331,6 +1333,36 @@ Each type has variants:
   - card_grid: '2col', '3col', '4col'
   - button: 'primary', 'secondary', 'ghost'
   - cta: 'centered', 'split', 'banner'
+
+Accepted props per type (all optional; unknown keys are preserved):
+  - hero: title, subtitle, button_text, image_url
+  - navbar: brand, links, cta_text
+  - card_grid: items
+  - card: title, description, price, button_text, image_url
+  - cta: title, subtitle, button_text
+  - button: text, label
+  - footer: text, copyright, links
+  - feature_list: items
+  - stats: items
+  - pricing: plans
+  - timeline: items
+  - faq: items
+  - form: fields, button_text
+  - image: src, url, alt
+  - tabs: items
+  - accordion: items
+  - carousel: slides, items
+  - modal: title, text, cancel_text, confirm_text
+  - sidebar: title, links
+  - breadcrumb: items
+  - pagination: total, current
+  - progress: label, value
+  - badge: text, label
+  - avatar: name, image
+  - banner: text, button_text
+  - text_section: title, text
+  - testimonial: quote, author, role, avatar
+  - grid/table/alert/tooltip/bento_grid/glass_card/marquee/feature_grid/cookie_banner/toggle: see dashboard renderer
 
 Args:
   - type (string): Component type

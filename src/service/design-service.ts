@@ -14,6 +14,7 @@ import { applyStyleTokenSet } from "../tokens.js";
 import { applyStyleGuide } from "../style-guides.js";
 import { executeUserPrompt, type PromptExecutionResult } from "../prompt-executor.js";
 import { getBehaviorTemplate, getComponentTemplate } from "../template-catalog.js";
+import { validateComponentProps, describeComponentProps } from "../component-schemas.js";
 
 export type MutationSource = "ai" | "user";
 
@@ -176,7 +177,9 @@ export function addComponent(
   source: MutationSource = "user"
 ) {
   assertKnownComponentType(type);
-  return stateStore.addComponent(type, variant, props, parentId, source);
+  // 组件 props schema (Phase 2.2): 校验并按类型规范化，AI 参数更可预测。
+  const normalized = validateComponentProps(type, props);
+  return stateStore.addComponent(type, variant, normalized, parentId, source);
 }
 
 export function updateComponent(
@@ -186,7 +189,12 @@ export function updateComponent(
   layout?: Partial<ComponentLayout>,
   flags?: { visible?: boolean; locked?: boolean }
 ): boolean {
-  return stateStore.updateComponent(id, props, source, layout, flags);
+  const node = stateStore.getState().components.length
+    ? stateStore.getState().components.find((c) => c.id === id)
+    : undefined;
+  const type = node?.type;
+  const normalized = type ? validateComponentProps(type, props) : props;
+  return stateStore.updateComponent(id, normalized, source, layout, flags);
 }
 
 export function renameComponent(id: string, name: string, source: MutationSource = "user"): boolean {

@@ -1,6 +1,13 @@
 import { test, describe, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { stateStore } from "../src/state.js";
+import {
+  DesignStateStore,
+  getProjectStore,
+  hasProjectStore,
+  listProjectStores,
+  removeProjectStore,
+  stateStore,
+} from "../src/state.js";
 
 beforeEach(() => {
   stateStore.resetForTests();
@@ -611,5 +618,49 @@ describe("events, clearAll, and pending prompt", () => {
     assert.equal(stateStore.removePageLink(current.id, "user"), true);
     assert.equal(stateStore.getState().pageLinks.length, 0);
     assert.equal(stateStore.removePageLink(current.id, "user"), false);
+  });
+});
+
+describe("project buckets (Phase 2.3)", () => {
+  test("getProjectStore returns isolated stores with independent state", () => {
+    const a = getProjectStore("proj-a");
+    const b = getProjectStore("proj-b");
+    assert.notEqual(a, b, "different projects get different stores");
+    assert.notEqual(a, stateStore, "project stores are not the singleton");
+
+    a.setProjectName("Project A", "user");
+    b.setProjectName("Project B", "user");
+    assert.equal(a.getState().projectName, "Project A");
+    assert.equal(b.getState().projectName, "Project B");
+    assert.equal(stateStore.getState().projectName, "Untitled Project", "singleton untouched");
+  });
+
+  test("project stores keep independent undo histories", () => {
+    const a = getProjectStore("proj-undo-a");
+    const b = getProjectStore("proj-undo-b");
+    a.setProjectName("Alpha", "user");
+    assert.equal(a.canUndo(), true);
+    assert.equal(b.canUndo(), false, "other project has no history yet");
+    b.setProjectName("Beta", "user");
+    a.undo();
+    assert.equal(a.getState().projectName, "Untitled Project");
+    assert.equal(b.getState().projectName, "Beta", "undo in A does not touch B");
+  });
+
+  test("lazy creation, has/remove/list bookkeeping", () => {
+    assert.equal(hasProjectStore("proj-lazy"), false);
+    getProjectStore("proj-lazy");
+    assert.equal(hasProjectStore("proj-lazy"), true);
+    assert.ok(listProjectStores().includes("proj-lazy"));
+    assert.equal(removeProjectStore("proj-lazy"), true);
+    assert.equal(hasProjectStore("proj-lazy"), false);
+    assert.equal(removeProjectStore("proj-lazy"), false, "second remove is a no-op");
+  });
+
+  test("new DesignStateStore() is constructible and independent of the singleton", () => {
+    const fresh = new DesignStateStore();
+    fresh.setProjectName("Fresh", "user");
+    assert.equal(fresh.getState().projectName, "Fresh");
+    assert.equal(stateStore.getState().projectName, "Untitled Project");
   });
 });

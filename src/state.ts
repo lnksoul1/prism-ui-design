@@ -354,7 +354,7 @@ type StoredState = {
   pageBackground?: PageBackground;
 };
 
-class DesignStateStore extends EventEmitter {
+export class DesignStateStore extends EventEmitter {
   private state: StoredState;
   private static instance: DesignStateStore;
 
@@ -366,7 +366,15 @@ class DesignStateStore extends EventEmitter {
   // Pending user prompt (from client dashboard)
   private pendingPrompt: string | null;
 
-  private constructor() {
+  /**
+   * Create a fresh design state store.
+   *
+   * Phase 2.3 (项目分桶): the store is no longer forced into a singleton —
+   * each project window can hold its own isolated state + undo history via
+   * `getProjectStore(projectId)`. The classic singleton is preserved as the
+   * default store (`stateStore`) so all existing call sites keep working.
+   */
+  constructor() {
     super();
     const defaultPage: PageDef = {
       id: `page_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
@@ -1821,3 +1829,39 @@ class DesignStateStore extends EventEmitter {
 }
 
 export const stateStore = DesignStateStore.getInstance();
+
+// ===== 项目分桶 (Phase 2.3): per-project isolated stores =====
+
+/**
+ * Per-project design stores. The default `stateStore` singleton remains the
+ * store for the legacy single-project flow; `getProjectStore(projectId)`
+ * returns (or lazily creates) an isolated store for a named project so
+ * multiple windows/projects can be edited independently without stomping on
+ * each other's state or undo history.
+ */
+const projectStores = new Map<string, DesignStateStore>();
+
+/** The store for a given project (lazily created). */
+export function getProjectStore(projectId: string): DesignStateStore {
+  let store = projectStores.get(projectId);
+  if (!store) {
+    store = new DesignStateStore();
+    projectStores.set(projectId, store);
+  }
+  return store;
+}
+
+/** True when a project store already exists (avoids accidental creation). */
+export function hasProjectStore(projectId: string): boolean {
+  return projectStores.has(projectId);
+}
+
+/** Remove and drop a project store (frees its state + history). */
+export function removeProjectStore(projectId: string): boolean {
+  return projectStores.delete(projectId);
+}
+
+/** List project ids that currently have isolated stores. */
+export function listProjectStores(): string[] {
+  return [...projectStores.keys()];
+}

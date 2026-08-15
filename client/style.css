@@ -2567,23 +2567,22 @@ body::after {
 .top-lib-name { font-size: 12px; font-weight: 700; color: var(--text); white-space: nowrap; }
 .top-lib-slug { font-size: 10px; color: var(--text-muted); font-family: var(--mono); }
 
-/* 悬停向下展开的气泡（z-index 高于画布内容） */
-.top-lib-bubble {
-  display: none;
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
+/* 悬停详情：应用顶层固定浮层（不参与顶栏布局，不拉伸顶栏高度） */
+.top-lib-popup {
+  position: fixed;
+  z-index: 900; /* 高于画布与顶栏（.top-library z-index:100） */
   width: 320px;
-  max-height: 420px;
+  display: none;
+}
+.top-lib-popup .top-lib-bubble {
+  max-height: 60vh;
   overflow-y: auto;
   padding: 10px 12px;
   background: var(--surface);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16);
-  z-index: 120;
 }
-.top-lib-card:hover .top-lib-bubble { display: block; }
 .top-lib-example { margin-top: 6px; }
 .tl-example-box {
   border: 1px solid var(--border);

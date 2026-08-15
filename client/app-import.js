@@ -824,10 +824,67 @@ function setupTopLibrary() {
   }
 }
 
+/* ===== 顶库悬停浮层：应用顶层 fixed 弹层，不参与顶栏布局、不拉伸顶栏高度 ===== */
+let topLibPopupEl = null;
+let topLibHideTimer = null;
+
+function getTopLibPopup() {
+  if (topLibPopupEl) return topLibPopupEl;
+  topLibPopupEl = $("top-lib-popup");
+  if (topLibPopupEl) {
+    // 移入浮层时取消隐藏计时；移出时延迟隐藏，给指针留出跨越间隙
+    topLibPopupEl.addEventListener("mouseenter", () => clearTimeout(topLibHideTimer));
+    topLibPopupEl.addEventListener("mouseleave", () => scheduleHideTopLibPopup());
+  }
+  return topLibPopupEl;
+}
+
+/** 把卡片气泡内容移入顶层浮层，并定位到卡片正下方（空间不足时翻转到上方）。 */
+function showTopLibPopup(anchorEl, bubble) {
+  const popup = getTopLibPopup();
+  if (!popup || !bubble) return;
+  clearTimeout(topLibHideTimer);
+  popup.innerHTML = "";
+  popup.appendChild(bubble);
+  popup.style.display = "block";
+  const rect = anchorEl.getBoundingClientRect();
+  const pw = popup.offsetWidth;
+  const ph = popup.offsetHeight;
+  let left = rect.left;
+  if (left + pw > window.innerWidth - 8) left = Math.max(8, window.innerWidth - pw - 8);
+  let top = rect.bottom + 6;
+  if (top + ph > window.innerHeight - 8) top = rect.top - ph - 6;
+  popup.style.left = left + "px";
+  popup.style.top = Math.max(8, top) + "px";
+}
+
+function scheduleHideTopLibPopup() {
+  clearTimeout(topLibHideTimer);
+  topLibHideTimer = setTimeout(() => {
+    const popup = getTopLibPopup();
+    if (popup) popup.style.display = "none";
+  }, 140);
+}
+
+function hideTopLibPopup() {
+  clearTimeout(topLibHideTimer);
+  const popup = getTopLibPopup();
+  if (popup) popup.style.display = "none";
+}
+
+/** 卡片悬停绑定：进入时把气泡移入顶层浮层展示，离开时延迟隐藏。 */
+function bindTopLibHover(card) {
+  card.addEventListener("mouseenter", () => {
+    if (card._bubble) showTopLibPopup(card, card._bubble);
+  });
+  card.addEventListener("mouseleave", () => scheduleHideTopLibPopup());
+}
+
 /** 渲染顶部库的分类术语卡片条（横向排列）。 */
 function renderTopLibraryStrip(category) {
   const strip = $("top-lib-strip");
   if (!strip) return;
+  hideTopLibPopup();
   strip.innerHTML = "";
   const data = window.VIBE_HUB_TERMS;
   if (!data) {
@@ -877,7 +934,8 @@ function buildStyleCard(style) {
     p.appendChild(el("div", "vh-text", style.principles));
     bubble.appendChild(p);
   }
-  card.appendChild(bubble);
+  card._bubble = bubble; // 悬停时移入顶层浮层展示，卡片自身不参与气泡布局
+  bindTopLibHover(card);
   return card;
 }
 
@@ -956,7 +1014,8 @@ function buildTopLibCard(term) {
     });
     bubble.appendChild(applyBtn);
   }
-  card.appendChild(bubble);
+  card._bubble = bubble; // 悬停时移入顶层浮层展示，卡片自身不参与气泡布局
+  bindTopLibHover(card);
   return card;
 }
 

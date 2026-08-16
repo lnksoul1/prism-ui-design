@@ -20,6 +20,72 @@ function examplePromptText(p) {
   return p[uiLang] || p.zh;
 }
 
+
+/** 给原始文档注入 <base href>（URL 来源），让相对 CSS/图片/链接在 srcdoc 中正确解析。 */
+function withDocumentBase(html, baseUrl) {
+  if (!baseUrl) return html;
+  if (/<base\b[^>]*>/i.test(html)) return html;
+  const base = `<base href="${String(baseUrl).replace(/&/g, "&amp;").replace(/"/g, "&quot;")}">`;
+  const headClose = /<\/head>/i.exec(html);
+  if (headClose) return html.slice(0, headClose.index) + base + html.slice(headClose.index);
+  return base + html;
+}
+
+/** 原页面预览：iframe srcdoc 精确还原完整 HTML（样式/脚本/链接/表单交互）。 */
+function renderSourceDocument(canvas, meta) {
+  canvas.innerHTML = "";
+  canvas.classList.add("source-view");
+  const rulers = $("ruler-stage");
+  if (rulers) rulers.style.display = "none";
+  const guides = $("canvas-guides");
+  if (guides) {
+    guides.innerHTML = "";
+    guides.style.display = "none";
+  }
+  const selectionBar = $("selection-toolbar");
+  if (selectionBar) selectionBar.style.display = "none";
+  const frame = document.createElement("iframe");
+  frame.className = "source-view-frame";
+  frame.setAttribute("sandbox", "allow-scripts allow-forms allow-popups allow-modals");
+  frame.setAttribute("srcdoc", withDocumentBase(pageSourceDoc.html, pageSourceDoc.base_url || ""));
+  frame.setAttribute("loading", "eager");
+  frame.title = `${pageSourceDoc.source || ""} — 原页面预览`;
+  canvas.appendChild(frame);
+  const count = countComponents(getCurrentComponents());
+  if (meta) meta.textContent = `原页面预览 · ${count} 个可编辑区域`;
+}
+
+/** 切换原页面预览 / 片段编辑模式。 */
+function toggleSourceView() {
+  if (!pageSourceDoc) {
+    showToastMsg("当前页面没有可预览的原始文档，请先从 URL / HTML / 项目文件夹导入", true);
+    return;
+  }
+  sourceViewActive = !sourceViewActive;
+  const canvas = $("canvas");
+  if (canvas) canvas.classList.toggle("source-view", sourceViewActive);
+  renderCanvas({ silent: true });
+  renderSelectionToolbar();
+  const btn = $("source-view-btn");
+  if (btn) btn.textContent = sourceViewActive ? "✎ 编辑" : "◎ 原页面";
+}
+
+function setupSourceView() {
+  const btn = $("source-view-btn");
+  if (btn) btn.addEventListener("click", toggleSourceView);
+  updateSourceViewButton();
+}
+
+function updateSourceViewButton() {
+  const btn = $("source-view-btn");
+  if (!btn) return;
+  btn.style.display = pageSourceDoc ? "inline-flex" : "none";
+  btn.textContent = sourceViewActive ? "✎ 编辑" : "◎ 原页面";
+  btn.title = sourceViewActive
+    ? "切换到可编辑片段（当前为原页面预览）"
+    : "切换回原页面预览（当前为片段编辑）";
+}
+
 function renderCanvas(opts) {
   const canvas = $("canvas");
   const meta = $("canvas-meta");
@@ -39,6 +105,17 @@ function renderCanvas(opts) {
   }
 
   const components = getCurrentComponents();
+
+  // 原页面预览 (v2 import pipeline): 完整原始文档 iframe 优先，忠实还原 UI 与交互。
+  if (sourceViewActive && pageSourceDoc && pageSourcePageId === (currentState && currentState.currentPageId)) {
+    renderSourceDocument(canvas, meta);
+    return;
+  }
+  canvas.classList.remove("source-view");
+  const rulers = $("ruler-stage");
+  if (rulers) rulers.style.display = "";
+  const guides = $("canvas-guides");
+  if (guides) guides.style.display = "";
 
   if (!currentState || components.length === 0) {
     canvas.innerHTML = `
@@ -89,8 +166,11 @@ function renderCanvas(opts) {
     const libBtn = $("empty-library");
     if (libBtn) {
       libBtn.addEventListener("click", () => {
-        const tab = document.querySelector('.lib-tab[data-lib="components"]');
-        if (tab) tab.click();
+        const search = $("design-library-search");
+        if (search) {
+          search.focus();
+          search.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
         const hint = $("canvas-drop-hint");
         if (hint) {
           hint.textContent = t("startWithLibraryDesc");
@@ -103,10 +183,11 @@ function renderCanvas(opts) {
     if (tplBtn) {
       tplBtn.addEventListener("click", async () => {
         try {
-          const response = await fetch("/api/template", {
+          // 模板生成走本地指令引擎（/api/template 端点已随 v1.1 移除）。
+          const response = await fetch("/api/prompt", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ template: "saas_landing" }),
+            body: JSON.stringify({ prompt: "生成一个 SaaS 落地页模板" }),
           });
           if (response.ok) {
             await fetchInitialState();
@@ -152,8 +233,8 @@ function renderCanvas(opts) {
     const canvasBtn = $("empty-canvas");
     if (canvasBtn) {
       canvasBtn.addEventListener("click", () => {
-        // 第一步：预览画布直接绘制 → 切换到「矩形」绘制工具
-        if (typeof selectDrawTool === "function") selectDrawTool("rect");
+        // 绘制工具已随 v1.1 移除：空白画布 = 直接操作当前画布。
+        if (typeof showToastMsg === "function") showToastMsg(t("behaviorToast"));
       });
     }
     document.querySelectorAll(".example-btn").forEach((btn) => {
@@ -1228,6 +1309,7 @@ function applyCanvasMode(canvas) {
     renderRulers();
     renderGuides();
   }
+  updateSourceViewButton();
 }
 
 function initializeFreeformLayouts() {
@@ -1286,6 +1368,11 @@ let activeDrawTool = "select";
 let connectorSourceId = null;
 
 function selectDrawTool(toolId) {
+  if (sourceViewActive && toolId !== "select" && toolId !== "hand") {
+    sourceViewActive = false;
+    updateSourceViewButton();
+    renderCanvas({ silent: true });
+  }
   activeDrawTool = toolId;
   connectorSourceId = null;
   document.querySelectorAll(".draw-tool").forEach((b) => b.classList.toggle("active", b.dataset.tool === toolId));

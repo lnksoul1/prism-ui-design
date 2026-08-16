@@ -56,6 +56,14 @@
       <div class="page-tabs" id="page-tabs"></div>
       <button class="page-add-btn" id="page-add-btn" title="添加页面">+</button>
     </div>
+      <!-- Design Library (DESIGN.md v1.1 §3.3): the only left-side content panel -->
+      <div class="design-library-panel" id="design-library-panel">
+        <h3 class="panel-title">设计库</h3>
+        <input type="text" class="tool-search" id="design-library-search" placeholder="搜索风格、组件…">
+        <div class="design-library-styles" id="design-library-styles"></div>
+        <div class="design-library-components" id="design-library-components"></div>
+      </div>
+      <!--
     <!-- Tools: Layers / Versions / Comments (合并 tab 栏) -->
     <div class="tools-tabs" id="tools-tabs">
       <button class="tool-tab active" data-tool="layers" data-i18n="layers">图层</button>
@@ -90,6 +98,7 @@
     <div class="activity-list" id="activity-list">
       <div class="activity-empty">AI Agent 操作将显示在这里</div>
     </div>
+      -->
   </aside>
 
   <!-- Design Library Hover Preview Popup -->
@@ -117,8 +126,9 @@
         </select>
       </div>
       <div class="canvas-toolbar-right">
+          <button class="toolbar-btn" id="source-view-btn" style="display:none" title="原页面/编辑">◎ 原页面</button>
         <button class="toolbar-btn play-btn" id="play-btn" data-i18n="playMode">▶ 播放</button>
-        <button class="toolbar-btn layout-mode-btn" id="layout-mode-btn" title="切换画布模式（流式/自由）" data-i18n="flow">流式</button>
+        <!-- layout-mode-btn removed: single streaming canvas (DESIGN.md v1.1 §5) -->
         <button class="toolbar-btn" id="auto-layout-btn" title="自动排列组件" data-i18n="autoLayout">自动排列</button>
         <div class="zoom-control">
           <button class="zoom-btn" id="zoom-out" title="缩小">−</button>
@@ -131,6 +141,8 @@
       </div>
     </div>
     <div class="selection-toolbar" id="selection-toolbar" style="display:none"></div>
+      <!-- canvas-tool-rail removed: drawing tools are no longer part of v1.1 -->
+      <!--
     <div class="canvas-tool-rail" id="canvas-tool-rail" role="toolbar" aria-label="绘制工具">
       <button class="draw-tool active" data-tool="select" data-i18n-title="toolSelect" title="选择">↖</button>
       <button class="draw-tool" data-tool="hand" data-i18n-title="toolHand" title="抓手">✋</button>
@@ -145,6 +157,7 @@
       <span class="rail-sep"></span>
       <button class="draw-tool" data-tool="connector" data-i18n-title="toolConnector" title="连线">⛓</button>
     </div>
+      -->
     <div class="canvas-scroll-wrap" id="canvas-scroll-wrap">
       <div class="ruler-stage" id="ruler-stage">
         <div class="canvas-ruler canvas-ruler-h" id="ruler-h"></div>
@@ -210,6 +223,7 @@
 
 <!-- prism-region:toplib -->
 <!-- 底部设计库：点击展开 / 再次点击收起 -->
+<!--
 <div class="bottom-library" id="bottom-library">
   <button class="bottom-lib-toggle" id="bottom-lib-toggle" aria-expanded="false" title="点击展开设计库">📚 设计库 <span class="bl-arrow">▴</span></button>
   <div class="top-library" id="top-library" style="display:none">
@@ -231,6 +245,7 @@
     <div class="top-lib-strip" id="top-lib-strip"></div>
   </div>
 </div>
+-->
 <!-- /prism-region:toplib -->
 
 <!-- AI Settings Modal (built-in LLM channel, BYO API key) -->
@@ -442,6 +457,7 @@
 <script src="app-renderers.js"></script>
 <script src="app-panels.js"></script>
 <script src="app-import.js"></script>
+<script src="app-design-library.js"></script>
 <script src="app-canvas-editor.js"></script>
 </body>
 </html>

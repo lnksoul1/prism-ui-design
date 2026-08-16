@@ -313,6 +313,7 @@ function init() {
   setupLlmSettings();
   updateLlmBadge();
   setupCanvasDrawing();
+    setupSourceView();
   setupApplyBanner();
   setupCommandPalette();
   setupQuickActions();

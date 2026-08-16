@@ -1362,12 +1362,59 @@ function wcagContrastRatio(a, b) {
 
 // ===== Health Check Fallback =====
 
+async function refreshPageSourceDoc() {
+  const pageId = currentState && currentState.currentPageId;
+  const record = currentState && currentState.imports ? currentState.imports[pageId] : null;
+  const supportsSourceDoc =
+    record &&
+    (record.kind === "url" || record.kind === "html" || (record.kind === "file" && record.source_is_html));
+  if (!pageId || !record || !supportsSourceDoc) {
+    const hadSource = !!pageSourceDoc;
+    pageSourceDoc = null;
+    pageSourcePageId = null;
+    sourceViewActive = false;
+    if (hadSource) {
+      const canvas = $("canvas");
+      if (canvas) canvas.classList.remove("source-view");
+      renderCanvas({ silent: true });
+    }
+    updateSourceViewButton();
+    return;
+  }
+  const previousPage = pageSourcePageId;
+  try {
+    const response = await fetch(`/api/import/document?page_id=${encodeURIComponent(pageId)}`);
+    if (!response.ok) {
+      pageSourceDoc = null;
+      pageSourcePageId = null;
+      sourceViewActive = false;
+      updateSourceViewButton();
+        renderCanvas({ silent: true });
+      return;
+    }
+    const data = await response.json();
+    pageSourceDoc = data;
+    pageSourcePageId = pageId;
+    // 切到新导入页时默认先看原页面，之后尊重用户切换。
+    if (previousPage !== pageId) sourceViewActive = false;
+    updateSourceViewButton();
+    renderCanvas({ silent: true });
+  } catch {
+    pageSourceDoc = null;
+    pageSourcePageId = null;
+    sourceViewActive = false;
+    updateSourceViewButton();
+      renderCanvas({ silent: true });
+  }
+}
+
 async function fetchInitialState() {
   try {
     const response = await fetch("/api/state");
     if (response.ok) {
       currentState = await response.json();
       renderAll();
+      refreshPageSourceDoc();
     }
   } catch {
     // Will rely on WebSocket

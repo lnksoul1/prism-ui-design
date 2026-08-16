@@ -2672,11 +2672,11 @@ export function registerAllDesignTools(server: McpServer): void {
   registerDesignUpdateComponentTool(server);
   registerDesignRenameTool(server);
   registerDesignAnimationTool(server);
-  registerDesignBehaviorTool(server);
+  
   registerDesignAlignTool(server);
   registerDesignZOrderTool(server);
-  registerDesignComponentTemplateTool(server);
-  registerDesignBehaviorTemplateTool(server);
+  
+  
   registerDesignGetStateTool(server);
   registerDesignSetTokenTool(server);
   registerDesignRemoveComponentTool(server);

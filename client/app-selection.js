@@ -46,10 +46,16 @@ function getSelectedComps() {
 }
 
 function selectComponent(id, additive) {
+  // 从图层面板等入口选中组件时，自动离开原页面预览进入片段编辑。
+  if (sourceViewActive) {
+    sourceViewActive = false;
+    updateSourceViewButton();
+    renderCanvas({ silent: true });
+  }
   // 组件级重新选择时清除元素级选择（元素选择由 selectElement 管理）；
   // 点击同一片段的内层元素时保留元素选中（组件与元素同时选中）
   selectedElementPath = null;
-  if (typeof clearPrismFragElementSelection === "function" && prismFragElementSel && prismFragElementSel.compId !== id) {
+  if (typeof clearPrismFragElementSelection === "function" && prismFragElementSel) {
     clearPrismFragElementSelection();
   }
   if (additive) {
@@ -138,6 +144,9 @@ function deselectAll() {
   selectedComponentId = null;
   selectedIds = [];
   selectedElementPath = null;
+  if (typeof clearPrismFragElementSelection === "function" && prismFragElementSel) {
+    clearPrismFragElementSelection();
+  }
   document.querySelectorAll(".comp-wrapper.selected").forEach((w) => w.classList.remove("selected"));
   document.querySelectorAll(".element-selected").forEach((w) => w.classList.remove("element-selected"));
   renderInspector();
@@ -497,6 +506,9 @@ function renderInspectorProps(panel, comp) {
   contentSection.appendChild(el("div", "inspector-section-title", t("content")));
   let textRows = 0;
   Object.entries(props).forEach(([key, value]) => {
+      if (typeof value !== "string") return;
+      // 片段源文件是内部数据，不能塞进普通文本输入框（大页面会卡死检查器）。
+      if (comp.type === "html_fragment" && ["html", "css", "original_html", "region"].includes(key)) return;
     if (typeof value !== "string") return;
     const row = el("div", "prop-row");
     row.appendChild(el("div", "prop-label", key));
@@ -805,7 +817,7 @@ function renderInspectorProps(panel, comp) {
       // 文字
       if (selEl.childElementCount === 0) {
         const txtRow = el("div", "prop-row");
-        txtRow.appendChild(el("div", "prop-label", t("behaviorMessage")));
+        txtRow.appendChild(el("div", "prop-label", "文字内容"));
         const txt = el("input", "prop-text-input");
         txt.value = selEl.textContent || "";
         txt.addEventListener("change", () => {
@@ -818,13 +830,83 @@ function renderInspectorProps(panel, comp) {
         elemSection.appendChild(txtRow);
       }
 
+        // 属性编辑：href / src / alt / placeholder / value / type / class / id
+        const attrRows = [];
+        const tag = selEl.tagName.toLowerCase();
+        if (tag === "a") attrRows.push(["链接地址", "href"]);
+        if (["img", "script", "iframe", "video", "audio", "source"].includes(tag)) attrRows.push(["资源地址", "src"]);
+        if (tag === "img") attrRows.push(["替代文字", "alt"]);
+        if (["input", "textarea", "select"].includes(tag)) {
+          attrRows.push(["占位提示", "placeholder"]);
+          attrRows.push(["当前值", "value"]);
+        }
+        if (tag === "input") attrRows.push(["输入类型", "type"]);
+        attrRows.push(["CSS 类名", "class"], ["元素 ID", "id"]);
+        attrRows.forEach(([label, attr]) => {
+          const row = el("div", "prop-row");
+          row.appendChild(el("div", "prop-label", label));
+          const input = el("input", "prop-text-input");
+          input.value = selEl.getAttribute(attr) || "";
+          input.placeholder = `无 ${attr}`;
+          input.addEventListener("change", () => {
+            const el = currentFragElement();
+            if (!el) return;
+            const v = input.value.trim();
+            if (!v) el.removeAttribute(attr);
+            else el.setAttribute(attr, v);
+            commit();
+          });
+          row.appendChild(input);
+          elemSection.appendChild(row);
+        });
+
+        // 样式精确编辑：常用 CSS 属性均可直接输入。
+        const preciseStyleRows = [
+          { label: "背景色", prop: "background-color", init: "" },
+          { label: "文字色", prop: "color", init: "" },
+          { label: "字号", prop: "font-size", init: "px" },
+          { label: "字重", prop: "font-weight", init: "" },
+          { label: "行高", prop: "line-height", init: "" },
+          { label: "内边距", prop: "padding", init: "px" },
+          { label: "外边距", prop: "margin", init: "px" },
+          { label: "宽度", prop: "width", init: "px" },
+          { label: "高度", prop: "height", init: "px" },
+          { label: "圆角", prop: "border-radius", init: "px" },
+          { label: "边框", prop: "border", init: "" },
+          { label: "阴影", prop: "box-shadow", init: "" },
+          { label: "透明度", prop: "opacity", init: "" },
+          { label: "定位", prop: "position", init: "" },
+          { label: "显示", prop: "display", init: "" },
+        ];
+        preciseStyleRows.forEach(({ label, prop, init }) => {
+          const row = el("div", "prop-row");
+          row.appendChild(el("div", "prop-label", label));
+          const input = el("input", "prop-text-input");
+          const cur = selEl.style.getPropertyValue(prop) || "";
+          input.value = init === "px" ? cur.replace(/px$/, "") : cur;
+          input.placeholder = cur || "";
+          input.addEventListener("change", () => {
+            const el = currentFragElement();
+            if (!el) return;
+            const v = input.value.trim();
+            if (!v) {
+              el.style.removeProperty(prop);
+            } else {
+              el.style.setProperty(prop, init === "px" && /^-?[\d.]+$/.test(v) ? v + init : v);
+            }
+            commit();
+          });
+          row.appendChild(input);
+          elemSection.appendChild(row);
+        });
+
       // 样式旋钮：背景色 / 文字色 / 字号 / 内边距 / 圆角
       const styleRows = [
-        { label: "背景色", prop: "background-color", init: "" },
-        { label: "文字色", prop: "color", init: "" },
-        { label: "字号", prop: "font-size", init: "px" },
-        { label: "内边距", prop: "padding", init: "px" },
-        { label: "圆角", prop: "border-radius", init: "px" },
+        /* 样式字段已扩展为下方的精确编辑列表 */
+        /* removed */
+        /* removed */
+        /* removed */
+        /* removed */
       ];
       styleRows.forEach(({ label, prop, init }) => {
         const row = el("div", "prop-row");
@@ -1067,10 +1149,44 @@ function renderElementPanel(panel, comp, path) {
     section.appendChild(info);
   }
 
+  // 组件化（DESIGN.md v1.1 §5.2）：把内部元素提升为独立子组件。
+  const promoteBtn = el("button", "el-promote-btn", "组件化");
+  promoteBtn.type = "button";
+  promoteBtn.title = "将当前元素提升为独立组件（保留原位渲染）";
+  promoteBtn.addEventListener("click", async () => {
+    const comp = getSelectedComp();
+    if (!comp) return;
+    try {
+      const res = await fetch(
+        `/api/component/${encodeURIComponent(comp.id)}/element/${encodeURIComponent(path)}/promote`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        }
+      );
+      if (res.ok) {
+        showToastMsg("已组件化");
+        selectedElementPath = null;
+        if (typeof clearElementSelection === "function") clearElementSelection();
+        await fetchInitialState();
+      } else {
+        showToastMsg(t("dsError"), true);
+      }
+    } catch (err) {
+      console.error("Promote element failed:", err);
+      showToastMsg(t("dsError"), true);
+    }
+  });
+  section.appendChild(promoteBtn);
+
   // 取消元素选择：回到组件级
   const backBtn = el("button", "el-clear-element", t("elementBack"));
   backBtn.type = "button";
   backBtn.addEventListener("click", () => {
+      if (selectedElementPath && selectedElementPath.startsWith("frag:") && typeof clearPrismFragElementSelection === "function") {
+        clearPrismFragElementSelection();
+      }
     selectedElementPath = null;
     applyElementSelectionHighlight();
     renderInspector();

@@ -67,28 +67,30 @@ import {
   autosavePath,
   enableAutoSave,
   loadProject,
+  getProjectDir,
 } from "./project-store.js";
-import { listTemplates, loadTemplate, saveTemplate } from "./templates.js";
+
 import { createVersion, diffVersions, listVersions, restoreVersion } from "./versions.js";
 
 // Phase B capabilities: token interop, a11y audit, render preview, resources, prompts
 import { registerTokenInteropTools } from "./tools/token-interop.js";
 import { registerAuditTool } from "./tools/design-audit.js";
 import { previewsDir, registerRenderTool } from "./tools/design-render.js";
-import { registerTemplateTools } from "./tools/template-tools.js";
+
 import { registerVersionTools } from "./tools/version-tools.js";
 import { registerDesignMdTool } from "./tools/design-md.js";
-import { registerStyleGuideTools } from "./tools/style-guide-tools.js";
-import { applyStyleGuide, BRAND_DESIGN_SYSTEMS } from "./style-guides.js";
+
+
 import { registerSemanticStyleTool } from "./tools/semantic-tools.js";
 import { registerExplainTool, explainDesign } from "./tools/explain-tools.js";
 import { registerCapabilitiesTool } from "./tools/capabilities.js";
+import { registerDesignLibraryTools } from "./tools/design-library-tools.js";
 import { registerWebpageImportTool } from "./tools/webpage-import.js";
 import { registerSpecTools } from "./tools/spec-tools.js";
 import { registerPlatformTools } from "./tools/platform-tools.js";
 import { registerCollabTools } from "./tools/collab-tools.js";
 import { registerGeneratePageTool } from "./tools/generate-tools.js";
-import { registerCanvasTools } from "./tools/canvas-tools.js";
+
 import {
   registerSuggestTool,
   registerBrandStyleTool,
@@ -110,11 +112,14 @@ import "./animations/css-presets.js";
 import "./animations/gsap-presets.js";
 
 // Route modules (P2.2: routes split into dedicated files)
-import { registerCanvasRoutes } from "./routes/canvas.js";
+
 import { registerTokensRoutes } from "./routes/tokens.js";
 import { registerComponentsRoutes } from "./routes/components.js";
 import { registerProjectsRoutes } from "./routes/projects.js";
-import { registerTemplatesRoutes } from "./routes/templates.js";
+import { registerDesignLibraryRoutes } from "./routes/design-library.js";
+import { registerLayoutRoutes } from "./routes/layout.js";
+import { ensureTopLevelLayouts, containerWidthForPlatform } from "./layout-engine.js";
+
 import { errorHandler } from "./routes/shared.js";
 
 // Built-in LLM channel (product definition v2: BYO API key, no external agent)
@@ -158,18 +163,21 @@ registerAuditTool(server);
 registerRenderTool(server);
 
 // Templates (C3) and version snapshots (C4)
-registerTemplateTools(server);
+
 registerVersionTools(server);
 
 // DESIGN.md interop, webpage import, style guides, semantic styling
 registerDesignMdTool(server);
 registerWebpageImportTool(server);
-registerStyleGuideTools(server);
+
 registerSemanticStyleTool(server);
 registerExplainTool(server);
 
 // Self-describing capability manifest
 registerCapabilitiesTool(server);
+
+// Design library (DESIGN.md v1.1 §9.3): the single content panel
+registerDesignLibraryTools(server);
 
 // Spec §8.2 alignment tools (list presets/components/pages, token get/batch/delete, project name)
 registerSpecTools(server);
@@ -185,7 +193,7 @@ registerReviewAndImproveTool(server);
 registerPlatformTools(server);
 registerCollabTools(server);
 registerGeneratePageTool(server);
-registerCanvasTools(server);
+
 
 // Upgrade plan U1-U3: Lenis (scroll), GSAP (animations), Vanta (3D bg), React Bits
 registerScrollTools(server);
@@ -209,16 +217,19 @@ const wsClients = new Map<WebSocket, { id: string; joinedAt: string; cursor?: { 
 
 // Serve static client files
 const clientDir = path.resolve(__dirname, "../client");
-app.use(express.json());
+// 导入/写回会携带完整 HTML 片段与 CSS；默认 100kb 会直接拒绝真实页面。
+app.use(express.json({ limit: "8mb" }));
+app.use(express.urlencoded({ extended: true, limit: "8mb" }));
 app.use(express.static(clientDir));
 app.use("/previews", express.static(previewsDir()));
 
 // Mount extracted route modules (P2.2)
-app.use(registerCanvasRoutes());
+app.use(registerDesignLibraryRoutes());
+app.use(registerLayoutRoutes());
 app.use(registerTokensRoutes());
 app.use(registerComponentsRoutes());
 app.use(registerProjectsRoutes());
-app.use(registerTemplatesRoutes());
+
 
 // Built-in LLM channel routes (AI settings + generation)
 registerLlmRoutes(app);
@@ -303,6 +314,9 @@ function broadcastLlmError(summary: string): void {
     }
   });
 }
+
+/* Removed old page-template / saved-template / brand-design-system endpoints.
+ * They are superseded by /api/design-library (DESIGN.md v1.1 §9.1).
 
 // API: Apply a page template (used by the canvas empty-state "start from template")
 app.post("/api/template", (req, res) => {
@@ -391,6 +405,8 @@ app.post("/api/template/load", (req, res) => {
     res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
   }
 });
+*/
+
 
 // API: Create a design version snapshot
 app.post("/api/version", (req, res) => {
@@ -785,6 +801,35 @@ async function autoImportProjectPages(): Promise<void> {
         );
       }
       totalComponents += page.components.length;
+        // DESIGN.md v1.1 §5.1: server-side streaming-column layout on import.
+        ensureTopLevelLayouts(newPage.components, containerWidthForPlatform(stateStore.getState().activePlatform));
+        stateStore.replacePageComponents(newPage.id, newPage.components, "ai");
+
+        // Record provenance for HTML pages so the apply banner / source view
+        // work for startup auto-import too (same pipeline as import modal).
+        if (page.sourceHtml !== undefined) {
+          try {
+            const importsDir = path.join(getProjectDir(), "imports");
+            fs.mkdirSync(importsDir, { recursive: true });
+            const htmlFile = path.join(importsDir, `${newPage.id}.html`);
+            fs.writeFileSync(htmlFile, page.sourceHtml, "utf-8");
+            stateStore.setImport(
+              newPage.id,
+              {
+                kind: "file",
+                source: page.name || projectName,
+                html_file: htmlFile,
+                imported_at: new Date().toISOString(),
+                component_count: page.components.length,
+                source_file: page.filePath,
+                source_is_html: true,
+              },
+              "ai"
+            );
+          } catch (recordError) {
+            console.error(`[${SERVER_NAME}] Auto-import: record provenance failed for ${page.filePath}`, recordError);
+          }
+        }
     }
 
     // Remove the default empty "Home" page now that we have imported pages

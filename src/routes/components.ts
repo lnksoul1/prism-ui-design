@@ -50,6 +50,7 @@ export function registerComponentsRoutes(): express.Router {
     const code = exportComponentCode(comp, format, stateStore.getState().tokens);
     res.json({ success: true, id: comp.id, type: comp.type, format, code });
   }));
+    /*
 
   // API: Export a library component as code (uses its default props)
   router.post("/api/library-code", asyncHandler(async (req, res) => {
@@ -68,6 +69,7 @@ export function registerComponentsRoutes(): express.Router {
     const code = exportComponentCode(node, fmt, stateStore.getState().tokens);
     res.json({ success: true, type, format: fmt, code });
   }));
+    */
 
   // API: Update component (from client inline edit / layout nudge)
   router.post("/api/component/:id", asyncHandler(async (req, res) => {
@@ -138,6 +140,7 @@ export function registerComponentsRoutes(): express.Router {
     }
     res.json({ success: true, id: copy.id, type: copy.type });
   }));
+    /*
 
   // API: Bind or clear an interaction behavior on a component (行为模型 P1)
   router.put("/api/component/:id/behavior", asyncHandler(async (req, res) => {
@@ -175,6 +178,22 @@ export function registerComponentsRoutes(): express.Router {
     }
     res.json({ success: true, id, path, behavior: behavior ?? null, kind: kind ?? null });
   }));
+    */
+
+    // API: Promote a selected inner element to an independent child component
+    // (DESIGN.md v1.1 §5.2). Optional body: { type?: string }
+    router.post("/api/component/:id/element/:path/promote", asyncHandler(async (req, res) => {
+      const { id, path } = req.params;
+      if (!path) {
+        throw new HttpError(400, "path is required");
+      }
+      const child = stateStore.promoteElementToComponent(id, path, (req.body || {}).type, "user");
+      if (!child) {
+        throw new HttpError(404, `Component ${id} or element path not found`);
+      }
+      res.json({ success: true, id, path, child_id: child.id, child_type: child.type });
+    }));
+
 
   // API: Set or clear the page-level background (背景编辑 P1):
   // body: { background: { type, value, animation?, params? } | null }

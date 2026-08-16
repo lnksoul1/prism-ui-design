@@ -11,9 +11,11 @@
 import { z } from "zod";
 import { stateStore, type AlignMode, type AnimationDef, type ComponentBehavior, type ComponentLayout, type ElementMeta, type PageBackground, type ZOrderMode } from "../state.js";
 import { applyStyleTokenSet } from "../tokens.js";
-import { applyStyleGuide } from "../style-guides.js";
-import { executeUserPrompt, type PromptExecutionResult } from "../prompt-executor.js";
+
 import { getBehaviorTemplate, getComponentTemplate } from "../template-catalog.js";
+import { executeUserPrompt, type PromptExecutionResult } from "../prompt-executor.js";
+
+import { applyDesignLibraryComponent, applyDesignStyle } from "../design-library.js";
 import { validateComponentProps, describeComponentProps } from "../component-schemas.js";
 
 export type MutationSource = "ai" | "user";
@@ -514,6 +516,7 @@ export const wsMessageSchema = z.discriminatedUnion("type", [
     curve: z.string().optional(),
     stagger: z.number().optional(),
   }),
+    /*
   z.strictObject({
     type: z.literal("set_behavior"),
     component_id: z.string().min(1),
@@ -549,6 +552,7 @@ export const wsMessageSchema = z.discriminatedUnion("type", [
       .optional(),
     kind: z.enum(["text", "button", "link"]).nullable().optional(),
   }),
+    */
   z.strictObject({
     type: z.literal("set_page_background"),
     background: z
@@ -570,6 +574,16 @@ export const wsMessageSchema = z.discriminatedUnion("type", [
     id: z.string().min(1),
     mode: z.enum(["front", "back", "forward", "backward"]),
   }),
+    z.strictObject({
+      type: z.literal("apply_design_style"),
+      style_id: z.string().min(1),
+    }),
+    z.strictObject({
+      type: z.literal("apply_component_template"),
+      component_id: z.string().min(1),
+      target_id: z.string().optional(),
+    }),
+    /*
   z.strictObject({
     type: z.literal("apply_style"),
     style: z.string().min(1),
@@ -588,6 +602,7 @@ export const wsMessageSchema = z.discriminatedUnion("type", [
     component_id: z.string().min(1),
     template_id: z.string().min(1),
   }),
+    */
 ]);
 
 export type WsClientMessage = z.infer<typeof wsMessageSchema>;
@@ -676,6 +691,15 @@ export function applyClientMessage(msg: WsClientMessage): { ok: boolean; detail:
       const ok = setAnimation(msg.component_id, animation, "user");
       return { ok, detail: ok ? `animation ${msg.component_id}` : `component ${msg.component_id} not found` };
     }
+      case "apply_design_style": {
+        const result = applyDesignStyle(msg.style_id, "user");
+        return { ok: result.ok, detail: result.ok ? `design style ${result.style_name} applied` : result.detail || "apply design style failed" };
+      }
+      case "apply_component_template": {
+        const result = applyDesignLibraryComponent(msg.component_id, msg.target_id || null, "user");
+        return { ok: result.ok, detail: result.detail || "apply component template failed" };
+      }
+      /*
     case "set_behavior": {
       const ok = setBehavior(msg.component_id, msg.behavior, "user");
       return { ok, detail: ok ? `behavior ${msg.component_id}` : `component ${msg.component_id} not found` };
@@ -690,6 +714,7 @@ export function applyClientMessage(msg: WsClientMessage): { ok: boolean; detail:
       const ok = setElementMeta(msg.component_id, msg.path, meta, "user");
       return { ok, detail: ok ? `element meta ${msg.component_id}#${msg.path}` : `component ${msg.component_id} not found` };
     }
+        */
     case "set_page_background": {
       const ok = setPageBackground(msg.background, "user");
       return { ok, detail: ok ? `page background ${msg.background ? msg.background.type : "cleared"}` : "page background failed" };
@@ -702,6 +727,7 @@ export function applyClientMessage(msg: WsClientMessage): { ok: boolean; detail:
       const ok = zOrderComponent(msg.id, msg.mode, "user");
       return { ok, detail: ok ? `z-order ${msg.id}` : `component ${msg.id} not found` };
     }
+        /*
     case "apply_style": {
       // 兼容旧客户端：apply_style 现在映射到中性默认 token（风格预设已移除）。
       const ok = applyStyle(msg.style, "user");
@@ -723,6 +749,7 @@ export function applyClientMessage(msg: WsClientMessage): { ok: boolean; detail:
       const result = applyBehaviorTemplate(msg.component_id, msg.template_id, msg.component_id, "user");
       return { ok: result.ok, detail: result.detail || result.template_id || "apply behavior template failed" };
     }
+      */
     default:
       return { ok: false, detail: `unsupported message type` };
   }

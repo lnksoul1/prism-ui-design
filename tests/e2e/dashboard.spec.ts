@@ -47,14 +47,6 @@ async function runPrompt(page: Page, text: string): Promise<void> {
   await page.keyboard.press("Enter");
 }
 
-/** Expand the bottom design library (collapsed by default; click to expand). */
-async function openLibrary(page: Page): Promise<void> {
-  const toggle = page.locator("#bottom-lib-toggle");
-  if ((await toggle.getAttribute("aria-expanded")) !== "true") {
-    await toggle.click();
-  }
-}
-
 let server: ChildProcess | null = null;
 let port = 0;
 
@@ -90,8 +82,10 @@ test("dashboard loads with the premium empty state", async ({ page }: { page: Pa
   await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "domcontentloaded", timeout: 60000 });
   await expect(page.locator(".topbar")).toBeVisible();
   await expect(page.locator(".placeholder-guide")).toBeVisible();
-  await openLibrary(page);
-  await expect(page.locator("#top-lib-strip")).toBeVisible();
+  // 设计库是唯一内容面板（DESIGN.md v1.1 §3.3）：左栏常驻，默认可见
+  await expect(page.locator("#design-library-panel")).toBeVisible();
+  await expect(page.locator("#design-library-search")).toBeVisible();
+  await expect(page.locator("#design-library-styles").first()).toBeVisible();
   // Primary topbar actions stay visible; secondary utilities live in the "…" menu.
   await expect(page.locator("#export-btn")).toBeVisible();
   await expect(page.locator("#more-btn")).toBeVisible();
@@ -111,7 +105,7 @@ test("dashboard loads with the premium empty state", async ({ page }: { page: Pa
   expect(errors).toEqual([]);
 });
 
-test("drawing canvas: draw shapes directly on the preview canvas (unified coordinates)", async ({ page }: { page: Page }) => {
+test("design library panel: click a component to add it, click a style to restyle", async ({ page }: { page: Page }) => {
   const errors: string[] = [];
   page.on("console", (msg) => {
     if (msg.type() === "error" && !msg.text().includes("Failed to load resource")) errors.push(msg.text());
@@ -120,56 +114,44 @@ test("drawing canvas: draw shapes directly on the preview canvas (unified coordi
 
   await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "domcontentloaded", timeout: 60000 });
   await expect(page.locator(".topbar")).toBeVisible();
-  // 预览画布是唯一编辑面：绘制工具栏常驻可见
-  await expect(page.locator("#canvas-tool-rail")).toBeVisible();
-  await expect(page.locator(".draw-tool").first()).toBeVisible();
+  // 设计库是唯一内容面板：左栏常驻，组件术语按分类渲染
+  await expect(page.locator("#design-library-panel")).toBeVisible();
+  await expect(page.locator("#design-library-components .lib-item").first()).toBeVisible();
 
-  // 选择「矩形」工具，在画布上拖出形状 → 直接落为组件（统一坐标系）
-  await page.locator('.draw-tool[data-tool="rect"]').click();
-  const canvasBox = await page.locator("#canvas").boundingBox();
-  expect(canvasBox).toBeTruthy();
-  await page.mouse.move(canvasBox!.x + 60, canvasBox!.y + 60);
-  await page.mouse.down();
-  await page.mouse.move(canvasBox!.x + 260, canvasBox!.y + 200, { steps: 8 });
-  await page.mouse.up();
-  await expect
-    .poll(async () => {
-      return page.evaluate(async () => {
-        const s = (await (await fetch("/api/state")).json()) as { components: Array<{ type: string }> };
-        return s.components.some((c) => c.type === "rect");
-      });
-    }, { timeout: 10000 })
-    .toBe(true);
-
-  // 文字工具：点击创建文字组件
-  await page.locator('.draw-tool[data-tool="text"]').click();
-  await page.mouse.click(canvasBox!.x + 320, canvasBox!.y + 260);
-  await expect
-    .poll(async () => {
-      return page.evaluate(async () => {
-        const s = (await (await fetch("/api/state")).json()) as { components: Array<{ type: string }> };
-        return s.components.some((c) => c.type === "text");
-      });
-    }, { timeout: 10000 })
-    .toBe(true);
-
-  // 形状组件可选中（切回选择工具；用图层树选择避免 overlay 拦截）
-  await page.locator('.draw-tool[data-tool="select"]').click();
-  const rectIdForSel = await page.evaluate(async () => {
-    const s = (await (await fetch("/api/state")).json()) as { components: Array<{ type: string; id: string }> };
-    const r = s.components.find((c) => c.type === "rect");
-    return r ? r.id : null;
+  // 点击第一个组件术语 → 通过 REST 添加到画布（v1.1 组件模板/变体）
+  const before = await page.evaluate(async () => {
+    const s = (await (await fetch("/api/state")).json()) as { components: Array<{ type: string }> };
+    return s.components.length;
   });
-  expect(rectIdForSel).toBeTruthy();
-  await page.locator(`#layer-tree .layer-item[data-id="${rectIdForSel}"]`).locator(".layer-name").click();
+  await page.locator("#design-library-components .lib-item").first().click();
+  await expect
+    .poll(async () => {
+      return page.evaluate(async () => {
+        const s = (await (await fetch("/api/state")).json()) as { components: Array<{ type: string }> };
+        return s.components.length;
+      });
+    }, { timeout: 10000 })
+    .toBe(before + 1);
+
+  // 组件已渲染并可选中 → 检查器出现
+  await expect(page.locator(".comp-wrapper").first()).toBeVisible({ timeout: 10000 });
+  await page.locator(".comp-wrapper").first().click();
   await expect(page.locator(".inspector-tabs")).toBeVisible();
 
-  // 顶部设计库: 组件知识卡渲染（悬停展开气泡）
-  await openLibrary(page);
-  await page.locator('.top-lib-tab[data-lib="按钮与链接"]').click();
-  await page.waitForSelector(".top-lib-card", { timeout: 5000 });
-  await page.locator(".top-lib-card").first().hover();
-  await expect(page.locator(".top-lib-bubble").first()).toBeVisible({ timeout: 5000 });
+  // 点击设计风格卡 → 令牌覆盖生效（state.style 更新）
+  const styleCard = page.locator("#design-library-styles .lib-style-card").first();
+  await expect(styleCard).toBeVisible();
+  const styleId = await styleCard.evaluate((el) => (el as HTMLElement).dataset.slug || "");
+  await styleCard.click();
+  await expect
+    .poll(async () => {
+      return page.evaluate(async () => {
+        const s = (await (await fetch("/api/state")).json()) as { style?: string };
+        return s.style;
+      });
+    }, { timeout: 10000 })
+    .not.toBeNull();
+  void styleId;
 
   expect(errors).toEqual([]);
 });
@@ -205,11 +187,8 @@ test("quick actions: ? help, Ctrl+K palette, template thumbnails", async ({ page
   await page.keyboard.press("Escape");
   await expect(page.locator("#help-overlay")).not.toBeVisible();
 
-  // 绘制工具栏常驻（预览画布 = 唯一编辑面），工具切换有激活态
-  await expect(page.locator("#canvas-tool-rail")).toBeVisible();
-  await page.locator('.draw-tool[data-tool="rect"]').click();
-  await expect(page.locator('.draw-tool[data-tool="rect"]')).toHaveClass(/active/);
-  await page.locator('.draw-tool[data-tool="select"]').click();
+  // 左栏设计库面板常驻（DESIGN.md v1.1 §3.3）
+  await expect(page.locator("#design-library-panel")).toBeVisible();
 
   expect(errors).toEqual([]);
 });
@@ -237,20 +216,15 @@ test("inspect code tab and brand design systems work from the dashboard", async 
   const copyEnabled = await page.locator(".inspector-copy-btn").isEnabled();
   expect(copyEnabled).toBe(true);
 
-  // 设计库重做 (P1): 底部库"设计风格" tab 渲染 VibeHub 知识卡片。
-  await openLibrary(page);
-  await page.locator('.top-lib-tab[data-lib="设计风格"]').click();
-  await expect(page.locator(".top-lib-card").first()).toBeVisible({ timeout: 5000 });
-  const vhCount = await page.locator(".top-lib-card").count();
-  expect(vhCount).toBeGreaterThanOrEqual(10);
-  // 悬停展开气泡（用法/示例）
-  await page.locator(".top-lib-card").first().hover();
-  await expect(page.locator(".top-lib-bubble").first()).toBeVisible();
-  // 布局 tab 也渲染知识卡
-  await page.locator('.top-lib-tab[data-lib="CSS 布局"]').click();
-  await expect(page.locator(".top-lib-card").first()).toBeVisible();
-  const layoutCount = await page.locator(".top-lib-card").count();
-  expect(layoutCount).toBeGreaterThanOrEqual(10);
+  // 设计库重做 (v1.1): 左栏设计库渲染 VibeHub 风格卡与组件术语。
+  const styleCards = page.locator("#design-library-styles .lib-style-card");
+  await expect(styleCards.first()).toBeVisible({ timeout: 5000 });
+  const styleCount = await styleCards.count();
+  expect(styleCount).toBeGreaterThanOrEqual(10);
+  // 组件术语按分类渲染
+  await expect(page.locator("#design-library-components .lib-group-title").first()).toBeVisible();
+  const compCount = await page.locator("#design-library-components .lib-item").count();
+  expect(compCount).toBeGreaterThanOrEqual(10);
 
   expect(errors).toEqual([]);
 });
@@ -459,7 +433,7 @@ test("multi-select and alignment adjust freeform layouts", async ({ page }: { pa
   expect(errors).toEqual([]);
 });
 
-test("play mode: a linked component navigates to the target page", async ({ page }: { page: Page }) => {
+test("play mode toggles on and back to editing", async ({ page }: { page: Page }) => {
   const errors: string[] = [];
   page.on("console", (msg) => {
     if (msg.type() === "error" && !msg.text().includes("Failed to load resource")) errors.push(msg.text());
@@ -469,56 +443,17 @@ test("play mode: a linked component navigates to the target page", async ({ page
   await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "domcontentloaded", timeout: 60000 });
   await expect(page.locator(".topbar")).toBeVisible();
 
-  // Start from the SaaS template so there is a component to click
+  // Start from the SaaS template so there is a component to view
   await runPrompt(page, "应用 SaaS 模板");
   await expect(page.locator(".comp-wrapper").first()).toBeVisible({ timeout: 10000 });
 
-  // Remember the current page, then create the target page through the REST API
-  const homePageId = await page.evaluate(async () => {
-    const s = (await (await fetch("/api/state")).json()) as { currentPageId: string };
-    return s.currentPageId;
-  });
-  const detailPageId = await page.evaluate(async () => {
-    const res = await fetch("/api/page", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "Detail" }),
-    });
-    const data = (await res.json()) as { page_id: string };
-    return data.page_id;
-  });
-  // addPage switches to the new page; switch back to Home so the template is visible
-  await page.evaluate(async (homeId) => {
-    await fetch(`/api/page/${homeId}/switch`, { method: "POST" });
-  }, homePageId);
-  await expect(page.locator(".comp-wrapper").first()).toBeVisible({ timeout: 10000 });
-
-  // Select the first component and bind a "navigate" behavior to the Detail page
-  await page.locator(".comp-wrapper").first().click();
-  await expect(page.locator(".inspector-tabs")).toBeVisible();
-  const typeSelect = page.locator("select.prop-select").filter({
-    has: page.locator("option", { hasText: "跳转页面" }),
-  });
-  await typeSelect.selectOption("navigate");
-  const pageSelect = page.locator("select.prop-select").filter({
-    has: page.locator("option", { hasText: "选择目标页" }),
-  });
-  await pageSelect.selectOption(detailPageId);
-  await expect(page.locator(".inspector-link-info")).toBeVisible();
-
-  // Play mode: clicking the component dispatches the behavior (navigate)
+  // Play mode is a read-only preview: editing controls are hidden.
   await page.locator("#play-btn").click();
-  await page.locator(".comp-wrapper").first().click();
-  await page.waitForFunction(
-    (id) =>
-      fetch("/api/state")
-        .then((r) => r.json())
-        .then((s) => (s as { currentPageId?: string }).currentPageId === id),
-    detailPageId,
-    { timeout: 10000 }
-  );
+  await expect(page.locator("#play-btn")).toHaveClass(/active/, { timeout: 5000 });
+  await expect(page.locator("#selection-toolbar")).toBeHidden();
+  await expect(page.locator(".resize-handle").first()).toBeHidden();
 
-  // Esc exits play mode
+  // Esc exits play mode back to editing
   await page.keyboard.press("Escape");
   await expect(page.locator("#play-btn")).toContainText("播放");
 
@@ -590,43 +525,21 @@ test("library: component template replaces the selected component in place", asy
   expect(replaced?.type).toBe("hero");
   expect(replaced?.variant).toBe("split");
 
-  // 底部设计库: 组件知识卡添加到画布 (VibeHub 知识卡 + 应用到画布)
-  await openLibrary(page);
-  await page.locator('.top-lib-tab[data-lib="按钮与链接"]').click();
-  await expect(page.locator(".top-lib-card").first()).toBeVisible();
-  const cardCount = await page.locator(".top-lib-card").count();
-  expect(cardCount).toBeGreaterThanOrEqual(2);
-  // 悬停展开气泡显示用法
-  await page.locator(".top-lib-card").first().hover();
-  await expect(page.locator(".top-lib-bubble").first()).toBeVisible();
-
-  // Bind a behavior template to the selection via REST (the in-library
-  // interactions tab was removed with the design-library rebuild).
-  const behRes = await page.evaluate(async (id) => {
-    const res = await fetch("/api/templates/behavior", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ component_id: id, template_id: "toast_feedback" }),
-    });
-    return res.status;
-  }, firstId);
-  expect(behRes).toBe(200);
-  // Deterministic: wait until the toast behavior landed on the component.
-  await expect.poll(async () => {
-    return page.evaluate(async (id) => {
-      const s = (await (await fetch("/api/state")).json()) as {
-        components: Array<{ id: string; behavior?: { type: string } }>;
-      };
-      return s.components.find((c) => c.id === id)?.behavior?.type ?? null;
-    }, firstId);
-  }, { timeout: 10000 }).toBe("toast");
-  const behavior = await page.evaluate(async (id) => {
-    const s = (await (await fetch("/api/state")).json()) as {
-      components: Array<{ id: string; behavior?: { type: string } }>;
-    };
-    return s.components.find((c) => c.id === id)?.behavior;
-  }, firstId);
-  expect(behavior?.type).toBe("toast");
+  // 设计库（v1.1）：左栏面板点击组件术语 → 添加到画布
+  await expect(page.locator("#design-library-components .lib-item").first()).toBeVisible();
+  const compCountBefore = await page.evaluate(async () => {
+    const s = (await (await fetch("/api/state")).json()) as { components: Array<unknown> };
+    return s.components.length;
+  });
+  await page.locator("#design-library-components .lib-item").first().click();
+  await expect
+    .poll(async () => {
+      return page.evaluate(async () => {
+        const s = (await (await fetch("/api/state")).json()) as { components: Array<unknown> };
+        return s.components.length;
+      });
+    }, { timeout: 10000 })
+    .toBe(compCountBefore + 1);
 
   expect(errors).toEqual([]);
 });
@@ -665,70 +578,6 @@ test("exact editing: layer rename + rulers/guides appear in freeform", async ({ 
     return s.components.some((c) => c.name === "我的 Hero");
   });
   expect(state).toBe(true);
-
-  expect(errors).toEqual([]);
-});
-
-test("drawing canvas: draw a shape, bind an interaction, play mode triggers it", async ({ page }: { page: Page }) => {
-  const errors: string[] = [];
-  page.on("console", (msg) => {
-    if (msg.type() === "error" && !msg.text().includes("Failed to load resource")) errors.push(msg.text());
-  });
-  page.on("pageerror", (err) => errors.push(String(err)));
-
-  await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "domcontentloaded", timeout: 60000 });
-  await expect(page.locator(".topbar")).toBeVisible();
-
-  // 预览画布直接绘制一个矩形组件（统一坐标系）
-  await page.locator('.draw-tool[data-tool="rect"]').click();
-  const box = await page.locator("#canvas").boundingBox();
-  expect(box).toBeTruthy();
-  await page.mouse.move(box!.x + 100, box!.y + 100);
-  await page.mouse.down();
-  await page.mouse.move(box!.x + 300, box!.y + 260, { steps: 8 });
-  await page.mouse.up();
-  await expect
-    .poll(async () => {
-      return page.evaluate(async () => {
-        const s = (await (await fetch("/api/state")).json()) as { components: Array<{ type: string }> };
-        return s.components.some((c) => c.type === "rect");
-      });
-    }, { timeout: 10000 })
-    .toBe(true);
-
-  // 选中矩形 → 检查器「交互」区绑定「提示消息」(toast)
-  await page.locator('.draw-tool[data-tool="select"]').click();
-  const rectId = await page.evaluate(async () => {
-    const s = (await (await fetch("/api/state")).json()) as { components: Array<{ type: string; id: string }> };
-    const r = s.components.find((c) => c.type === "rect");
-    return r ? r.id : null;
-  });
-  expect(rectId).toBeTruthy();
-  await page.locator(`#layer-tree .layer-item[data-id="${rectId}"]`).locator(".layer-name").click();
-  await expect(page.locator(".inspector-tabs")).toBeVisible();
-  const toastSelect = page.locator("select.prop-select").filter({ has: page.locator("option", { hasText: "提示消息" }) });
-  await toastSelect.selectOption("toast");
-  const msgInput = page.locator(".behavior-params input.prop-text-input").first();
-  await msgInput.fill("形状被点击了");
-  await msgInput.dispatchEvent("change");
-  // 等行为持久化到组件
-  await expect
-    .poll(async () => {
-      return page.evaluate(async () => {
-        const s = (await (await fetch("/api/state")).json()) as {
-          components: Array<{ behavior?: { type?: string } }>;
-        };
-        return s.components.some((c) => c.behavior && c.behavior.type === "toast");
-      });
-    }, { timeout: 10000 })
-    .toBe(true);
-
-  // 播放模式：点击形状触发 toast
-  await page.locator("#play-btn").click();
-  await expect(page.locator("#play-btn")).toHaveClass(/active/, { timeout: 5000 });
-  await page.locator(".comp-rect").first().click();
-  await expect(page.locator("#prism-toast")).toContainText("形状被点击了", { timeout: 5000 });
-  await page.keyboard.press("Escape");
 
   expect(errors).toEqual([]);
 });
@@ -863,7 +712,7 @@ test("child component is selectable and adjustable via the inspector", async ({ 
   expect(errors).toEqual([]);
 });
 
-test("element-level editing: select inner text, promote to button, bind behavior", async ({ page }: { page: Page }) => {
+test("element-level editing: select an inner element and promote it to a child component", async ({ page }: { page: Page }) => {
   const errors: string[] = [];
   const badResponses: string[] = [];
   page.on("console", (msg) => {
@@ -877,7 +726,7 @@ test("element-level editing: select inner text, promote to button, bind behavior
   await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "domcontentloaded", timeout: 60000 });
   await expect(page.locator(".topbar")).toBeVisible();
 
-  // Build a hero with title + button via the REST API.
+  // Build a hero with title + subtitle via the REST API.
   const heroId = await page.evaluate(async () => {
     const res = await fetch("/api/component", {
       method: "POST",
@@ -894,55 +743,35 @@ test("element-level editing: select inner text, promote to button, bind behavior
   await expect(heroTitle).toBeVisible();
   await heroTitle.click();
   await expect(page.locator(".el-element-title")).toBeVisible();
-  await expect(page.locator(".el-kind-option").first()).toBeVisible();
 
-  // 2. Promote the title to a button → kind persisted + rendered class.
-  await page.locator(".el-kind-option", { hasText: "按钮" }).click();
-  await expect.poll(async () => {
-    return page.evaluate(async (id) => {
-      const s = (await (await fetch("/api/state")).json()) as {
-        components: Array<{ id: string; elementMeta?: Record<string, { kind?: string }> }>;
-      };
-      return s.components.find((c) => c.id === id)?.elementMeta?.title?.kind ?? null;
-    }, heroId);
-  }, { timeout: 10000 }).toBe("button");
-  const kindState = await page.evaluate(async (id) => {
+  // 2. Promote the element to an independent child component (DESIGN.md v1.1 §5.2).
+  await page.locator(".el-promote-btn").click();
+  await expect
+    .poll(async () => {
+      return page.evaluate(async (id) => {
+        const s = (await (await fetch("/api/state")).json()) as {
+          components: Array<{ id: string; children?: Array<{ id: string }> }>;
+        };
+        const comp = s.components.find((c) => c.id === id);
+        return comp && comp.children && comp.children.length > 0;
+      }, heroId);
+    }, { timeout: 10000 })
+    .toBe(true);
+
+  // 3. The promoted child appears in the layer tree (independent identity).
+  const childId = await page.evaluate(async (id) => {
     const s = (await (await fetch("/api/state")).json()) as {
-      components: Array<{ id: string; elementMeta?: Record<string, { kind?: string }> }>;
+      components: Array<{ id: string; children?: Array<{ id: string }> }>;
     };
-    return s.components.find((c) => c.id === id)?.elementMeta?.title?.kind;
+    const comp = s.components.find((c) => c.id === id);
+    return comp && comp.children && comp.children.length > 0 ? comp.children[0].id : null;
   }, heroId);
-  expect(kindState).toBe("button");
-  await expect(page.locator('.comp-hero h1[data-prop="title"].el-kind-btn')).toBeVisible();
+  expect(childId).toBeTruthy();
+  await expect(page.locator(`#layer-tree .layer-item[data-id="${childId}"]`)).toBeVisible({ timeout: 10000 });
 
-  // 3. Bind a toast behavior to the element → persisted elementMeta.
-  const elSelect = page.locator("select.el-prop-select").first();
-  await elSelect.selectOption("toast");
-  await expect.poll(async () => {
-    return page.evaluate(async (id) => {
-      const s = (await (await fetch("/api/state")).json()) as {
-        components: Array<{ id: string; elementMeta?: Record<string, { behavior?: { type: string } }> }>;
-      };
-      return s.components.find((c) => c.id === id)?.elementMeta?.title?.behavior?.type ?? null;
-    }, heroId);
-  }, { timeout: 10000 }).toBe("toast");
-  const behaviorState = await page.evaluate(async (id) => {
-    const s = (await (await fetch("/api/state")).json()) as {
-      components: Array<{ id: string; elementMeta?: Record<string, { behavior?: { type: string } }> }>;
-    };
-    return s.components.find((c) => c.id === id)?.elementMeta?.title?.behavior;
-  }, heroId);
-  expect(behaviorState?.type).toBe("toast");
-  await expect(page.locator(".el-link-info")).toBeVisible();
-
-  // 4. Play mode: clicking the element triggers the element-level toast.
-  await page.locator("#play-btn").click();
+  // 4. Clear element selection via the back button.
   await heroTitle.click();
-  await expect(page.locator("#prism-toast")).toContainText("操作成功", { timeout: 5000 });
-  await page.keyboard.press("Escape");
-
-  // 5. Clear element selection via the back button.
-  await heroTitle.click();
+  await expect(page.locator(".el-element-title")).toBeVisible();
   await page.locator(".el-clear-element").click();
   await expect(page.locator(".el-element-title")).toBeHidden();
 

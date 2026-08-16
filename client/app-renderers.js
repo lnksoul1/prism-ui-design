@@ -1024,7 +1024,7 @@ function renderContainer(props) {
 function rewriteShadowCss(css) {
   if (!css) return "";
   const out = [
-    ":host { all: initial; display: block; width: 100%; height: 100%; overflow: hidden; box-sizing: border-box; }",
+    ":host { all: initial; display: block; width: 100%; min-height: 100%; box-sizing: border-box; }",
   ];
   const n = css.length;
   let i = 0;
@@ -1086,8 +1086,10 @@ function rewriteShadowCss(css) {
 
 /** 标记片段内文本叶子节点为可双击编辑。 */
 function markEditableInShadow(root) {
-  const selector = "p, h1, h2, h3, h4, h5, h6, span, a, button, li, label, td, th, div";
+  const selector = "p, h1, h2, h3, h4, h5, h6, span, a, button, input, textarea, select, option, img, video, audio, li, label, td, th, div";
   root.querySelectorAll(selector).forEach((el) => {
+    const path = fragElementPath(root, el);
+    if (path) el.setAttribute("data-prism-path", "frag:" + path.join("."));
     if (el.childElementCount === 0 && (el.textContent || "").trim()) {
       el.setAttribute("data-editable", "true");
     }
@@ -1100,6 +1102,7 @@ function setupShadowInlineEditing(host, shadow) {
   if (!root) return;
 
   root.addEventListener("dblclick", (e) => {
+      if (playMode) return;
     const t = e.target;
     if (!(t instanceof Element)) return;
     if (!t.closest("[data-editable='true']")) return;
@@ -1142,6 +1145,48 @@ function setupShadowInlineEditing(host, shadow) {
   );
 }
 
+
+/** 把 comp.elementMeta（key 为 "frag:<path>"）应用到 shadow 内元素。 */
+function applyFragmentElementMeta(root, comp) {
+  if (!root || !comp || !comp.elementMeta) return;
+  root.querySelectorAll("[data-prism-path^='frag:']").forEach((el) => {
+    const path = el.getAttribute("data-prism-path");
+    if (!path) return;
+    const meta = comp.elementMeta[path];
+    if (!meta) return;
+    if (meta.kind === "button") {
+      el.classList.add("el-kind-btn");
+    } else if (meta.kind === "link") {
+      el.classList.add("el-kind-link");
+    }
+    if (meta.behavior && meta.behavior.type) {
+      el.classList.add("el-play-linked");
+      el.title = t("behaviorPlayHint");
+    }
+  });
+}
+
+/** 播放模式下，shadow 内元素点击触发 elementMeta 中绑定的行为。 */
+function setupFragmentPlayBehavior(host, shadow) {
+  const root = shadow.querySelector(".prism-fragment-root");
+  if (!root) return;
+  root.addEventListener("click", (e) => {
+    if (!playMode) return;
+    const target = e.target instanceof Element ? e.target.closest("[data-prism-path^='frag:']") : null;
+    if (!target) return;
+    const wrapper = host.closest(".comp-wrapper");
+    const compId = wrapper ? wrapper.dataset.id : null;
+    if (!compId) return;
+    const comp = getCompById(compId);
+    const path = target.getAttribute("data-prism-path");
+    const meta = comp && comp.elementMeta ? comp.elementMeta[path] : null;
+    if (!meta || !meta.behavior || !meta.behavior.type) return;
+    e.preventDefault();
+    e.stopPropagation();
+    dispatchBehavior({ behavior: meta.behavior });
+  });
+}
+
 function renderHtmlFragment(props) {
   const host = el("div", "prism-fragment");
   const shadow = host.attachShadow({ mode: "open" });
@@ -1151,8 +1196,11 @@ function renderHtmlFragment(props) {
   const root = shadow.querySelector(".prism-fragment-root");
   if (root) {
     markEditableInShadow(root);
+      // elementMeta 在 host 挂载到 .comp-wrapper 后于下方 setTimeout 补水
+      // (elementMeta 补水已移到下方 setTimeout)
     setupShadowInlineEditing(host, shadow);
     setupFragmentElementSelection(host, root);
+      setupFragmentPlayBehavior(host, shadow);
   }
   // 重绘后恢复元素选中高亮
   const wrapperId = host.closest(".comp-wrapper")?.dataset?.id;
@@ -1163,6 +1211,19 @@ function renderHtmlFragment(props) {
       el.style.outlineOffset = "2px";
     }
   }
+    // host 此刻可能尚未挂载；等本轮 DOM 插入完成后再补 elementMeta 和选中高亮。
+    setTimeout(() => {
+      const hydratedWrapperId = host.closest(".comp-wrapper")?.dataset?.id;
+      const hydratedComp = hydratedWrapperId ? getCompById(hydratedWrapperId) : null;
+      if (root && hydratedComp) applyFragmentElementMeta(root, hydratedComp);
+      if (root && hydratedWrapperId && prismFragElementSel && prismFragElementSel.compId === hydratedWrapperId) {
+        const hydratedEl = fragElementByPath(root, prismFragElementSel.path);
+        if (hydratedEl) {
+          hydratedEl.style.outline = "2px dashed var(--accent, #2383E2)";
+          hydratedEl.style.outlineOffset = "2px";
+        }
+      }
+    }, 0);
   return host;
 }
 
@@ -1208,6 +1269,10 @@ function clearPrismFragElementHighlight() {
 
 function clearPrismFragElementSelection() {
   clearPrismFragElementHighlight();
+  if (selectedElementPath && selectedElementPath.startsWith("frag:")) {
+    selectedElementPath = null;
+  }
+  if (typeof renderInspector === "function") renderInspector();
 }
 
 function selectPrismFragElement(compId, el, root) {
@@ -1215,8 +1280,16 @@ function selectPrismFragElement(compId, el, root) {
   const path = fragElementPath(root, el);
   if (!path) return;
   prismFragElementSel = { compId, path };
+  selectedComponentId = compId;
+  selectedIds = [compId];
+  selectedElementPath = "frag:" + path.join(".");
+  if (typeof applyElementSelectionHighlight === "function") applyElementSelectionHighlight();
   el.style.outline = "2px dashed var(--accent, #2383E2)";
   el.style.outlineOffset = "2px";
+  document.querySelectorAll(".comp-wrapper.selected").forEach((w) => w.classList.remove("selected"));
+  const wrapper = document.querySelector(`.comp-wrapper[data-id="${CSS.escape(compId)}"]`);
+  if (wrapper) wrapper.classList.add("selected");
+  if (typeof renderLayerPanel === "function") renderLayerPanel();
   if (typeof renderInspector === "function") renderInspector();
 }
 
@@ -1224,6 +1297,7 @@ function selectPrismFragElement(compId, el, root) {
 function setupFragmentElementSelection(host, root) {
   const wrapperId = () => host.closest(".comp-wrapper")?.dataset?.id || null;
   root.addEventListener("click", (e) => {
+      if (playMode) return; // 播放模式点击只触发行为，不进入元素编辑选择
     const compId = wrapperId();
     if (!compId) return;
     const t = e.target;
@@ -1243,7 +1317,9 @@ function setupFragmentElementSelection(host, root) {
 function cleanFragmentHtml(html) {
   return String(html)
     .replace(/\s+data-editable="true"/g, "")
-    .replace(/\s+contenteditable="(?:true|false)"/g, "");
+    .replace(/\s+contenteditable="(?:true|false)"/g, "")
+    .replace(/\s+data-prism-editing="1"/g, "")
+    .replace(/\s+data-prism-path="frag:[\d.]+"/g, "");
 }
 
 /** 把片段当前 HTML 序列化回组件（元素样式/文字改动提交）。

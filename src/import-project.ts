@@ -9,7 +9,7 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { stateStore } from "./state.js";
+import { stateStore, type ComponentNode } from "./state.js";
 
 // ===== Types =====
 
@@ -23,6 +23,8 @@ export interface ExtractedPage {
   name: string;
   filePath: string;
   components: ExtractedComponent[];
+  /** Original file content for plain HTML pages (full-document writeback). */
+  sourceHtml?: string;
 }
 
 /** 忠实显示的 HTML 片段（渲染层 Shadow DOM + 原 CSS 驱动）。 */
@@ -64,6 +66,9 @@ export function scanProject(folderPath: string): ImportResult {
       } else if (ext === ".vue") {
         page = parseVueFile(filePath);
       }
+        if (page && (ext === ".html" || ext === ".htm")) {
+          page.sourceHtml = fs.readFileSync(filePath, "utf-8");
+        }
 
       if (page && page.components.length > 0) {
         pages.push(page);
@@ -95,7 +100,8 @@ export function importHtmlString(
 ): { pageName: string; pageId: string; imported: number } {
   const inlineCss = extractInlineStyles(html);
   const bodyHtml = extractBodyHtml(html);
-  const components: ExtractedComponent[] = extractHtmlFragments(bodyHtml, css || inlineCss).map((f) => ({
+  const combinedCss = [inlineCss, css].filter(Boolean).join("\n");
+  const components: ExtractedComponent[] = extractHtmlFragments(bodyHtml, combinedCss).map((f) => ({
     type: "html_fragment",
     props: { region: f.region, html: f.html, css: f.css },
   }));
@@ -112,12 +118,39 @@ export function importHtmlString(
   return { pageName: page.name, pageId: page.id, imported: components.length };
 }
 
-/** 将 HTML 文件解析为语义区域片段（v2：忠实显示用户页面）。 */
+/** 将 HTML 文件解析为语义区域片段；link 样式表一并读入（v2）。 */
+
+/** 读取本地 HTML 文件引用的同目录/相对路径样式表，供片段编辑态还原视觉。 */
+function extractLinkedFileStyles(html: string, filePath: string): string {
+  const parts: string[] = [];
+  const linkRe = /<link\b[^>]*>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = linkRe.exec(html)) !== null) {
+    const tag = m[0];
+    const rel = /\brel\s*=\s*["']?([^"'\s>]+)/i.exec(tag);
+    const href = /\bhref\s*=\s*["']([^"']+)["']/i.exec(tag);
+    if (!rel || !href || !rel[1].split(/\s+/).includes("stylesheet")) continue;
+      if (!/\.css(?:[?#].*)?$/i.test(href[1])) continue;
+    try {
+      const target = /^[a-z]+:/i.test(href[1])
+        ? null
+        : path.resolve(path.dirname(filePath), href[1]);
+      if (!target || !fs.existsSync(target)) continue;
+      parts.push(fs.readFileSync(target, "utf-8"));
+    } catch {
+      // 读取失败不影响导入
+    }
+  }
+  return parts.join("\n");
+}
+
 function parseHtmlFragmentsFile(filePath: string): ExtractedPage {
   const html = fs.readFileSync(filePath, "utf-8");
   const name = derivePageName(filePath);
   const bodyHtml = extractBodyHtml(html);
-  const css = extractInlineStyles(html);
+  const css = [extractInlineStyles(html), extractLinkedFileStyles(html, filePath)]
+      .filter(Boolean)
+      .join("\n");
   const components: ExtractedComponent[] = extractHtmlFragments(bodyHtml, css).map((f) => ({
     type: "html_fragment",
     props: { region: f.region, html: f.html, css: f.css },
@@ -240,10 +273,14 @@ export function extractHtmlFragments(bodyHtml: string, css: string): HtmlFragmen
   const push = (region: string, frag: string) => {
     if (take(frag)) frags.push({ region, html: frag, css });
   };
-  const nav = grabFirst("nav");
+  const header = grabFirst("header");
+    if (header) push("header", header);
+    const nav = grabFirst("nav");
   if (nav) push("nav", nav);
+    /* 旧提取顺序已上移，避免嵌套在 header 内的 nav 被拆散
   const header = grabFirst("header");
   if (header) push("header", header);
+    */
   const main = grabFirst("main");
   if (main) push("main", main);
   const footer = grabFirst("footer");
@@ -259,6 +296,86 @@ export function extractHtmlFragments(bodyHtml: string, css: string): HtmlFragmen
   if (leftover) frags.push({ region: "content", html: leftover, css });
   return frags;
 }
+
+/**
+ * 把画布上已编辑的 html_fragment 组件写回原始 HTML 文档（精确到原 body 内容）。
+ * 对每个原始片段按 region 匹配：仍存在 → 替换为编辑后的 HTML；已删除 → 移除；
+ * 新增片段 → 追加到 body 末尾。head / body 属性 / 脚本全部保留，因此原页面
+ * 的 CSS、meta 与交互脚本不会在“一键应用”时丢失。
+ */
+export function applyHtmlFragmentsToDocument(
+  originalHtml: string,
+  components: ComponentNode[]
+): string {
+  const bodyHtml = extractBodyHtml(originalHtml);
+  const originalFrags = extractHtmlFragments(bodyHtml, "");
+  // 片段提取顺序（header 先于 nav 等）不一定等于原文顺序；按原文位置排序，
+  // 否则基于 cursor 的顺序替换会跳过早于前一片段出现的区域。
+  const orderedFrags = [...originalFrags].sort(
+    (a, b) => bodyHtml.indexOf(a.html) - bodyHtml.indexOf(b.html)
+  );
+  const editedByRegion = new Map<string, string>();
+  for (const comp of components) {
+    if (comp.type !== "html_fragment") continue;
+    const region = comp.props && typeof comp.props.region === "string" ? comp.props.region : null;
+    const html = comp.props && typeof comp.props.html === "string" ? comp.props.html : "";
+    if (region) editedByRegion.set(region, html);
+  }
+
+  const replaceFirst = (haystack: string, needle: string, replacement: string, fromIndex = 0) => {
+    const idx = haystack.indexOf(needle, fromIndex);
+    if (idx === -1 || needle.length === 0) return { changed: false, value: haystack, nextIndex: fromIndex };
+    return {
+      changed: true,
+      value: haystack.slice(0, idx) + replacement + haystack.slice(idx + needle.length),
+        nextIndex: idx + replacement.length,
+    };
+  };
+
+  let body = bodyHtml;
+    let cursor = 0;
+  let changed = false;
+  for (const frag of orderedFrags) {
+    const edited = editedByRegion.get(frag.region);
+    if (edited === undefined) {
+      // 原始区域对应的组件已被用户删除 → 从产物中移除该区域。
+      const result = replaceFirst(body, frag.html, "", cursor);
+      body = result.value;
+      changed = result.changed || changed;
+        cursor = result.nextIndex;
+      continue;
+    }
+    editedByRegion.delete(frag.region);
+    const result = replaceFirst(body, frag.html, edited, cursor);
+    body = result.value;
+      cursor = result.nextIndex;
+    if (edited !== frag.html) changed = result.changed || changed;
+  }
+
+  // 用户在画布上新增的片段：追加到 body 末尾。
+  for (const html of editedByRegion.values()) {
+    body += `\n${html}`;
+    changed = true;
+  }
+
+  if (!changed) return originalHtml;
+
+  const bodyRe = /<body\b[^>]*>([\s\S]*?)<\/body>/i;
+  const m = bodyRe.exec(originalHtml);
+  if (m) {
+    return (
+      originalHtml.slice(0, m.index + m[0].indexOf(m[1])) +
+      body +
+      originalHtml.slice(m.index + m[0].indexOf(m[1]) + m[1].length)
+    );
+  }
+  const bodyOpen = /<body\b[^>]*>/i.exec(originalHtml);
+  if (bodyOpen) {
+    return originalHtml.slice(0, bodyOpen.index + bodyOpen[0].length) + body;
+  }
+  return body;
+}
+
 
 /** 抓取 HTML 内嵌 <style> 内容（同步；link 样式表由路由异步抓取后合并传入）。 */
 export function extractInlineStyles(html: string): string {

@@ -24,7 +24,7 @@ import { registerRenderTool } from "../src/tools/design-render.js";
 import { registerTemplateTools } from "../src/tools/template-tools.js";
 import { registerVersionTools } from "../src/tools/version-tools.js";
 import { registerDesignMdTool } from "../src/tools/design-md.js";
-import { registerStyleGuideTools } from "../src/tools/style-guide-tools.js";
+import { registerDesignLibraryTools } from "../src/tools/design-library-tools.js";
 import { registerSemanticStyleTool } from "../src/tools/semantic-tools.js";
 import { registerCapabilitiesTool } from "../src/tools/capabilities.js";
 import { registerWebpageImportTool } from "../src/tools/webpage-import.js";
@@ -76,7 +76,7 @@ registerRenderTool(fakeServer as never);
 registerTemplateTools(fakeServer as never);
 registerVersionTools(fakeServer as never);
 registerDesignMdTool(fakeServer as never);
-registerStyleGuideTools(fakeServer as never);
+registerDesignLibraryTools(fakeServer as never);
 registerSemanticStyleTool(fakeServer as never);
 registerCapabilitiesTool(fakeServer as never);
 registerWebpageImportTool(fakeServer as never);
@@ -157,10 +157,11 @@ const VALID_PARAMS: Record<string, Record<string, unknown>> = {
   design_import_design_md: {
     markdown: `---\ncolors:\n  color-primary: "#123456"\n---\n\nProse here`,
   },
-  design_get_style_guide: {},
-  design_apply_style_guide: { tag: "brutalist" },
   design_semantic_style: { description: "温暖落地页", adjectives: ["温暖", "简约"] },
   design_list_capabilities: {},
+  design_list_design_library: {},
+  design_apply_design_style: { style_id: "minimal" },
+  design_apply_design_component: { component_id: "button" },
   design_import_webpage: {
     html: "<nav><a>Logo</a></nav><footer>© 2026</footer>",
   },
@@ -185,12 +186,6 @@ const VALID_PARAMS: Record<string, Record<string, unknown>> = {
   design_generate_page: { brief: "电商促销首页", adjectives: ["温暖", "简约"] },
   design_review_and_improve: {},
   design_explain_design: {},
-  design_set_behavior: {
-    component_id: "comp_1",
-    behavior: { type: "navigate", page_id: "page_2" },
-  },
-  design_apply_component_template: { template_id: "hero_split_cta" },
-  design_apply_behavior_template: { component_id: "comp_1", template_id: "toast_feedback" },
   design_align_components: { ids: ["comp_1", "comp_2"], mode: "center_x" },
   design_z_order_component: { component_id: "comp_1", mode: "front" },
 };
@@ -230,10 +225,11 @@ const EXPECT_STRUCTURED = new Set([
   "design_create_version",
   "design_list_versions",
   "design_import_design_md",
-  "design_get_style_guide",
-  "design_apply_style_guide",
   "design_semantic_style",
   "design_list_capabilities",
+  "design_list_design_library",
+  "design_apply_design_style",
+  "design_apply_design_component",
   "design_import_webpage",
   "design_list_components",
   "design_list_pages",
@@ -253,9 +249,6 @@ const EXPECT_STRUCTURED = new Set([
   "design_generate_page",
   "design_review_and_improve",
   "design_explain_design",
-  "design_set_behavior",
-  "design_apply_component_template",
-  "design_apply_behavior_template",
   "design_align_components",
   "design_z_order_component",
 ]);
@@ -283,7 +276,8 @@ const INVALID_PARAMS: Record<string, Record<string, unknown>> = {
   design_diff_versions: { from_id: "x" },
   design_import_webpage: { url: 123 },
   design_semantic_style: { description: "x", adjectives: [] },
-  design_apply_style_guide: { tag: "" },
+  design_apply_design_style: {},
+  design_apply_design_component: {},
   design_set_project_name: {},
   design_set_token_batch: { category: "bogus", tokens: {} },
   design_delete_token: {},
@@ -295,16 +289,13 @@ const INVALID_PARAMS: Record<string, Record<string, unknown>> = {
   design_remove_comment: {},
   design_generate_page: { brief: "" },
   design_explain_design: { lang: "fr" },
-  design_set_behavior: { component_id: "comp_1" },
-  design_apply_component_template: {},
-  design_apply_behavior_template: { component_id: "comp_1" },
   design_align_components: { ids: ["a"], mode: "center_x" },
   design_z_order_component: { component_id: "comp_1", mode: "diagonal" },
 };
 
-test("registers all 74 tools with unique names", () => {
-  assert.equal(captured.length, 74);
-  assert.equal(new Set(captured.map((t) => t.name)).size, 74);
+test("registers all 72 tools with unique names", () => {
+  assert.equal(captured.length, 72);
+  assert.equal(new Set(captured.map((t) => t.name)).size, 72);
   for (const tool of captured) {
     assert.equal(typeof tool.handler, "function");
   }

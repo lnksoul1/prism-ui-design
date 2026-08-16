@@ -2,6 +2,7 @@ import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { stateStore } from "../src/state.js";
 import {
+  applyHtmlFragmentsToDocument,
   extractHtmlFragments,
   importClientUi,
   importHtmlString,
@@ -118,4 +119,50 @@ test("splitClientRegions parses region markers", () => {
   const regions = splitClientRegions(html);
   assert.equal(regions.a, '<div id="a">old a</div>');
   assert.equal(regions.b, '<div id="b">old b</div>');
+
+test("applyHtmlFragmentsToDocument keeps head/scripts and patches edited regions", () => {
+  const original = `<!DOCTYPE html>
+<html>
+<head>
+  <title>Original</title>
+  <style>nav { color: red; }</style>
+</head>
+<body class="page">
+  <nav><a href="/">Logo</a></nav>
+  <header><h1>Hello</h1></header>
+  <footer>© 2026</footer>
+  <script>window.__prismTest = true;</script>
+</body>
+</html>`;
+  const importResult = importHtmlString(original, "test.html", true);
+  const state = stateStore.getState();
+  const comps = state.pages.find((p) => p.id === importResult.pageId)?.components || [];
+  const nav = comps.find((c) => String((c.props as { region?: string }).region ?? "") === "nav");
+  const header = comps.find((c) => String((c.props as { region?: string }).region ?? "") === "header");
+  assert.ok(nav && header, "expected nav and header fragments");
+  nav.props.html = String(nav.props.html).replace("Logo", "新 Logo");
+  header.props.html = '<header><h1>已编辑标题</h1></header>';
+
+  const rebuilt = applyHtmlFragmentsToDocument(original, comps);
+  assert.match(rebuilt, /<title>Original<\/title>/, "head is preserved");
+  assert.match(rebuilt, /<script>window\.__prismTest = true;<\/script>/, "scripts are preserved");
+  assert.match(rebuilt, /新 Logo/);
+  assert.match(rebuilt, /已编辑标题/);
+  assert.match(rebuilt, /<body class="page">/, "body attributes are preserved");
+});
+
+test("applyHtmlFragmentsToDocument removes deleted regions and appends added fragments", () => {
+  const original = "<html><head><style>nav{color:red}</style></head><body><nav><a>x</a></nav><footer>f</footer></body></html>";
+  const importResult = importHtmlString(original, "delete.html", true);
+  const state = stateStore.getState();
+  const comps = state.pages.find((p) => p.id === importResult.pageId)?.components || [];
+  const nav = comps.find((c) => String((c.props as { region?: string }).region ?? "") === "nav");
+  assert.ok(nav, "expected nav fragment");
+  nav.props.html = '<nav><a>新导航</a></nav>';
+  const withoutFooter = comps.filter((c) => String((c.props as { region?: string }).region ?? "") !== "footer");
+  const rebuilt = applyHtmlFragmentsToDocument(original, withoutFooter);
+  assert.match(rebuilt, /新导航/);
+  assert.doesNotMatch(rebuilt, /<footer>f<\/footer>/, "deleted footer is removed");
+});
+
 });

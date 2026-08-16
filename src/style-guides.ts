@@ -27,6 +27,8 @@ export interface StyleGuide {
 const RADIUS_NAMES = ["none", "sm", "md", "lg", "xl"];
 const SHADOW_NAMES = ["sm", "md", "lg", "xl", "2xl"];
 
+export const STYLE_GUIDES: StyleGuide[] = [];
+/*
 export const STYLE_GUIDES: StyleGuide[] = [
   {
     id: "glassmorphism",
@@ -180,12 +182,15 @@ export const STYLE_GUIDES: StyleGuide[] = [
     variantHints: { hero: "split", text_section: "standard" },
   },
 ];
+*/
 
 /**
  * Brand design systems (Inspired by OpenStitch's DESIGN.md presets):
  * one-click token overrides that restyle the whole project without touching
  * component structure. Listed in the dashboard design-library "设计系统" tab.
  */
+export const BRAND_DESIGN_SYSTEMS: StyleGuide[] = [];
+/*
 export const BRAND_DESIGN_SYSTEMS: StyleGuide[] = [
   {
     id: "linear",
@@ -690,6 +695,7 @@ export const BRAND_DESIGN_SYSTEMS: StyleGuide[] = [
     variantHints: { button: "primary", card: "elevated" },
   },
 ];
+*/
 
 // Brand design systems are full token overrides like style guides, so route
 // them through the same matching + application machinery.

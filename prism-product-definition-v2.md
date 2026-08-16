@@ -135,6 +135,9 @@ type Behavior =
   - **应用结果弹窗**：一键应用后展示产物完整路径 + `<link rel="stylesheet" href="prism-adjustments.css">` 引入指引 + 就地回滚按钮。
   - 测试：server 增加 import-client/capture provenance 断言（**总数 446 保持**）+ e2e 新增"客户端界面来源 → 横幅 → 应用 → 回滚"（**e2e 9 → 10**）。
 
+  - ✅ **导入还原与真实写回收口（v3.3）**：URL/HTML/HTML 文件来源保留完整原始文档；画布新增「原页面 / 编辑」切换（原页面用沙箱 iframe 完整还原 CSS/脚本/交互，编辑态为语义片段）；一键应用从原始文档重建产物——脚本与 `<head>` 不丢失；纯 HTML 文件来源原位写回原文件（`.prism-backups` 备份 + 回滚）；片段内任意元素可编辑文本/属性/15 项 CSS，并可绑定行为在播放模式触发。
+
+
 - ✅ **模板资产（支柱⑦的已有基础）**：**17 品牌设计系统**（`BRAND_DESIGN_SYSTEMS`，唯一换肤层）+ 每风格动效（`STYLE_MOTION_PROFILES`）+ 5 页面模板 + 41 组件类型（组件库拖拽上画布）。风格预设体系（`STYLE_PRESETS`/`STYLE_PRESETS_V2`）已整体移除：token 由中性默认 + 设计系统覆盖生成。
 - ✅ **模板快速变更（P0，支柱⑦）**：  - 组件模板（`src/template-catalog.ts` `COMPONENT_TEMPLATES`，10 个成品块）：Hero 分屏+CTA / 导航+按钮 / 定价三档 / 注册表单（自带提交行为）/ 评价墙 / 统计条 / FAQ / CTA 横幅（自带链接行为）/ Cookie 横幅 / 便当盒网格。
   - **就地替换**（`state.replaceComponent`）：同 id 同布局位置换装，可撤销；组件库新增「替换选中」开关，点块即替换、拖到画布即添加。

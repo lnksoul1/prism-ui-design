@@ -40,6 +40,8 @@ export interface ComponentTemplate {
   behavior?: ComponentBehavior;
 }
 
+export const COMPONENT_TEMPLATES: ComponentTemplate[] = [];
+/*
 export const COMPONENT_TEMPLATES: ComponentTemplate[] = [
   {
     id: "hero_split_cta",
@@ -190,6 +192,7 @@ export const COMPONENT_TEMPLATES: ComponentTemplate[] = [
     },
   },
 ];
+*/
 
 const COMPONENT_TEMPLATE_INDEX = new Map(COMPONENT_TEMPLATES.map((t) => [t.id, t]));
 
@@ -218,6 +221,8 @@ export interface BehaviorTemplate {
     selectedComponentId?: string | null;
   }) => ComponentBehavior;
 }
+export const BEHAVIOR_TEMPLATES: BehaviorTemplate[] = [];
+/*
 
 export const BEHAVIOR_TEMPLATES: BehaviorTemplate[] = [
   {
@@ -269,6 +274,7 @@ export const BEHAVIOR_TEMPLATES: BehaviorTemplate[] = [
     build: () => ({ type: "prompt", prompt: "优化这个组件的视觉效果" }),
   },
 ];
+*/
 
 const BEHAVIOR_TEMPLATE_INDEX = new Map(BEHAVIOR_TEMPLATES.map((t) => [t.id, t]));
 

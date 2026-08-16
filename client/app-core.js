@@ -48,6 +48,11 @@ let canvasZoom = 100;
 // 不重叠），同时每个组件仍可自由拖动/缩放。不再有流式/自由二元切换。
 let canvasMode = "freeform";
 let playMode = false;
+// 原页面预览 (v2 import pipeline): url/html/file 来源的完整文档用沙箱 iframe
+// 精确还原（含 CSS/脚本/原生交互）；切换到编辑模式后显示可编辑 html_fragment。
+let pageSourceDoc = null;
+let pageSourcePageId = null;
+let sourceViewActive = false;
 let pendingDrawTool = null;
 let myClientId = null;
 const remoteCursors = new Map();

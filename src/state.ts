@@ -39,6 +39,13 @@ export interface ComponentNode {
    * and a promoted type (text → button / link) without being separate nodes.
    */
   elementMeta?: Record<string, ElementMeta>;
+    /**
+     * 内部元素组件化 (DESIGN.md v1.1 §5.2): 子组件来源路径（父组件内元素路径），
+     * 由 `promoteElementToComponent` 写入，导出时优先渲染该子组件。
+     */
+    promotedElementPath?: string;
+    /** 源组件内已组件化的元素路径 → 子组件 id 映射。 */
+    promotedElements?: Record<string, string>;
 }
 
 /**
@@ -143,6 +150,18 @@ export interface ImportRecord {
   html_file: string;
   imported_at: string;
   component_count: number;
+  /**
+   * Original absolute URL for url imports. Used by the client source view to
+   * inject <base href="..."> so relative assets resolve like the live page.
+   */
+  base_url?: string;
+  /**
+   * Original file path for file imports. When set and the file is plain HTML,
+   * one-click apply writes the adjusted document back to this file in place.
+   */
+  source_file?: string;
+  /** True when source_file is plain HTML and can receive in-place writeback. */
+  source_is_html?: boolean;
 }
 
 export interface AnimationDef {
@@ -571,6 +590,28 @@ export class DesignStateStore extends EventEmitter {
     this.commit({ type: "tokenBatch", category, tokens });
   }
 
+    /**
+     * Apply a design-library style's token overrides in a single commit so the
+     * whole style change is one undo step (DESIGN.md v1.1 §6.2).
+     */
+    applyTokenOverrides(
+      category: keyof DesignTokens,
+      tokens: Record<string, string>,
+      source: "ai" | "user" = "user"
+    ): void {
+      Object.entries(tokens).forEach(([key, value]) => {
+        this.state.tokens[category][key] = { value, source };
+      });
+      this.logActivity(
+        "apply_design_style_tokens",
+        category,
+        `Applied ${Object.keys(tokens).length} ${category} tokens from design library`,
+        source
+      );
+      this.commit({ type: "tokenBatch", category, tokens });
+    }
+
+
   clearTokenCategory(category: keyof DesignTokens, source: "ai" | "user" | "preset" = "user"): void {
     this.state.tokens[category] = {};
     this.logActivity(
@@ -925,6 +966,46 @@ export class DesignStateStore extends EventEmitter {
     this.commit({ type: "setElementMeta", componentId, path, meta: meta || null });
     return true;
   }
+
+    /**
+     * 内部元素组件化 (DESIGN.md v1.1 §5.2): promote a selected inner element
+     * (identified by its prop path) into an independent child ComponentNode.
+     * The child keeps a `promotedElementPath` back-reference and the parent
+     * records the mapping so export/preview can render the child in place of
+     * the original element. Undoable like any mutation.
+     */
+    promoteElementToComponent(
+      componentId: string,
+      path: string,
+      type?: string,
+      source: "ai" | "user" = "user"
+    ): ComponentNode | null {
+      const node = this.findComponent(componentId);
+      if (!node || !path) return null;
+      const meta = node.elementMeta?.[path];
+      const childType =
+        type ||
+        (meta?.kind === "button" ? "button" : meta?.kind === "link" ? "button" : "text");
+      const child: ComponentNode = {
+        id: `comp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        type: childType,
+        props: meta?.kind === "link" && meta.behavior?.url ? { text: path, href: meta.behavior.url } : { text: path },
+        children: [],
+        promotedElementPath: path,
+      };
+      node.children.push(child);
+      if (!node.promotedElements) node.promotedElements = {};
+      node.promotedElements[path] = child.id;
+      this.logActivity(
+        "promote_element_to_component",
+        node.type,
+        `Promoted ${node.type} element "${path}" → child component ${child.id}`,
+        source
+      );
+      this.commit({ type: "promoteElementToComponent", componentId, path, childId: child.id });
+      return child;
+    }
+
 
   // ===== Page background (背景编辑 P1) =====
 

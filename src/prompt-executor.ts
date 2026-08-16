@@ -24,7 +24,7 @@
 import { stateStore, type ComponentNode, type DesignState } from "./state.js";
 import { applyStyleTokenSet } from "./tokens.js";
 import { applyPageTemplate } from "./tools/design-tools.js";
-import { applyStyleGuide, matchStyleGuide } from "./style-guides.js";
+import { applyDesignStyle, listDesignStyles } from "./design-library.js";
 import { FONT_PAIRINGS } from "./constants.js";
 import { adjustLightness, hexToHsl, hslToHex } from "./utils/color.js";
 
@@ -472,12 +472,17 @@ export function executeUserPrompt(prompt: string): PromptExecutionResult {
     return { executed: true, summary: "已切换为浅色模式", action: "set_light_theme" };
   }
 
-  // 7) Design system (风格预设已移除；自然语言"应用 XX 设计系统/风格"走品牌设计系统)
-  if (hasAny(lower, ["设计系统", "品牌风格", "风格", "style", "换肤", "换主题", "design system"])) {
-    const system = matchStyleGuide(lower.trim());
+  // 7) Design style (风格预设已移除；自然语言"应用 XX 风格/设计系统"走设计库)
+  if (hasAny(lower, ["设计系统", "品牌风格", "风格", "style", "换肤", "换主题", "design system", "拟态", "排版"])) {
+    const system = listDesignStyles().find(
+      (s) =>
+        lower.includes(s.name) ||
+        lower.includes(s.id) ||
+        (s.tags || []).some((t) => lower.includes(t.toLowerCase()))
+    );
     if (system) {
-      applyStyleGuide(system.id);
-      return { executed: true, summary: `已应用设计系统「${system.name}」`, action: "apply_style_guide" };
+      applyDesignStyle(system.id, "user");
+      return { executed: true, summary: `已应用设计风格「${system.name}」`, action: "apply_style_guide" };
     }
   }
 

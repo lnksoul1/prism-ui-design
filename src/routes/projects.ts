@@ -3,11 +3,18 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { stateStore, type ImportRecord } from "../state.js";
 import * as designService from "../service/design-service.js";
-import { applyClientUiWriteback, importClientUi, importHtmlString, resolveClientHtmlFile, scanProject } from "../import-project.js";
+import {
+  applyClientUiWriteback,
+  importClientUi,
+  importHtmlString,
+  resolveClientHtmlFile,
+  scanProject,
+} from "../import-project.js";
 import { applyStyleTokenSet } from "../tokens.js";
 import { saveProject, loadProject, listProjects, getProjectDir } from "../project-store.js";
 import { writebackAll, writebackPreview, writebackTokens, type WritebackMode } from "../writeback.js";
 import { applyDesign, rollbackApply } from "../apply.js";
+import { ensureTopLevelLayouts, containerWidthForPlatform } from "../layout-engine.js";
 import { exportDesign } from "../tools/design-tools.js";
 import { previewsDir } from "../tools/design-render.js";
 import { asyncHandler, HttpError } from "./shared.js";
@@ -76,9 +83,17 @@ export function registerProjectsRoutes(): express.Router {
         );
       }
 
+        ensureTopLevelLayouts(newPage.components, containerWidthForPlatform(stateStore.getState().activePlatform));
+        stateStore.replacePageComponents(newPage.id, newPage.components, "ai");
+
+
       // Record provenance so the apply banner / one-click apply cover this
       // page too (导入 → 调整 → 一键应用 一等旅程).
-      await recordProductImport(newPage.id, "file", page.name || projectName, page.components.length);
+      await recordProductImport(newPage.id, "file", page.name || projectName, page.components.length, undefined, {
+          sourceFile: page.filePath,
+          sourceHtml: page.sourceHtml,
+          sourceIsHtml: page.sourceHtml !== undefined,
+        });
 
       createdPages.push({
         id: newPage.id,
@@ -112,6 +127,15 @@ export function registerProjectsRoutes(): express.Router {
     stateStore.setStyle("minimal", "ai");
     applyStyleTokenSet(stateStore, "#2383E2", "ai");
     stateStore.switchPage(result.pageId, "ai");
+      {
+        const importedState = stateStore.getState();
+        const importedPage = importedState.pages.find((p) => p.id === result.pageId);
+        if (importedPage) {
+          ensureTopLevelLayouts(importedPage.components, containerWidthForPlatform(importedState.activePlatform));
+          stateStore.replacePageComponents(importedPage.id, importedPage.components, "ai");
+        }
+      }
+
     await recordProductImport(result.pageId, "client", "Prism 客户端界面", result.imported);
     res.json({ success: true, ...result, page_id: result.pageId, imported: result.imported });
   }));
@@ -139,6 +163,37 @@ export function registerProjectsRoutes(): express.Router {
     }
     res.json({ success: true, file, url, component_id: node.id, bytes: png.length, page_id: pageId });
   }));
+
+    // API: Import a user-provided actual-UI screenshot (data URL or file upload)
+    // as a reference image. The old self-capture endpoint above remains as a
+    // quick capture shortcut.
+    router.post("/api/import/capture", asyncHandler(async (req, res) => {
+      const { data_url, file_name } = req.body || {};
+      if (typeof data_url !== "string" || !data_url.startsWith("data:image/")) {
+        throw new HttpError(400, "data_url must be a data:image/* data URL");
+      }
+      const mime = /^data:(image\/[a-zA-Z0-9.+-]+);base64,/.exec(data_url);
+      if (!mime) {
+        throw new HttpError(400, "data_url must be base64-encoded image data");
+      }
+      const ext = mime[1].split("/")[1] || "png";
+      const file = `capture-${Date.now()}.${ext}`;
+      const { writeFileSync } = await import("fs");
+      writeFileSync(path.join(previewsDir(), file), Buffer.from(data_url.split(",")[1], "base64"));
+      const node = stateStore.addComponent(
+        "image",
+        undefined,
+        { src: `/previews/${file}`, alt: file_name || "实际界面截图" },
+        null,
+        "user"
+      );
+      const pageId = stateStore.getState().currentPageId || stateStore.getState().pages[0]?.id || "";
+      if (pageId) {
+        await recordProductImport(pageId, "capture", file_name || "实际界面截图", 1);
+      }
+      res.json({ success: true, file, component_id: node.id, page_id: pageId, bytes: Math.round((data_url.length * 3) / 4) });
+    }));
+
 
   // API: One-click write-back — design tokens into client/style.css (with backup)
   // and the full design into client/design-writeback.html.
@@ -201,15 +256,22 @@ export function registerProjectsRoutes(): express.Router {
     kind: ImportRecord["kind"],
     source: string,
     componentCount: number,
-    url?: string
+    url?: string,
+      options?: {
+        baseUrl?: string;
+        sourceFile?: string;
+        sourceHtml?: string;
+        sourceIsHtml?: boolean;
+      }
   ): Promise<void> {
     const fs = await import("fs");
     const importsDir = path.join(getProjectDir(), "imports");
     fs.mkdirSync(importsDir, { recursive: true });
     const htmlFile = path.join(importsDir, `${pageId}.html`);
+      const sourceSnapshot = options && typeof options.sourceHtml === "string" ? options.sourceHtml : exportDesign("html");
     if (!fs.existsSync(htmlFile)) {
       // Snapshot the current rendered page so apply has an original to diff.
-      fs.writeFileSync(htmlFile, exportDesign("html"), "utf-8");
+      fs.writeFileSync(htmlFile, sourceSnapshot, "utf-8");
     }
     stateStore.setImport(
       pageId,
@@ -220,6 +282,9 @@ export function registerProjectsRoutes(): express.Router {
         html_file: htmlFile,
         imported_at: new Date().toISOString(),
         component_count: componentCount,
+          ...(options && typeof options.baseUrl === "string" ? { base_url: options.baseUrl } : {}),
+          ...(options && typeof options.sourceFile === "string" ? { source_file: options.sourceFile } : {}),
+          ...(options && options.sourceIsHtml ? { source_is_html: true } : {}),
       },
       "user"
     );
@@ -235,6 +300,7 @@ export function registerProjectsRoutes(): express.Router {
     let sourceHtml: string;
     let sourceName: string;
     let kind: ImportRecord["kind"] = "html";
+      let importBaseUrl = "";
     try {
       if (html) {
         sourceHtml = String(html);
@@ -253,7 +319,8 @@ export function registerProjectsRoutes(): express.Router {
           throw new HttpError(502, `Fetch failed: HTTP ${response.status} for ${url}`);
         }
         sourceHtml = await response.text();
-        sourceName = parsed.hostname;
+        importBaseUrl = response.url || String(url);
+          sourceName = new URL(importBaseUrl).hostname;
       }
       if (sourceHtml.length > 2_000_000) {
         throw new HttpError(400, `Page too large (${sourceHtml.length} chars, max 2000000)`);
@@ -261,12 +328,18 @@ export function registerProjectsRoutes(): express.Router {
       // 内联抓取 link 样式表，让片段渲染还原用户页面的完整样式
       let extraCss = "";
       if (kind === "url") {
+          /*
         const parsed = new URL(String(url));
-        const linkRe = /<link[^>]*rel=["']stylesheet["'][^>]*href=["']([^"']+)["'][^>]*>/gi;
+          */
+          const cssBase = new URL(importBaseUrl || String(url));
+        const linkTagRe = /<link\b[^>]*>/gi;
         let m: RegExpExecArray | null;
-        while ((m = linkRe.exec(sourceHtml)) !== null) {
+        while ((m = linkTagRe.exec(sourceHtml)) !== null) {
           try {
-            const href = new URL(m[1], parsed).toString();
+            const rel = /\brel\s*=\s*["']?([^"'\s>]+)/i.exec(m[0]);
+              const hrefAttr = /\bhref\s*=\s*["']([^"']+)["']/i.exec(m[0]);
+              if (!rel || !hrefAttr || !rel[1].split(/\s+/).includes("stylesheet")) continue;
+              const href = new URL(hrefAttr[1], cssBase).toString();
             const cssRes = await fetch(href, { signal: AbortSignal.timeout(8000) });
             if (cssRes.ok) extraCss += (await cssRes.text()) + "\n";
           } catch {
@@ -275,12 +348,24 @@ export function registerProjectsRoutes(): express.Router {
         }
       }
       const result = importHtmlString(sourceHtml, sourceName, false, extraCss);
+        {
+          const importedState = stateStore.getState();
+          const importedPage = importedState.pages.find((p) => p.id === result.pageId);
+          if (importedPage) {
+            ensureTopLevelLayouts(importedPage.components, containerWidthForPlatform(importedState.activePlatform));
+            stateStore.replacePageComponents(importedPage.id, importedPage.components, "ai");
+          }
+        }
+
       // Persist the original HTML for provenance / future apply steps
       const importsDir = path.join(getProjectDir(), "imports");
       fs.mkdirSync(importsDir, { recursive: true });
       const htmlFile = path.join(importsDir, `${result.pageId}.html`);
       fs.writeFileSync(htmlFile, sourceHtml, "utf-8");
-      await recordProductImport(result.pageId, kind, sourceName, result.imported, kind === "url" ? String(url) : undefined);
+      await recordProductImport(result.pageId, kind, sourceName, result.imported, kind === "url" ? String(url) : undefined, {
+          baseUrl: kind === "url" ? (importBaseUrl || String(url)) : undefined,
+          sourceHtml,
+        });
       stateStore.switchPage(result.pageId, "user");
       res.json({
         success: true,
@@ -301,6 +386,33 @@ export function registerProjectsRoutes(): express.Router {
     const state = stateStore.getState();
     res.json({ success: true, imports: state.imports || {} });
   }));
+
+  // API: 原页面文档（url/html/file 来源的完整原始 HTML）。客户端用 iframe
+  // srcdoc 做“原页面预览”，保证 CSS/脚本/交互完整还原；画布片段负责编辑。
+  router.get("/api/import/document", asyncHandler(async (req, res) => {
+    const state = stateStore.getState();
+    const pageId = typeof req.query.page_id === "string" ? req.query.page_id : state.currentPageId;
+    const page = state.pages.find((p) => p.id === pageId);
+    const record = pageId ? stateStore.getImport(pageId) : null;
+    if (!page || !record || !record.html_file) {
+      throw new HttpError(404, "当前页面没有可预览的原始文档");
+    }
+    if (record.kind === "file" && !record.source_is_html) {
+      throw new HttpError(404, "该文件来源不支持完整文档预览（仅 HTML 文件支持）");
+    }
+    const fs = await import("fs");
+    if (!fs.existsSync(record.html_file)) {
+      throw new HttpError(404, "原始文档快照不存在，请重新导入");
+    }
+    res.json({
+      success: true,
+      page_id: pageId,
+      source: record.source,
+      base_url: record.base_url || null,
+      html: fs.readFileSync(record.html_file, "utf-8"),
+    });
+  }));
+
 
   // API: One-click apply — write the adjusted page + adjustment CSS into the
   // product directory with timestamped backups (rollback supported).

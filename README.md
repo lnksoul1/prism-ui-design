@@ -126,6 +126,23 @@ prototype generator:
 The dashboard shows an apply banner whenever the current page came from an
 imported product.
 
+### Fidelity + real writeback (v3.3)
+
+- **原页面预览**: for URL / HTML / project-folder imports the canvas toolbar
+  shows a **◎ 原页面 / ✎ 编辑** toggle. 原页面 renders the complete original
+  document in a sandboxed iframe — original `<head>`, CSS, scripts, links and
+  form interactions keep working. 编辑 switches to the editable semantic
+  fragments.
+- **Full-document apply**: URL/HTML imports rebuild the adjusted page from the
+  original document (scripts and `<head>` preserved) instead of exporting a
+  reduced generated page. Plain-HTML project files are written back **in
+  place** to the original file, with a `.prism-backups` backup and rollback.
+- **Fragment element editing**: click any inner element of an imported
+  fragment to edit its text, attributes (`href`/`src`/`class`/`id`/…), 15 CSS
+  properties, or bind a Prism interaction (`elementMeta`), which play mode
+  triggers inside the fragment.
+
+
 ## Template quick change (想快就套模板，想细就自己微调)
 
 Product definition v3.2 pillar ⑦ — one-click changes applied to the **current**

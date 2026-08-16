@@ -30,6 +30,9 @@ client/design-writeback.html
 .tmp-shot/
 prism-ui-design-mcp/
 
+# DSH harness inspection scratch
+.dsh-plugin-inspect/
+
 # Environment
 .env
 .env.local

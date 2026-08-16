@@ -9,7 +9,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { SERVER_NAME, SERVER_VERSION } from "../constants.js";
 import { COMPONENT_TYPES } from "../service/design-service.js";
-import { STYLE_GUIDES } from "../style-guides.js";
+import { listDesignComponents, listDesignStyles } from "../design-library.js";
 import { adjectiveCatalog } from "./semantic-tools.js";
 
 const TOOL_MANIFEST: Array<{ name: string; group: string; summary: string; example: string }> = [
@@ -65,8 +65,8 @@ const TOOL_MANIFEST: Array<{ name: string; group: string; summary: string; examp
   { name: "design_import_webpage", group: "interop", summary: "Import a webpage URL/HTML as components", example: 'design_import_webpage(url="https://example.com")' },
   // Semantic & style guides
   { name: "design_semantic_style", group: "semantics", summary: "Adjective → token semantic mapping", example: 'design_semantic_style(description="温暖落地页", adjectives=["温暖","简约"])' },
-  { name: "design_get_style_guide", group: "semantics", summary: "Look up a style guide", example: 'design_get_style_guide(tag="glassmorphism")' },
-  { name: "design_apply_style_guide", group: "semantics", summary: "Apply a style guide", example: 'design_apply_style_guide(tag="brutalist")' },
+  { name: "design_list_design_library", group: "design-library", summary: "List the unified design library (24 styles, 117 components, term templates)", example: "design_list_design_library()" },
+  { name: "design_apply_design_style", group: "design-library", summary: "Apply a design-library style by id", example: 'design_apply_design_style(style_id="glassmorphism")' },
   { name: "design_list_capabilities", group: "meta", summary: "Self-describing capability manifest", example: "design_list_capabilities()" },
   // Spec §8.2 alignment
   { name: "design_list_components", group: "design", summary: "List components on the current page", example: "design_list_components()" },
@@ -94,9 +94,9 @@ const TOOL_MANIFEST: Array<{ name: string; group: string; summary: string; examp
   { name: "design_review_and_improve", group: "review", summary: "One-call review loop: score, fix, re-score + a11y audit", example: "design_review_and_improve()" },
   // Non-professional UX
   { name: "design_explain_design", group: "semantics", summary: "Explain the current design in plain language + suggest follow-up instructions", example: 'design_explain_design(lang="zh")' },
-  { name: "design_set_behavior", group: "interaction", summary: "Bind an interaction behavior to a component (navigate/link/toggle/toast/submit/prompt)", example: 'design_set_behavior(component_id="comp_x", behavior={"type":"navigate","page_id":"page_2"})' },
-  { name: "design_apply_component_template", group: "interaction", summary: "Apply a ready-made component block (add, or replace the selected component in place)", example: 'design_apply_component_template(template_id="hero_split_cta", target_id="comp_5")' },
-  { name: "design_apply_behavior_template", group: "interaction", summary: "Bind a preset interaction template to a component in one click", example: 'design_apply_behavior_template(component_id="comp_5", template_id="toast_feedback")' },
+  
+  { name: "design_apply_design_component", group: "design-library", summary: "Add a design-library component, or replace an existing component in place", example: 'design_apply_design_component(component_id="hero_split", target_id="comp_5")' },
+  
   { name: "design_align_components", group: "design", summary: "Align/distribute multiple components (freeform, single undo step)", example: 'design_align_components(ids=["comp_1","comp_2"], mode="center_x")' },
   { name: "design_z_order_component", group: "design", summary: "Reorder component stacking (front/back/forward/backward)", example: 'design_z_order_component(component_id="comp_x", mode="front")' },
   // Upgrade plan U1: Lenis smooth scroll + GSAP animation engine
@@ -146,15 +146,19 @@ export function registerCapabilitiesTool(server: McpServer): void {
           ],
           prompts: ["build_page", "design_review", "import_project"],
           component_types: [...COMPONENT_TYPES].sort(),
-          templates: ["ecommerce_home", "saas_landing", "blog_post", "portfolio", "dashboard"],
-          style_guides: STYLE_GUIDES.map((g) => ({ id: g.id, name: g.name, keywords: g.keywords })),
+          design_library: {
+              source: "https://vibe-hub.org/topics/design",
+              styles: listDesignStyles().map((s) => ({ id: s.id, name: s.name, tags: s.tags })),
+              components: listDesignComponents().map((c) => ({ id: c.id, name: c.name, type: c.type, variant: c.variant, baseId: c.baseId })),
+            },
+          design_library_source: "https://vibe-hub.org/topics/design",
           semantic_adjectives: adjectiveCatalog(),
         };
         return {
           content: [
             {
               type: "text" as const,
-              text: `# Prism Capabilities\n\n${manifest.tool_count} tools · ${manifest.component_types.length} component types · ${manifest.style_guides.length} style guides · ${manifest.semantic_adjectives.length} semantic adjectives\n\nFull manifest in structuredContent.json.`,
+              text: `# Prism Capabilities\n\n${manifest.tool_count} tools · ${manifest.component_types.length} component types · ${manifest.design_library.styles.length} design styles · ${manifest.design_library.components.length} design components · ${manifest.semantic_adjectives.length} semantic adjectives\n\nDesign library source: https://vibe-hub.org/topics/design`,
             },
           ],
           structuredContent: { success: true, json: manifest },

@@ -6,8 +6,12 @@
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import fs from "fs";
+import path from "path";
 import { z } from "zod";
 import { importHtmlString } from "../import-project.js";
+import { stateStore } from "../state.js";
+import { getProjectDir } from "../project-store.js";
 
 const MAX_HTML = 2_000_000;
 
@@ -48,6 +52,7 @@ Exactly one of url or html is required.`,
       try {
         let html: string;
         let sourceName: string;
+          let importBaseUrl = "";
         if (params.html) {
           html = params.html;
           sourceName = "Pasted HTML";
@@ -64,12 +69,55 @@ Exactly one of url or html is required.`,
           if (html.length > MAX_HTML) {
             throw new Error(`Page too large (${html.length} chars, max ${MAX_HTML})`);
           }
-          sourceName = url.hostname;
+          importBaseUrl = response.url || params.url;
+            sourceName = new URL(importBaseUrl).hostname;
         } else {
           throw new Error("Provide either 'url' or 'html'");
         }
 
-        const result = importHtmlString(html, sourceName, params.clear_existing || false);
+        // URL 来源同步抓取 link 样式表，让片段编辑态也尽量还原页面视觉。
+        let extraCss = "";
+        if (params.url) {
+          const baseUrl = validateUrl(importBaseUrl || params.url);
+          const linkTagRe = /<link\b[^>]*>/gi;
+          let m: RegExpExecArray | null;
+          while ((m = linkTagRe.exec(html)) !== null) {
+            try {
+              const rel = /\brel\s*=\s*["']?([^"'\s>]+)/i.exec(m[0]);
+                const hrefAttr = /\bhref\s*=\s*["']([^"']+)["']/i.exec(m[0]);
+                if (!rel || !hrefAttr || !rel[1].split(/\s+/).includes("stylesheet")) continue;
+                const href = new URL(hrefAttr[1], baseUrl).toString();
+              const cssRes = await fetch(href, { signal: AbortSignal.timeout(8000) });
+              if (cssRes.ok) extraCss += (await cssRes.text()) + "\n";
+            } catch {
+              // 单条样式失败不影响整体导入
+            }
+          }
+        }
+
+
+        const result = importHtmlString(html, sourceName, params.clear_existing || false, extraCss);
+          // 记录 provenance：与 dashboard 的 URL/HTML 导入同一套应用/回滚链路。
+          try {
+            const importsDir = path.join(getProjectDir(), "imports");
+            fs.mkdirSync(importsDir, { recursive: true });
+            const htmlFile = path.join(importsDir, `${result.pageId}.html`);
+            fs.writeFileSync(htmlFile, html, "utf-8");
+            stateStore.setImport(
+              result.pageId,
+              {
+                kind: (params.url ? "url" : "html") as "url" | "html",
+                source: sourceName,
+                ...(params.url ? { url: params.url, base_url: importBaseUrl || params.url } : {}),
+                html_file: htmlFile,
+                imported_at: new Date().toISOString(),
+                component_count: result.imported,
+              },
+              "user"
+            );
+          } catch {
+            // provenance 失败不阻断导入
+          }
         return {
           content: [
             {

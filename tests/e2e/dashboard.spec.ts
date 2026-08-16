@@ -563,8 +563,12 @@ test("exact editing: layer rename + rulers/guides appear in freeform", async ({ 
   await expect(page.locator("#ruler-v")).toBeVisible();
   await expect(page.locator(".ruler-tick").first()).toBeVisible();
 
-  // Rename a layer via the layer panel (double-click the name)
-  await page.locator("#layer-tree .layer-item").first().dblclick();
+  // Rename a layer via the layer panel (double-click the name; the first
+  // click selects and re-renders the tree, so re-click the fresh node).
+  const layerName = page.locator("#layer-tree .layer-item .layer-name").first();
+  await layerName.click();
+  await page.waitForTimeout(120);
+  await layerName.click();
   const nameInput = page.locator(".layer-rename-input");
   await expect(nameInput).toBeVisible();
   await nameInput.fill("我的 Hero");
@@ -946,6 +950,14 @@ test("performance instrumentation collects render stats with ?perf=1 (Phase 3.5)
   await expect(page.locator(".topbar")).toBeVisible();
 
   // PrismPerf is exposed with a summary + recorded stats after init renders.
+  await expect
+    .poll(async () => {
+      return page.evaluate(() => {
+        const p = (window as unknown as { PrismPerf?: { enabled: boolean; stats: { renders: number } } }).PrismPerf;
+        return p && p.enabled ? p.stats.renders : 0;
+      });
+    }, { timeout: 10000 })
+    .toBeGreaterThanOrEqual(1);
   const perf = await page.evaluate(() => {
     const p = (window as unknown as { PrismPerf?: { enabled: boolean; stats: { renders: number; totalMs: number; window: unknown[] }; summary(): string } }).PrismPerf;
     return p ? { enabled: p.enabled, renders: p.stats.renders, summary: p.summary() } : null;

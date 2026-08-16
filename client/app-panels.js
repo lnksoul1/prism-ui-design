@@ -175,6 +175,7 @@ function getSliderRange(key, value) {
 
 function renderActivityLog() {
   const list = $("activity-list");
+  if (!list) return;
 
   if (!currentState || !currentState.activityLog || currentState.activityLog.length === 0) {
     list.innerHTML = `<div class="activity-empty">${t("activityEmpty")}</div>`;

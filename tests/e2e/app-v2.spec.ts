@@ -102,3 +102,35 @@ test.describe("Prism V2 React client", () => {
     expect(errors).toEqual([]);
   });
 });
+
+// V2 M2 冒烟：AI 面板与盒子模式渲染。第二个用例通过 REST 直接添加 chart
+// 组件（绕过 LLM 依赖），依赖服务端 WS change 广播驱动客户端全量刷新。
+test.describe("Prism V2 M2 features", () => {
+  test("AI panel renders with input and generate button", async ({ page }) => {
+    await page.goto(`http://127.0.0.1:${port}/v2/`, { waitUntil: "domcontentloaded", timeout: 60000 });
+    await expect(page.getByPlaceholder(/描述你想要的页面/)).toBeVisible();
+    await expect(page.getByRole("button", { name: "生成" })).toBeVisible();
+  });
+
+  test("adding a box-mode component renders placeholder", async ({ page }) => {
+    await page.goto(`http://127.0.0.1:${port}/v2/`, { waitUntil: "domcontentloaded", timeout: 60000 });
+    // 等设计库/画布就绪后再发 POST，确保 WS 已连接以接收 change 广播
+    await expect(page.locator(".canvas-host")).toBeVisible();
+    // chart 等 BOX_MODE_TYPES 不在服务端 COMPONENT_TYPES 清单内（POST 会 400），
+    // 因此走真实 M2 链路：先加一个 text 组件，再通过 box-mode 端点启用盒子模式。
+    await page.evaluate(async () => {
+      const res = await fetch("/api/component", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "text", props: { text: "盒子模式" }, parent_id: null }),
+      });
+      const data = (await res.json()) as { id: string };
+      await fetch(`/api/component/${data.id}/box-mode`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: true }),
+      });
+    });
+    await expect(page.locator(".box-mode-placeholder")).toBeVisible({ timeout: 10_000 });
+  });
+});

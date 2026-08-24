@@ -70,7 +70,7 @@ function StyleSection({ node, breakpoint }: { node: ComponentNode; breakpoint: s
       }
     }
     setDraft(next);
-  }, [node.id, breakpoint]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [node.id, breakpoint]);
 
   const commit = (key: string, value: string): void => {
     if (breakpoint === "desktop") {

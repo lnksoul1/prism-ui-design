@@ -121,3 +121,76 @@ export async function chatCompletion(messages: ChatMessage[], cfg: LlmConfig): P
   if (cfg.provider === "google") return googleChat(messages, cfg);
   return openaiChat(messages, cfg);
 }
+
+/**
+ * M2 NL2UI 流式: OpenAI 兼容的流式对话；anthropic/google 降级为非流式
+ * （一次性 onDelta 回调），对上层调用方保持同一接口。
+ */
+export async function streamChatCompletion(
+  messages: ChatMessage[],
+  cfg: LlmConfig,
+  onDelta: (text: string) => void
+): Promise<string> {
+  if (cfg.provider !== "openai") {
+    const full = await chatCompletion(messages, cfg);
+    onDelta(full);
+    return full;
+  }
+  const base = (cfg.baseUrl || "https://api.openai.com/v1").replace(/\/+$/, "");
+  let res: Response;
+  try {
+    res = await fetch(`${base}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${cfg.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: cfg.model,
+        messages,
+        temperature: 0.7,
+        max_tokens: 4096,
+        stream: true,
+      }),
+    });
+  } catch (err) {
+    throw new LlmError(`OpenAI 请求失败：${err instanceof Error ? err.message : String(err)}`);
+  }
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new LlmError(`OpenAI HTTP ${res.status}：${body.slice(0, 300)}`);
+  }
+  if (!res.body) throw new LlmError("OpenAI 流式响应缺少 body");
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let full = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith("data:")) continue;
+      const data = trimmed.slice(5).trim();
+      if (!data || data === "[DONE]") continue;
+      try {
+        const json = JSON.parse(data) as {
+          choices?: Array<{ delta?: { content?: string } }>;
+        };
+        const delta = json.choices?.[0]?.delta?.content;
+        if (typeof delta === "string" && delta) {
+          full += delta;
+          onDelta(delta);
+        }
+      } catch {
+        // 忽略无法解析的行（心跳/注释）
+      }
+    }
+  }
+  if (!full) throw new LlmError("OpenAI 流式返回为空");
+  return full;
+}

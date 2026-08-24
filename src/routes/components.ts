@@ -503,5 +503,24 @@ export function registerComponentsRoutes(): express.Router {
     res.json({ success: true, link_id: req.params.id });
   }));
 
+  // M2 盒子模式: 更新组件盒子配置
+  router.post("/api/component/:id/box-mode", asyncHandler(async (req, res) => {
+    const { enabled, internalConfig } = req.body || {};
+    const patch: { enabled?: boolean; internalConfig?: Record<string, unknown> } = {};
+    if (typeof enabled === "boolean") patch.enabled = enabled;
+    if (internalConfig !== undefined) {
+      if (!internalConfig || typeof internalConfig !== "object" || Array.isArray(internalConfig)) {
+        throw new HttpError(400, "internalConfig must be an object");
+      }
+      patch.internalConfig = internalConfig as Record<string, unknown>;
+    }
+    if (patch.enabled === undefined && patch.internalConfig === undefined) {
+      throw new HttpError(400, "Nothing to update: provide enabled and/or internalConfig");
+    }
+    const ok = stateStore.setBoxMode(req.params.id, patch, "user");
+    if (!ok) throw new HttpError(404, `Component ${req.params.id} not found`);
+    res.json({ success: true, id: req.params.id });
+  }));
+
   return router;
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useDesignStore } from "../../stores/design";
 import { api } from "../../api";
+import { isBoxModeComponent } from "../../lib/boxMode";
 import type { ComponentNode } from "../../types";
 
 const TEXT_PROP_KEYS = ["text", "title", "label", "button_text", "cta_text", "heading", "brand"];
@@ -18,6 +19,7 @@ export function InspectorPanel() {
   return (
     <div className="inspector">
       <h3 className="panel-title">{node.name || node.type}{node.variant ? ` · ${node.variant}` : ""}</h3>
+      {isBoxModeComponent(node) && <BoxModeSection node={node} />}
       <PropsSection node={node} />
       <StyleSection node={node} breakpoint={breakpoint} />
     </div>
@@ -31,6 +33,52 @@ function findNode(nodes: ComponentNode[], id: string): ComponentNode | null {
     if (found) return found;
   }
   return null;
+}
+
+/** 盒子模式区：编辑器只控外层容器，内部配置以 JSON 形式维护、预览时挂载。 */
+function BoxModeSection({ node }: { node: ComponentNode }) {
+  const [json, setJson] = useState(() => JSON.stringify(node.boxMode?.internalConfig ?? {}, null, 2));
+  const [error, setError] = useState<string | null>(null);
+  const [enabled, setEnabled] = useState(node.boxMode?.enabled ?? true);
+
+  const commitJson = (): void => {
+    try {
+      const parsed = JSON.parse(json) as Record<string, unknown>;
+      setError(null);
+      void api.setBoxMode(node.id, { enabled, internalConfig: parsed });
+    } catch {
+      setError("JSON 格式错误，未提交");
+    }
+  };
+
+  return (
+    <section className="insp-section">
+      <div className="insp-title">盒子模式</div>
+      <label className="insp-row">
+        <span>启用</span>
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={(e) => {
+            setEnabled(e.target.checked);
+            void api.setBoxMode(node.id, { enabled: e.target.checked });
+          }}
+        />
+      </label>
+      <label className="insp-row insp-row-column">
+        <span>internalConfig</span>
+        <textarea
+          aria-label="internalConfig"
+          className="insp-json"
+          value={json}
+          onChange={(e) => setJson(e.target.value)}
+          onBlur={commitJson}
+          rows={6}
+        />
+      </label>
+      {error && <div className="insp-error">{error}</div>}
+    </section>
+  );
 }
 
 function PropsSection({ node }: { node: ComponentNode }) {

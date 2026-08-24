@@ -25,4 +25,6 @@ export const api = {
     post(`/api/component/${id}/base-style`, { style }),
   setBreakpointStyle: (id: string, breakpoint: string, style: Record<string, string>) =>
     post(`/api/component/${id}/breakpoint-style`, { breakpoint, style }),
+  setBoxMode: (id: string, patch: { enabled?: boolean; internalConfig?: Record<string, unknown> }) =>
+    post(`/api/component/${id}/box-mode`, patch),
 };

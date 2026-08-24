@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import type { ComponentNode } from "../../types";
 import { resolveStyle } from "../../lib/style";
+import { isBoxModeComponent } from "../../lib/boxMode";
 
 interface Props {
   node: ComponentNode;
@@ -21,7 +22,16 @@ export function ComponentView({ node, selected, breakpoint, onSelect }: Props) {
     ...(resolveStyle(node, breakpoint) as CSSProperties),
   };
 
-  const content = renderContent(node);
+  const boxModeOn = isBoxModeComponent(node);
+  const content = boxModeOn ? (
+    <div className="box-mode-placeholder">
+      <span className="box-mode-icon">▣</span>
+      <span className="box-mode-label">{node.type}</span>
+      <span className="box-mode-hint">盒子模式 · 预览时挂载实例</span>
+    </div>
+  ) : (
+    renderContent(node)
+  );
 
   return (
     <div
@@ -34,7 +44,7 @@ export function ComponentView({ node, selected, breakpoint, onSelect }: Props) {
       }}
     >
       {content}
-      {node.children?.map((child) => (
+      {!boxModeOn && node.children?.map((child) => (
         <ComponentView
           key={child.id}
           node={child}

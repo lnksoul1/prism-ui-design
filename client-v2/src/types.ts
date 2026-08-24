@@ -14,6 +14,7 @@ export interface ComponentNode {
   animation?: Record<string, unknown>;
   animations?: unknown[];
   behavior?: Record<string, unknown>;
+  boxMode?: { enabled: boolean; internalConfig: Record<string, unknown> };
 }
 
 export interface DesignStateView {

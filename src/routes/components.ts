@@ -23,6 +23,24 @@ function findComponentInState(id: string): ComponentNode | null {
   return null;
 }
 
+// V2.0 多断点编辑 — style payloads are CSS property → string value maps.
+// Reject non-string values and values over 200 characters so arbitrary
+// garbage never enters the baseStyle/breakpointOverrides diff model.
+function assertStyleObject(style: unknown): Record<string, string> {
+  if (!style || typeof style !== "object" || Array.isArray(style)) {
+    throw new HttpError(400, "style object is required");
+  }
+  for (const [key, value] of Object.entries(style)) {
+    if (typeof value !== "string") {
+      throw new HttpError(400, `style.${key} must be a string`);
+    }
+    if (value.length > 200) {
+      throw new HttpError(400, `style.${key} must be at most 200 characters`);
+    }
+  }
+  return style as Record<string, string>;
+}
+
 // Component / page / undo-redo / comment / page-link routes
 export function registerComponentsRoutes(): express.Router {
   const router = express.Router();
@@ -191,7 +209,7 @@ export function registerComponentsRoutes(): express.Router {
     if (typeof target_path !== "string" || !target_path) {
       throw new HttpError(400, "target_path (string) is required");
     }
-    const ok = designService.moveArrayItem(id, path, position, target_path, "user");
+    const ok = stateStore.moveArrayItem(id, path, position, target_path, "user");
     if (!ok) {
       throw new HttpError(400, "Move failed: paths must share the same props array");
     }
@@ -358,9 +376,7 @@ export function registerComponentsRoutes(): express.Router {
   // API: V2.0 多断点编辑 — set the desktop base style of a component
   router.post("/api/component/:id/base-style", asyncHandler(async (req, res) => {
     const { style } = req.body || {};
-    if (!style || typeof style !== "object") {
-      throw new HttpError(400, "style object is required");
-    }
+    assertStyleObject(style);
     const ok = stateStore.setBaseStyle(req.params.id, style, "user");
     if (!ok) throw new HttpError(404, `Component ${req.params.id} not found`);
     res.json({ success: true, id: req.params.id });
@@ -372,18 +388,56 @@ export function registerComponentsRoutes(): express.Router {
     if (!isBreakpoint(String(breakpoint || "")) || breakpoint === "desktop") {
       throw new HttpError(400, "breakpoint must be tablet or mobile");
     }
-    if (!style || typeof style !== "object") {
-      throw new HttpError(400, "style object is required");
-    }
+    assertStyleObject(style);
     const ok = stateStore.setBreakpointOverride(req.params.id, breakpoint, style, "user");
     if (!ok) throw new HttpError(404, `Component ${req.params.id} not found`);
     res.json({ success: true, id: req.params.id, breakpoint });
   }));
 
-  // API: V2.0 时间线 — append a timeline animation block to a component
+  // API: V2.0 时间线 — append a timeline animation block to a component.
+  // Body is validated + whitelisted: trackId/preset (non-empty strings),
+  // startTime/duration (numbers >= 0, defaulting to 0/600), plus optional
+  // engine ('css' | 'gsap'), params (object) and id; extra fields are dropped.
   router.post("/api/component/:id/animation", asyncHandler(async (req, res) => {
-    const anim = stateStore.addTimelineAnimation(req.params.id, req.body || {}, "user");
-    if (!anim) throw new HttpError(404, `Component ${req.params.id} not found`);
+    const { id } = req.params;
+    const body: Record<string, unknown> = req.body || {};
+    const { trackId, preset, startTime, duration, engine, params } = body;
+    if (typeof trackId !== "string" || !trackId) {
+      throw new HttpError(400, "trackId must be a non-empty string");
+    }
+    if (typeof preset !== "string" || !preset) {
+      throw new HttpError(400, "preset must be a non-empty string");
+    }
+    const start = startTime === undefined ? 0 : startTime;
+    const ms = duration === undefined ? 600 : duration;
+    if (typeof start !== "number" || !Number.isFinite(start) || start < 0) {
+      throw new HttpError(400, "startTime must be a number >= 0");
+    }
+    if (typeof ms !== "number" || !Number.isFinite(ms) || ms < 0) {
+      throw new HttpError(400, "duration must be a number >= 0");
+    }
+    if (engine !== undefined && engine !== null && engine !== "css" && engine !== "gsap") {
+      throw new HttpError(400, "engine must be 'css' or 'gsap'");
+    }
+    if (params !== undefined && params !== null && (typeof params !== "object" || Array.isArray(params))) {
+      throw new HttpError(400, "params must be an object");
+    }
+    const anim = stateStore.addTimelineAnimation(
+      id,
+      {
+        trackId,
+        preset,
+        startTime: start,
+        duration: ms,
+        ...(typeof body.id === "string" && body.id ? { id: body.id } : {}),
+        ...(engine === "css" || engine === "gsap" ? { engine } : {}),
+        ...(params && typeof params === "object" && !Array.isArray(params)
+          ? { params: params as Record<string, number | string | boolean> }
+          : {}),
+      },
+      "user"
+    );
+    if (!anim) throw new HttpError(404, `Component ${id} not found`);
     res.json({ success: true, animation: anim });
   }));
 

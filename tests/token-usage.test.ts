@@ -31,4 +31,14 @@ describe("buildTokenUsage", () => {
     const usage = buildTokenUsage(stateStore.getState());
     assert.deepEqual(usage["colors.color-bg"], []);
   });
+
+  test("same-value tokens each keep their own usage entry", () => {
+    stateStore.setToken("colors", "brand-primary", "#1890ff", "user");
+    stateStore.setToken("colors", "link", "#1890ff", "user");
+    const node = stateStore.addComponent("button", undefined, {}, null, "user");
+    stateStore.setBaseStyle(node.id, { background: "#1890ff" }, "user");
+    const usage = buildTokenUsage(stateStore.getState());
+    assert.deepEqual(usage["colors.brand-primary"], [node.id]);
+    assert.deepEqual(usage["colors.link"], [node.id]);
+  });
 });

@@ -8,7 +8,8 @@ import type { ComponentNode, DesignState } from "./state.js";
  */
 export function buildTokenUsage(state: DesignState): Record<string, string[]> {
   const valueToIds = new Map<string, string[]>();
-  const tokenIdByValue = new Map<string, string>();
+  // 同值 token 会共享一条组件引用列表，须保留 value → 多个 token id 的映射。
+  const tokenIdsByValue = new Map<string, string[]>();
 
   const tokenCategories: Array<keyof DesignState["tokens"]> = [
     "colors",
@@ -24,7 +25,9 @@ export function buildTokenUsage(state: DesignState): Record<string, string[]> {
     for (const [key, token] of Object.entries(group)) {
       const id = `${category}.${key}`;
       valueToIds.set(token.value, []);
-      tokenIdByValue.set(token.value, id);
+      const tokenIds = tokenIdsByValue.get(token.value);
+      if (tokenIds) tokenIds.push(id);
+      else tokenIdsByValue.set(token.value, [id]);
     }
   }
 
@@ -57,8 +60,9 @@ export function buildTokenUsage(state: DesignState): Record<string, string[]> {
 
   const usage: Record<string, string[]> = {};
   for (const [value, ids] of valueToIds) {
-    const tokenId = tokenIdByValue.get(value);
-    if (tokenId) usage[tokenId] = ids;
+    for (const tokenId of tokenIdsByValue.get(value) ?? []) {
+      usage[tokenId] = ids;
+    }
   }
   return usage;
 }

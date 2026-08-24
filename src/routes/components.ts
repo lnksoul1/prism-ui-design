@@ -1,5 +1,6 @@
 import express from "express";
 import { stateStore, type ComponentNode } from "../state.js";
+import { isBreakpoint } from "../responsive.js";
 import * as designService from "../service/design-service.js";
 import { exportComponentCode } from "../tools/design-tools.js";
 import { asyncHandler, HttpError } from "./shared.js";
@@ -51,7 +52,6 @@ export function registerComponentsRoutes(): express.Router {
     res.json({ success: true, id: comp.id, type: comp.type, format, code });
   }));
     /*
-
   // API: Export a library component as code (uses its default props)
   router.post("/api/library-code", asyncHandler(async (req, res) => {
     const { type, variant, props, format } = req.body || {};
@@ -140,8 +140,6 @@ export function registerComponentsRoutes(): express.Router {
     }
     res.json({ success: true, id: copy.id, type: copy.type });
   }));
-    /*
-
   // API: Bind or clear an interaction behavior on a component (行为模型 P1)
   router.put("/api/component/:id/behavior", asyncHandler(async (req, res) => {
     const { id } = req.params;
@@ -157,11 +155,12 @@ export function registerComponentsRoutes(): express.Router {
   }));
 
   // API: Set or clear element-level metadata (元素级编辑 P1): bind an
-  // interaction to an inner element (by its prop path) and/or promote its
-  // type (text → button / link). Pass behavior/kind as null to clear them.
+  // interaction to an inner element (by its prop path), promote its type
+  // (text → button / link), and/or set element-level CSS overrides
+  // (width / fontSize / color …). Pass behavior/kind/css as null to clear.
   router.put("/api/component/:id/element-meta", asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const { path, behavior, kind } = req.body || {};
+    const { path, behavior, kind, css } = req.body || {};
     if (typeof path !== "string" || !path) {
       throw new HttpError(400, "path (string) is required");
     }
@@ -171,14 +170,33 @@ export function registerComponentsRoutes(): express.Router {
     if (kind !== undefined && kind !== null && !["text", "button", "link"].includes(kind)) {
       throw new HttpError(400, "kind must be 'text' | 'button' | 'link' | null");
     }
-    const meta = { behavior, kind };
-    const ok = designService.setElementMeta(id, path, meta as never, "user");
+    if (css !== undefined && css !== null && (typeof css !== "object" || Array.isArray(css))) {
+      throw new HttpError(400, "css must be an object of CSS property → value pairs, or null");
+    }
+    const ok = designService.setElementMeta(id, path, { behavior, kind, css } as never, "user");
     if (!ok) {
       throw new HttpError(404, `Component ${id} not found`);
     }
-    res.json({ success: true, id, path, behavior: behavior ?? null, kind: kind ?? null });
+    res.json({ success: true, id, path, behavior: behavior ?? null, kind: kind ?? null, css: css ?? null });
   }));
-    */
+
+  // API: Move the array item backing an inner element before/after another
+  // item of the same props array (内部元素拖拽排序, DESIGN.md v1.1 §5.2).
+  router.post("/api/component/:id/element/:path/move", asyncHandler(async (req, res) => {
+    const { id, path } = req.params;
+    const { position, target_path } = req.body || {};
+    if (position !== "before" && position !== "after") {
+      throw new HttpError(400, "position must be 'before' or 'after'");
+    }
+    if (typeof target_path !== "string" || !target_path) {
+      throw new HttpError(400, "target_path (string) is required");
+    }
+    const ok = designService.moveArrayItem(id, path, position, target_path, "user");
+    if (!ok) {
+      throw new HttpError(400, "Move failed: paths must share the same props array");
+    }
+    res.json({ success: true, id, path, position, target_path });
+  }));
 
     // API: Promote a selected inner element to an independent child component
     // (DESIGN.md v1.1 §5.2). Optional body: { type?: string }
@@ -242,6 +260,44 @@ export function registerComponentsRoutes(): express.Router {
     res.json({ success: true, id, mode });
   }));
 
+  // API: Reparent a component (组件任意组合 P2): move it into another
+  // component as a child, or back to the top level when parent_id is null.
+  router.post("/api/component/:id/reparent", asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { parent_id } = req.body || {};
+    if (parent_id !== null && typeof parent_id !== "string") {
+      throw new HttpError(400, "parent_id must be a component id string or null");
+    }
+    const ok = stateStore.reparentComponent(id, parent_id || null, "user");
+    if (!ok) {
+      throw new HttpError(400, `Reparent failed: ${id} → ${parent_id || "top-level"} (missing ids or invalid nesting)`);
+    }
+    res.json({ success: true, id, parent_id: parent_id || null });
+  }));
+
+  // API: Group 2+ top-level components into a container (成组 P2)
+  router.post("/api/components/group", asyncHandler(async (req, res) => {
+    const { ids } = req.body || {};
+    if (!Array.isArray(ids) || ids.length < 2 || !ids.every((x) => typeof x === "string")) {
+      throw new HttpError(400, "ids must be an array of ≥ 2 component id strings");
+    }
+    const group = stateStore.groupComponents(ids, "user");
+    if (!group) {
+      throw new HttpError(400, "Group failed: need ≥ 2 top-level components on the current page");
+    }
+    res.json({ success: true, group_id: group.id, count: ids.length });
+  }));
+
+  // API: Ungroup a container (解组 P2): children return to the top level.
+  router.post("/api/component/:id/ungroup", asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const ok = stateStore.ungroupComponents(id, "user");
+    if (!ok) {
+      throw new HttpError(404, `Ungroup failed: group ${id} not found`);
+    }
+    res.json({ success: true, id });
+  }));
+
   // API: Undo
   router.post("/api/undo", asyncHandler(async (_req, res) => {
     const success = designService.undo();
@@ -297,6 +353,38 @@ export function registerComponentsRoutes(): express.Router {
     }
     const node = designService.addComponent(type, variant, props || {}, parent_id || null, "ai");
     res.json({ success: true, id: node.id, type: node.type });
+  }));
+
+  // API: V2.0 多断点编辑 — set the desktop base style of a component
+  router.post("/api/component/:id/base-style", asyncHandler(async (req, res) => {
+    const { style } = req.body || {};
+    if (!style || typeof style !== "object") {
+      throw new HttpError(400, "style object is required");
+    }
+    const ok = stateStore.setBaseStyle(req.params.id, style, "user");
+    if (!ok) throw new HttpError(404, `Component ${req.params.id} not found`);
+    res.json({ success: true, id: req.params.id });
+  }));
+
+  // API: V2.0 多断点编辑 — set a breakpoint's diff style (tablet / mobile only)
+  router.post("/api/component/:id/breakpoint-style", asyncHandler(async (req, res) => {
+    const { breakpoint, style } = req.body || {};
+    if (!isBreakpoint(String(breakpoint || "")) || breakpoint === "desktop") {
+      throw new HttpError(400, "breakpoint must be tablet or mobile");
+    }
+    if (!style || typeof style !== "object") {
+      throw new HttpError(400, "style object is required");
+    }
+    const ok = stateStore.setBreakpointOverride(req.params.id, breakpoint, style, "user");
+    if (!ok) throw new HttpError(404, `Component ${req.params.id} not found`);
+    res.json({ success: true, id: req.params.id, breakpoint });
+  }));
+
+  // API: V2.0 时间线 — append a timeline animation block to a component
+  router.post("/api/component/:id/animation", asyncHandler(async (req, res) => {
+    const anim = stateStore.addTimelineAnimation(req.params.id, req.body || {}, "user");
+    if (!anim) throw new HttpError(404, `Component ${req.params.id} not found`);
+    res.json({ success: true, animation: anim });
   }));
 
   // API: Add a review comment

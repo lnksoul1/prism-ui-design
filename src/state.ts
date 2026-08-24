@@ -1,5 +1,6 @@
 import { EventEmitter } from "events";
 import { getContrastRatio } from "./utils/color.js";
+import { isBreakpoint as isBreakpointSafe } from "./responsive.js";
 
 // ===== Design State Types =====
 
@@ -32,6 +33,12 @@ export interface ComponentNode {
   animation?: AnimationDef;
   /** Product definition v2 — 行为模型: any component can carry an interaction. */
   behavior?: ComponentBehavior;
+  /** V2.0 多断点编辑: 桌面基线样式（键为 camelCase CSS 属性名）。 */
+  baseStyle?: Record<string, string>;
+  /** V2.0 多断点编辑: 非 desktop 断点仅存与基线的差异值。 */
+  breakpointOverrides?: Partial<Record<import("./responsive.js").Breakpoint, Record<string, string>>>;
+  /** V2.0 动效时间线: 多轨道动效块（旧 animation 字段继续兼容，见 resolveAnimations）。 */
+  animations?: TimelineAnimation[];
   /**
    * 元素级编辑 (P1): per-inner-element metadata keyed by the element's prop
    * path (e.g. "title", "button_text", "items.0.title"). Lets inner rendered
@@ -57,7 +64,16 @@ export interface ElementMeta {
   behavior?: ComponentBehavior;
   /** Type promotion: render the element as a button / link / plain text. */
   kind?: "text" | "button" | "link";
+  /** 元素级 CSS 覆盖 (DESIGN.md v1.1 §5.2): width / fontSize / color 等。 */
+  css?: Record<string, string>;
 }
+
+/** Safe CSS property whitelist for element-level overrides. */
+const ELEMENT_CSS_PROPS = new Set([
+  "width", "maxWidth", "height", "fontSize", "fontWeight", "color", "background",
+  "borderRadius", "border", "margin", "padding", "textAlign", "lineHeight",
+  "letterSpacing", "opacity", "textDecoration", "flex",
+]);
 
 export const ELEMENT_KINDS = ["text", "button", "link"] as const;
 export type ElementKind = (typeof ELEMENT_KINDS)[number];
@@ -187,6 +203,33 @@ export interface AnimationDef {
   };
 }
 
+/** V2.0 动效时间线数据模型（M1 仅数据层，时间轴 UI 在 M4）。 */
+export interface TimelineAnimation {
+  id: string;
+  trackId: string;
+  startTime: number;
+  duration: number;
+  preset: string;
+  engine?: "css" | "gsap";
+  params?: Record<string, number | string | boolean>;
+}
+
+/** 归一化：旧的单 animation 字段映射为 track "main" 上的一个动效块。 */
+export function resolveAnimations(node: ComponentNode): TimelineAnimation[] {
+  const out: TimelineAnimation[] = [...(node.animations || [])];
+  if (node.animation) {
+    out.push({
+      id: `${node.id}-legacy`,
+      trackId: "main",
+      startTime: node.animation.delay || 0,
+      duration: node.animation.duration || 600,
+      preset: node.animation.entry || node.animation.hover || node.animation.exit || "fadeIn",
+      engine: node.animation.engine || "css",
+    });
+  }
+  return out;
+}
+
 export interface ComponentLayout {
   x: number;
   y: number;
@@ -223,10 +266,6 @@ export interface DesignState {
   comments: DesignComment[];
   pageLinks: PageLink[];
   revision: number;
-  /** tldraw canvas snapshots keyed by page id (方案A canvas-first editing). */
-  canvasDocs: Record<string, unknown>;
-  /** AI draw commands waiting to be applied to each page's canvas. */
-  canvasDraws: Record<string, CanvasDraw[]>;
   /** 导入记录: pageId → provenance of the "导入 → 调整 → 一键应用" pipeline. */
   imports: Record<string, ImportRecord>;
   /** Upgrade plan U1: smooth scroll configuration (Lenis). */
@@ -315,21 +354,6 @@ export interface PageLink {
   source_component_id?: string;
 }
 
-/** A simple drawing command queued by the AI (`design_draw_canvas`). */
-export interface CanvasDraw {
-  id: string;
-  type: "rect" | "text" | "arrow" | "image" | "prism";
-  x: number;
-  y: number;
-  w?: number;
-  h?: number;
-  label?: string;
-  src?: string;
-  color?: string;
-  kind?: string;
-  createdAt: string;
-}
-
 // ===== State Store (Singleton) =====
 
 /**
@@ -355,10 +379,6 @@ type StoredState = {
   comments: DesignComment[];
   pageLinks: PageLink[];
   revision: number;
-  /** tldraw canvas snapshots keyed by page id (方案A canvas-first editing). */
-  canvasDocs: Record<string, unknown>;
-  /** AI draw commands waiting to be applied to each page's canvas. */
-  canvasDraws: Record<string, CanvasDraw[]>;
   /** 导入记录: pageId → provenance of the "导入 → 调整 → 一键应用" pipeline. */
   imports: Record<string, ImportRecord>;
   /** Upgrade plan U1: smooth scroll configuration (Lenis). */
@@ -420,8 +440,6 @@ export class DesignStateStore extends EventEmitter {
       comments: [],
       pageLinks: [],
       revision: 0,
-      canvasDocs: {},
-      canvasDraws: {},
       imports: {},
     };
     // Initialize history with the initial state
@@ -727,6 +745,11 @@ export class DesignStateStore extends EventEmitter {
       const parent = this.findComponent(parentId);
       if (parent) {
         parent.children.push(node);
+      } else {
+        // Parent not found (e.g. removed concurrently) — append to page root
+        // instead of silently dropping the new node.
+        const page = this.currentPage();
+        if (page) page.components.push(node);
       }
     } else {
       const page = this.currentPage();
@@ -823,6 +846,49 @@ export class DesignStateStore extends EventEmitter {
     this.logActivity("duplicate_component", copy.type, `Duplicated ${copy.type} (${id} → ${copy.id})`, source);
     this.commit({ type: "duplicateComponent", id, newId: copy.id });
     return copy;
+  }
+
+  /** V2.0 多断点编辑: 设置桌面基线样式（全量替换）。 */
+  setBaseStyle(id: string, style: Record<string, string>, source: "ai" | "user" = "user"): boolean {
+    const node = this.findComponent(id);
+    if (!node) return false;
+    node.baseStyle = { ...style };
+    this.logActivity("set_base_style", node.type, `Base style set on ${id}`, source);
+    this.commit({ type: "setBaseStyle", id });
+    return true;
+  }
+
+  /** V2.0 多断点编辑: 设置某断点的差异样式（merge 到该断点已有差异上）。 */
+  setBreakpointOverride(
+    id: string,
+    bp: import("./responsive.js").Breakpoint,
+    style: Record<string, string>,
+    source: "ai" | "user" = "user"
+  ): boolean {
+    if (!isBreakpointSafe(bp)) return false;
+    const node = this.findComponent(id);
+    if (!node) return false;
+    node.breakpointOverrides = {
+      ...node.breakpointOverrides,
+      [bp]: { ...(node.breakpointOverrides?.[bp] || {}), ...style },
+    };
+    this.logActivity("set_breakpoint_style", node.type, `${bp} override set on ${id}`, source);
+    this.commit({ type: "setBreakpointOverride", id, breakpoint: bp });
+    return true;
+  }
+
+  /** V2.0 时间线: 向组件追加一个动效块。 */
+  addTimelineAnimation(componentId: string, anim: Omit<TimelineAnimation, "id"> & { id?: string }, source: "ai" | "user" = "user"): TimelineAnimation | null {
+    const node = this.findComponent(componentId);
+    if (!node) return null;
+    const entry: TimelineAnimation = {
+      ...anim,
+      id: anim.id || `anim_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    };
+    node.animations = [...(node.animations || []), entry];
+    this.logActivity("add_timeline_animation", node.type, `Animation "${entry.preset}" on track ${entry.trackId}`, source);
+    this.commit({ type: "addTimelineAnimation", id: componentId, animationId: entry.id });
+    return entry;
   }
 
   setAnimation(
@@ -923,7 +989,7 @@ export class DesignStateStore extends EventEmitter {
   setElementMeta(
     componentId: string,
     path: string,
-    meta: { behavior?: ComponentBehavior | null; kind?: ElementKind | null } | null,
+    meta: { behavior?: ComponentBehavior | null; kind?: ElementKind | null; css?: Record<string, string> | null } | null,
     source: "ai" | "user" = "user"
   ): boolean {
     const node = this.findComponent(componentId);
@@ -950,6 +1016,22 @@ export class DesignStateStore extends EventEmitter {
           delete next.kind;
         }
       }
+      if (meta.css !== undefined) {
+        if (meta.css === null) {
+          delete next.css;
+        } else if (typeof meta.css === "object") {
+          // Merge semantics: empty value removes the property, unknown or
+          // oversized values are dropped (whitelist above).
+          const merged: Record<string, string> = { ...(next.css || {}) };
+          for (const [prop, value] of Object.entries(meta.css)) {
+            if (!ELEMENT_CSS_PROPS.has(prop) || typeof value !== "string" || value.length > 200) continue;
+            if (value.length === 0) delete merged[prop];
+            else merged[prop] = value;
+          }
+          if (Object.keys(merged).length > 0) next.css = merged;
+          else delete next.css;
+        }
+      }
       if (Object.keys(next).length === 0) {
         delete node.elementMeta[path];
       } else {
@@ -964,6 +1046,83 @@ export class DesignStateStore extends EventEmitter {
       source
     );
     this.commit({ type: "setElementMeta", componentId, path, meta: meta || null });
+    return true;
+  }
+
+  /**
+   * 内部元素拖拽排序 (DESIGN.md v1.1 §5.2): move the array item backing the
+   * element at `path` before/after the item backing `targetPath`. Both paths
+   * must live in the same props array (e.g. "items.0.title" ↔ "items.2.title").
+   * elementMeta keys are remapped so element-level edits follow their item.
+   * One commit = one undo step.
+   */
+  moveArrayItem(
+    componentId: string,
+    path: string,
+    position: "before" | "after",
+    targetPath: string,
+    source: "ai" | "user" = "user"
+  ): boolean {
+    const node = this.findComponent(componentId);
+    if (!node || !node.props || !path || !targetPath || path === targetPath) return false;
+    const splitArrayPath = (p: string): { prefix: string; index: number } | null => {
+      const segs = p.split(".");
+      let lastNum = -1;
+      for (let i = segs.length - 1; i >= 0; i--) {
+        if (/^\d+$/.test(segs[i])) { lastNum = i; break; }
+      }
+      if (lastNum <= 0) return null; // 数组前缀不能为空（"0.x" 不是合法元素路径）
+      return { prefix: segs.slice(0, lastNum).join("."), index: parseInt(segs[lastNum], 10) };
+    };
+    const a = splitArrayPath(path);
+    const b = splitArrayPath(targetPath);
+    if (!a || !b || a.prefix !== b.prefix) return false;
+
+    // Walk to the array parent through props (object keys / array indices).
+    const segs = a.prefix.split(".");
+    let container: unknown = node.props;
+    for (const seg of segs) {
+      if (Array.isArray(container)) container = container[parseInt(seg, 10)];
+      else if (container && typeof container === "object") container = (container as Record<string, unknown>)[seg];
+      else return false;
+    }
+    if (!Array.isArray(container)) return false;
+    const from = a.index;
+    const to = b.index;
+    if (from === to || from < 0 || from >= container.length || to < 0 || to >= container.length) return false;
+    const [item] = container.splice(from, 1);
+    const insertAt = position === "after" ? (from < to ? to : to + 1) : (from < to ? to - 1 : to);
+    container.splice(Math.max(0, Math.min(container.length, insertAt)), 0, item);
+
+    // Remap elementMeta keys under the moved item's index.
+    // Move semantics (post-removal insertAt): old[from] → insertAt;
+    // from < insertAt: old (from, insertAt] → idx-1;
+    // from > insertAt: old [insertAt, from) → idx+1; others unchanged.
+    if (node.elementMeta) {
+      const remapped: Record<string, ElementMeta> = {};
+      const mapIndex = (idx: number): number => {
+        if (idx === from) return insertAt;
+        if (from < insertAt && idx > from && idx <= insertAt) return idx - 1;
+        if (from > insertAt && idx >= insertAt && idx < from) return idx + 1;
+        return idx;
+      };
+      const prefixRe = new RegExp(`^${a.prefix.replace(/[.\\]/g, "\\$&")}\\.(\\d+)`);
+      for (const [key, meta] of Object.entries(node.elementMeta)) {
+        const m = prefixRe.exec(key);
+        if (!m) { remapped[key] = meta; continue; }
+        const nextIdx = mapIndex(parseInt(m[1], 10));
+        remapped[key.replace(prefixRe, `${a.prefix}.${nextIdx}`)] = meta;
+      }
+      node.elementMeta = remapped;
+    }
+
+    this.logActivity(
+      "move_array_item",
+      node.type,
+      `${node.type} 元素 "${path}" 移动到 ${position} "${targetPath}"`,
+      source
+    );
+    this.commit({ type: "moveArrayItem", componentId, path, position, targetPath });
     return true;
   }
 
@@ -1337,7 +1496,7 @@ export class DesignStateStore extends EventEmitter {
 
     switch (mode) {
       case "left":
-        apply((b) => ({ x: minX }));
+        apply((_b) => ({ x: minX }));
         break;
       case "center_x":
         apply((b) => ({ x: (minX + maxX) / 2 - b.w / 2 }));
@@ -1346,7 +1505,7 @@ export class DesignStateStore extends EventEmitter {
         apply((b) => ({ x: maxX - b.w }));
         break;
       case "top":
-        apply((b) => ({ y: minY }));
+        apply((_b) => ({ y: minY }));
         break;
       case "center_y":
         apply((b) => ({ y: (minY + maxY) / 2 - b.h / 2 }));
@@ -1531,7 +1690,6 @@ export class DesignStateStore extends EventEmitter {
     if (idx === -1) return false;
 
     this.state.pages.splice(idx, 1);
-    delete this.state.canvasDocs[pageId];
 
     if (this.state.currentPageId === pageId) {
       const newPage = this.state.pages[0];
@@ -1705,8 +1863,6 @@ export class DesignStateStore extends EventEmitter {
     this.state.pages = [defaultPage];
     this.state.currentPageId = defaultPage.id;
     this.state.themeMode = "light";
-    this.state.canvasDocs = {};
-    this.state.canvasDraws = {};
     this.state.imports = {};
     this.state.scroll = undefined;
     this.state.vantaBackgrounds = undefined;
@@ -1769,14 +1925,6 @@ export class DesignStateStore extends EventEmitter {
       comments: Array.isArray(snapshot.comments) ? snapshot.comments.slice(0, 200) : [],
       pageLinks: Array.isArray(snapshot.pageLinks) ? snapshot.pageLinks.slice(0, 500) : [],
       revision: typeof snapshot.revision === "number" ? snapshot.revision : 0,
-      canvasDocs:
-        snapshot.canvasDocs && typeof snapshot.canvasDocs === "object"
-          ? JSON.parse(JSON.stringify(snapshot.canvasDocs))
-          : {},
-      canvasDraws:
-        snapshot.canvasDraws && typeof snapshot.canvasDraws === "object"
-          ? JSON.parse(JSON.stringify(snapshot.canvasDraws))
-          : {},
       imports:
         snapshot.imports && typeof snapshot.imports === "object"
           ? JSON.parse(JSON.stringify(snapshot.imports))
@@ -1855,8 +2003,6 @@ export class DesignStateStore extends EventEmitter {
       comments: [],
       pageLinks: [],
       revision: 0,
-      canvasDocs: {},
-      canvasDraws: {},
       imports: {},
       scroll: undefined,
       vantaBackgrounds: undefined,
@@ -1915,23 +2061,6 @@ export class DesignStateStore extends EventEmitter {
     this.emit("prompt_executed", { summary, action });
   }
 
-  // ===== Canvas Documents (方案A canvas-first editing) =====
-
-  /** Save a tldraw snapshot for a page. Stored opaquely as JSON. */
-  saveCanvasDoc(pageId: string, doc: unknown, source: "ai" | "user" = "user"): void {
-    this.state.canvasDocs[pageId] = JSON.parse(JSON.stringify(doc ?? null));
-    this.logActivity("save_canvas", "canvas", `Saved canvas for page ${pageId}`, source);
-    this.commit({ type: "canvasSave", pageId });
-  }
-
-  /** Return a deep copy of the canvas doc for a page (defaults to current). */
-  getCanvasDoc(pageId?: string | null): unknown | null {
-    const pid = pageId || this.state.currentPageId;
-    if (!pid) return null;
-    const doc = this.state.canvasDocs[pid];
-    return doc ? JSON.parse(JSON.stringify(doc)) : null;
-  }
-
   /**
    * Replace a page's component tree (used by "apply canvas to preview").
    * Recorded in undo history like any other mutation.
@@ -1951,58 +2080,6 @@ export class DesignStateStore extends EventEmitter {
       source
     );
     this.commit({ type: "replaceComponents", pageId, count: components.length });
-    return true;
-  }
-
-  /**
-   * Queue AI draw commands for a page (defaults to the current page). The
-   * browser canvas applies them on next load or via live WS broadcast.
-   */
-  addCanvasDraws(
-    draws: Array<Partial<CanvasDraw>>,
-    pageId?: string | null,
-    source: "ai" | "user" = "ai"
-  ): CanvasDraw[] {
-    const pid = pageId || this.state.currentPageId;
-    if (!pid || !Array.isArray(draws) || draws.length === 0) return [];
-    const now = new Date().toISOString();
-    const normalized: CanvasDraw[] = draws
-      .filter((d) => d && typeof d.type === "string")
-      .map((d) => ({
-        id: d.id || `draw_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-        type: (d.type as CanvasDraw["type"]) || "rect",
-        x: typeof d.x === "number" ? d.x : 0,
-        y: typeof d.y === "number" ? d.y : 0,
-        w: typeof d.w === "number" ? d.w : undefined,
-        h: typeof d.h === "number" ? d.h : undefined,
-        label: typeof d.label === "string" ? d.label : undefined,
-        src: typeof d.src === "string" ? d.src : undefined,
-        color: typeof d.color === "string" ? d.color : undefined,
-        kind: typeof d.kind === "string" ? d.kind : undefined,
-        createdAt: d.createdAt || now,
-      }));
-    if (normalized.length === 0) return [];
-    this.state.canvasDraws[pid] = [...(this.state.canvasDraws[pid] || []), ...normalized];
-    this.logActivity("canvas_draw", "canvas", `Queued ${normalized.length} AI draw commands`, source);
-    this.commit({ type: "canvasDraw", pageId: pid, count: normalized.length });
-    return normalized;
-  }
-
-  /** Return queued draw commands for a page (defaults to current). */
-  getCanvasDraws(pageId?: string | null): CanvasDraw[] {
-    const pid = pageId || this.state.currentPageId;
-    if (!pid) return [];
-    return JSON.parse(JSON.stringify(this.state.canvasDraws[pid] || [])) as CanvasDraw[];
-  }
-
-  /** Clear the draw queue for a page (after the client applied them). */
-  clearCanvasDraws(pageId?: string | null, source: "ai" | "user" = "user"): boolean {
-    const pid = pageId || this.state.currentPageId;
-    if (!pid || !this.state.canvasDraws[pid]) return false;
-    const count = this.state.canvasDraws[pid].length;
-    delete this.state.canvasDraws[pid];
-    this.logActivity("canvas_draws_cleared", "canvas", `Cleared ${count} draw commands`, source);
-    this.commit({ type: "canvasDrawsCleared", pageId: pid, count });
     return true;
   }
 

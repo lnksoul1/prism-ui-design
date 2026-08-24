@@ -402,6 +402,11 @@ export class DesignStateStore extends EventEmitter {
   private historyIndex: number;
   private maxHistory: number = 50;
 
+  /** 批量操作深度：>0 时 commit 只暂存 change，endBatch 时统一入栈一次。 */
+  private batchDepth = 0;
+  private batchChange: unknown = null;
+  private batchSnapshot: StoredState | null = null;
+
   // Pending user prompt (from client dashboard)
   private pendingPrompt: string | null;
 
@@ -458,10 +463,45 @@ export class DesignStateStore extends EventEmitter {
   // ===== Undo / Redo =====
 
   /**
+   * M2 Command 层: 开启批量操作。批量内的所有 mutation 共享一次 commit
+   * （一个 undo 步）。失败时用 abortBatch 回滚到开启前快照。
+   */
+  beginBatch(): void {
+    if (this.batchDepth === 0) {
+      this.batchSnapshot = JSON.parse(JSON.stringify(this.state));
+    }
+    this.batchDepth++;
+  }
+
+  endBatch(change?: unknown): void {
+    this.batchDepth = Math.max(0, this.batchDepth - 1);
+    if (this.batchDepth === 0) {
+      const final = this.batchChange ?? change ?? { type: "batch" };
+      this.batchChange = null;
+      this.batchSnapshot = null;
+      this.commit(final);
+    }
+  }
+
+  abortBatch(): void {
+    if (this.batchSnapshot) {
+      this.state = JSON.parse(JSON.stringify(this.batchSnapshot));
+    }
+    this.batchDepth = 0;
+    this.batchChange = null;
+    this.batchSnapshot = null;
+  }
+
+  /**
    * Save post-mutation state to history and emit change event.
    * Called at the end of every mutating method.
    */
   private commit(change: unknown): void {
+    // M2: 批量进行中只暂存 change，由 endBatch 统一入栈
+    if (this.batchDepth > 0) {
+      this.batchChange = change;
+      return;
+    }
     // Monotonic revision for optimistic-concurrency conflict detection (C5).
     this.state.revision = (this.state.revision || 0) + 1;
     // Truncate any redo history

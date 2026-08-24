@@ -44,5 +44,26 @@ export function registerLayoutRoutes(): express.Router {
     res.json({ success: true, changed, grid: g });
   }));
 
+  // M2 智能布局: 确定性重排
+  router.post("/api/layout/smart", asyncHandler(async (req, res) => {
+    const { ids, grid, gap, container } = req.body || {};
+    if (!Array.isArray(ids) || ids.length === 0 || ids.some((v) => typeof v !== "string")) {
+      throw new HttpError(400, "ids must be a non-empty string array");
+    }
+    const opts = {
+      grid: typeof grid === "number" && grid > 0 && grid <= 128 ? grid : undefined,
+      gap: typeof gap === "number" && gap >= 0 && gap <= 200 ? gap : undefined,
+      container:
+        container && typeof container === "object" &&
+        typeof container.x === "number" && typeof container.y === "number" &&
+        typeof container.width === "number" && typeof container.height === "number"
+          ? container
+          : null,
+    };
+    const ok = stateStore.applySmartLayout(ids, opts, "user");
+    if (!ok) throw new HttpError(404, "No valid components found");
+    res.json({ success: true, count: ids.length, ...opts });
+  }));
+
   return router;
 }

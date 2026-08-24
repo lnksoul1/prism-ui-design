@@ -3,6 +3,7 @@ import { getContrastRatio } from "./utils/color.js";
 import { isBreakpoint as isBreakpointSafe } from "./responsive.js";
 import { runBatch } from "./commands/batch.js";
 import { snapToGrid } from "./layout/snap.js";
+import { smartLayout } from "./layout/smart.js";
 
 // ===== Design State Types =====
 
@@ -1610,6 +1611,35 @@ export class DesignStateStore extends EventEmitter {
       }
     });
     this.logActivity("snap_to_grid", "layout", `Snapped ${moved.length} components to ${grid}px grid`, source);
+    return true;
+  }
+
+  /**
+   * M2 智能布局: 对选中组件做确定性重排（等间距堆叠 + 左对齐 + 可选容器 clamp）。
+   */
+  applySmartLayout(
+    ids: string[],
+    options: { grid?: number; gap?: number; container?: { x: number; y: number; width: number; height: number } | null },
+    source: "ai" | "user" = "user"
+  ): boolean {
+    const targets = ids
+      .map((id) => this.findComponent(id))
+      .filter((c): c is ComponentNode => !!c);
+    if (targets.length === 0) return false;
+    const boxes = targets.map((c) => ({
+      id: c.id,
+      x: c.layout?.x ?? 0,
+      y: c.layout?.y ?? 0,
+      w: c.layout?.w ?? 320,
+      h: c.layout?.h ?? 80,
+    }));
+    const out = smartLayout(boxes, options);
+    runBatch("smart-layout", () => {
+      for (const b of out) {
+        this.updateComponent(b.id, {}, source, { x: b.x, y: b.y, w: b.w, h: b.h });
+      }
+    });
+    this.logActivity("smart_layout", "layout", `Smart layout applied to ${out.length} components`, source);
     return true;
   }
 

@@ -1,11 +1,28 @@
+import { useEffect } from "react";
+import { Topbar } from "./components/Topbar";
+import { DesignLibrary } from "./components/DesignLibrary";
+import { CanvasStage } from "./components/Canvas/CanvasStage";
+import { InspectorPanel } from "./components/Inspector/InspectorPanel";
+import { useDesignStore } from "./stores/design";
+import { connectPrismSocket } from "./ws/client";
+import { api } from "./api";
+import type { DesignStateView } from "./types";
+
 export function App() {
+  const applyServerState = useDesignStore((s) => s.applyServerState);
+
+  useEffect(() => {
+    void api.getState().then((raw) => applyServerState(raw as DesignStateView));
+    return connectPrismSocket();
+  }, [applyServerState]);
+
   return (
     <div className="app-shell">
-      <header className="topbar"><span className="logo">✦ Prism V2</span></header>
+      <Topbar />
       <div className="main-layout">
-        <aside className="panel panel-left">设计库（Task 6 实现）</aside>
-        <main className="canvas-host">画布（Task 7 实现）</main>
-        <aside className="panel panel-right">检查器（Task 8 实现）</aside>
+        <aside className="panel panel-left"><DesignLibrary /></aside>
+        <main className="canvas-host"><CanvasStage /></main>
+        <aside className="panel panel-right"><InspectorPanel /></aside>
       </div>
     </div>
   );

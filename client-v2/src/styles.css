@@ -17,3 +17,10 @@ body {
 .panel-left { width: 280px; }
 .panel-right { width: 300px; border-right: none; border-left: 1px solid rgba(0,0,0,0.08); }
 .canvas-host { flex: 1; overflow: auto; padding: 24px; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background: #bbb; }
+.status-dot.on { background: #22c55e; }
+.bp-switcher { display: flex; gap: 4px; margin-left: 8px; }
+.bp-btn { border: 1px solid rgba(0,0,0,0.12); background: transparent; padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+.bp-btn.active { background: #2383e2; color: #fff; border-color: #2383e2; }
+.spacer { flex: 1; }
+.toolbar-btn { border: 1px solid rgba(0,0,0,0.12); background: #fff; width: 30px; height: 28px; border-radius: 6px; cursor: pointer; }

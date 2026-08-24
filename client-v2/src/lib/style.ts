@@ -6,5 +6,5 @@ export type Breakpoint = "desktop" | "tablet" | "mobile";
 export function resolveStyle(node: ComponentNode, bp: Breakpoint): Record<string, string> {
   const base = { ...(node.baseStyle || {}) };
   if (bp === "desktop") return base;
-  return { ...base, ...(node.breakpointOverrides?.[bp] || {}) };
+  return { ...base, ...(node.breakpointOverrides?.[bp] || {}) } as Record<string, string>;
 }

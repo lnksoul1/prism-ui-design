@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { Topbar } from "./components/Topbar";
+import { AiPanel } from "./components/AiPanel";
 import { DesignLibrary } from "./components/DesignLibrary";
 import { CanvasStage } from "./components/Canvas/CanvasStage";
 import { InspectorPanel } from "./components/Inspector/InspectorPanel";
@@ -19,6 +20,7 @@ export function App() {
   return (
     <div className="app-shell">
       <Topbar />
+      <AiPanel />
       <div className="main-layout">
         <aside className="panel panel-left"><DesignLibrary /></aside>
         <main className="canvas-host"><CanvasStage /></main>

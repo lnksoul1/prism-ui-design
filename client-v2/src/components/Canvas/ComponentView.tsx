@@ -2,6 +2,7 @@ import type { CSSProperties, ReactNode } from "react";
 import type { ComponentNode } from "../../types";
 import { resolveStyle } from "../../lib/style";
 import { isBoxModeComponent } from "../../lib/boxMode";
+import { useDesignStore } from "../../stores/design";
 
 interface Props {
   node: ComponentNode;
@@ -13,6 +14,7 @@ interface Props {
 /** M1 渲染策略：已知类型给最小保真呈现，未知类型渲染带类型标签的占位盒。 */
 export function ComponentView({ node, selected, breakpoint, onSelect }: Props) {
   const layout = node.layout;
+  const cqWidth = useDesignStore((s) => s.cqWidth);
   const style: CSSProperties = {
     position: "absolute",
     left: layout?.x ?? 16,
@@ -20,6 +22,9 @@ export function ComponentView({ node, selected, breakpoint, onSelect }: Props) {
     width: layout?.w ?? 320,
     minHeight: layout?.h,
     ...(resolveStyle(node, breakpoint) as CSSProperties),
+    ...(selected && cqWidth !== null
+      ? { containerType: "inline-size" as const, width: cqWidth }
+      : {}),
   };
 
   const boxModeOn = isBoxModeComponent(node);

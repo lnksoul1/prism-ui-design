@@ -65,3 +65,7 @@ body {
 .ai-output { display: flex; flex-direction: column; gap: 4px; }
 .ai-stream { max-height: 120px; overflow: auto; background: #fafaf8; border-radius: 6px; padding: 8px; font-size: 11px; font-family: Consolas, monospace; color: #666; white-space: pre-wrap; }
 .ai-status { font-size: 12px; color: #2383e2; }
+.cq-toolbar { position: absolute; top: 8px; right: 16px; z-index: 10; display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; padding: 6px 10px; font-size: 12px; }
+.cq-label { display: flex; align-items: center; gap: 6px; color: #666; }
+.cq-value { min-width: 48px; text-align: right; color: #2383e2; font-weight: 600; }
+.cq-reset { border: 1px solid rgba(0,0,0,0.12); background: #fff; border-radius: 6px; padding: 3px 8px; cursor: pointer; font-size: 11px; }

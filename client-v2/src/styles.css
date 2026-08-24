@@ -1,0 +1,19 @@
+/* client-v2/src/styles.css — 三栏骨架（沿用 V2 设计的浅灰工作台风格） */
+* { box-sizing: border-box; margin: 0; }
+html, body, #root { height: 100%; }
+body {
+  font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  background: #f7f7f5; color: #1a1a1a;
+}
+.app-shell { display: flex; flex-direction: column; height: 100%; }
+.topbar {
+  display: flex; align-items: center; gap: 12px;
+  height: 48px; padding: 0 16px;
+  background: #ffffff; border-bottom: 1px solid rgba(0,0,0,0.08);
+}
+.logo { font-weight: 700; letter-spacing: 0.5px; }
+.main-layout { display: flex; flex: 1; min-height: 0; }
+.panel { background: #ffffff; border-right: 1px solid rgba(0,0,0,0.08); overflow-y: auto; }
+.panel-left { width: 280px; }
+.panel-right { width: 300px; border-right: none; border-left: 1px solid rgba(0,0,0,0.08); }
+.canvas-host { flex: 1; overflow: auto; padding: 24px; }

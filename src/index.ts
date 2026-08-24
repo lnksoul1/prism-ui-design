@@ -30,6 +30,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import express from "express";
+import fs from "fs";
 import http from "http";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -55,7 +56,6 @@ import { registerDesignTokensTool } from "./tools/design-tokens.js";
 import {
   registerAllDesignTools,
   exportDesign,
-  applyPageTemplate,
 } from "./tools/design-tools.js";
 
 // Project import module
@@ -222,6 +222,12 @@ app.use(express.json({ limit: "8mb" }));
 app.use(express.urlencoded({ extended: true, limit: "8mb" }));
 app.use(express.static(clientDir));
 app.use("/previews", express.static(previewsDir()));
+
+// V2.0 React 客户端（client-v2 构建产物），与旧客户端并行运行
+const clientV2Dist = path.resolve(__dirname, "../client-v2/dist");
+if (fs.existsSync(clientV2Dist)) {
+  app.use("/v2", express.static(clientV2Dist));
+}
 
 // Mount extracted route modules (P2.2)
 app.use(registerDesignLibraryRoutes());

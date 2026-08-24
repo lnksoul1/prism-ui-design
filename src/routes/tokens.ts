@@ -1,6 +1,7 @@
 import express from "express";
 import { stateStore } from "../state.js";
 import * as designService from "../service/design-service.js";
+import { buildTokenUsage } from "../token-usage.js";
 import { asyncHandler, HttpError } from "./shared.js";
 
 // Token / theme / conflict routes
@@ -35,6 +36,12 @@ export function registerTokensRoutes(): express.Router {
   router.get("/api/conflicts", asyncHandler(async (_req, res) => {
     const conflicts = stateStore.getTokenConflicts();
     res.json({ conflicts, count: conflicts.length });
+  }));
+
+  // V2.0 Token 治理: tokenId → 引用组件反向索引
+  router.get("/api/token-usage", asyncHandler(async (_req, res) => {
+    const usage = buildTokenUsage(stateStore.getState());
+    res.json({ success: true, usage });
   }));
 
   return router;

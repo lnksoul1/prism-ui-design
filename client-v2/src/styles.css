@@ -24,3 +24,14 @@ body {
 .bp-btn.active { background: #2383e2; color: #fff; border-color: #2383e2; }
 .spacer { flex: 1; }
 .toolbar-btn { border: 1px solid rgba(0,0,0,0.12); background: #fff; width: 30px; height: 28px; border-radius: 6px; cursor: pointer; }
+.design-library { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.panel-title { font-size: 13px; font-weight: 600; color: #666; }
+.tool-search { border: 1px solid rgba(0,0,0,0.12); border-radius: 6px; padding: 6px 10px; font-size: 13px; }
+.lib-section { display: flex; flex-direction: column; gap: 4px; }
+.lib-section-title { font-size: 12px; color: #999; margin-top: 6px; }
+.lib-item { display: flex; flex-direction: column; text-align: left; gap: 2px; border: 1px solid rgba(0,0,0,0.1); background: #fff; border-radius: 8px; padding: 8px 10px; cursor: pointer; }
+.lib-item:hover { border-color: #2383e2; }
+.lib-item-name { font-size: 13px; font-weight: 500; }
+.lib-item-desc { font-size: 11px; color: #999; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lib-error { padding: 12px; color: #d4380d; font-size: 13px; }
+.lib-loading { padding: 12px; color: #999; font-size: 13px; }

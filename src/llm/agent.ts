@@ -13,7 +13,7 @@
 import { stateStore, type ComponentNode } from "../state.js";
 import { applyStyleTokenSet } from "../tokens.js";
 import { COMPONENT_TYPES } from "../service/design-service.js";
-import { chatCompletion, LlmError, type ChatMessage } from "./providers.js";
+import { chatCompletion, streamChatCompletion, LlmError, type ChatMessage } from "./providers.js";
 import type { LlmConfig } from "./config.js";
 
 export interface SpecComponent {
@@ -177,6 +177,46 @@ export function applySpec(spec: PageSpec): { nodes: ComponentNode[]; targetPageI
     stateStore.replacePageComponents(targetPageId, nodes, "ai");
   }
   return { nodes, targetPageId };
+}
+
+/**
+ * M2 NL2UI 流式: 流式生成页面。onDelta 收到原始 token 流（前端实时展示），
+ * 完成后解析并应用（复用 parseSpec/applySpec，与同步路径完全同一语义）。
+ */
+export async function streamPageGeneration(
+  prompt: string,
+  cfg: LlmConfig,
+  onDelta: (text: string) => void
+): Promise<LlmGenerateResult> {
+  try {
+    const messages: ChatMessage[] = [
+      { role: "system", content: buildSystemPrompt() },
+      { role: "user", content: buildUserPrompt(prompt) },
+    ];
+    const raw = await streamChatCompletion(messages, cfg, onDelta);
+    const spec = parseSpec(raw);
+    if (!spec) {
+      throw new LlmError("AI 输出无法解析为页面 JSON");
+    }
+    const { nodes, targetPageId } = applySpec(spec);
+    const count = countNodes(nodes);
+    return {
+      ok: true,
+      component_count: count,
+      page_count: stateStore.getState().pages.length,
+      page_id: targetPageId,
+      summary: `AI 已流式生成${spec.page === "new" ? "新页面" : "页面"}（${count} 个组件）`,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      component_count: 0,
+      page_count: stateStore.getState().pages.length,
+      page_id: null,
+      summary: "",
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
 }
 
 /**

@@ -1,6 +1,8 @@
 import { test, describe, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { streamChatCompletion } from "../src/llm/providers.js";
+import { streamPageGeneration } from "../src/llm/agent.js";
+import { stateStore } from "../src/state.js";
 import type { LlmConfig } from "../src/llm/config.js";
 
 const openaiCfg = {
@@ -93,5 +95,43 @@ describe("streamChatCompletion", () => {
       () => streamChatCompletion([{ role: "user", content: "x" }], openaiCfg, () => {}),
       /为空/
     );
+  });
+});
+
+describe("streamPageGeneration", () => {
+  test("streams deltas then applies the parsed spec", async () => {
+    stateStore.resetForTests();
+    const spec = {
+      page: "current",
+      template: null,
+      style: null,
+      base_color: null,
+      components: [{ type: "hero", props: { title: "流式标题" } }],
+    };
+    globalThis.fetch = (async () =>
+      new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { content: JSON.stringify(spec) } }] })}\n\ndata: [DONE]\n\n`,
+        { status: 200 }
+      )) as typeof fetch;
+    const deltas: string[] = [];
+    const result = await streamPageGeneration("做一个 hero", openaiCfg, (t) => deltas.push(t));
+    assert.equal(result.ok, true);
+    assert.equal(result.component_count, 1);
+    assert.ok(deltas.length >= 1);
+    const applied = JSON.stringify(stateStore.getState().components);
+    assert.ok(applied.includes("流式标题"));
+  });
+
+  test("unparseable output reports error without applying", async () => {
+    stateStore.resetForTests();
+    globalThis.fetch = (async () =>
+      new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "不是JSON" } }] })}\n\ndata: [DONE]\n\n`,
+        { status: 200 }
+      )) as typeof fetch;
+    const result = await streamPageGeneration("x", openaiCfg, () => {});
+    assert.equal(result.ok, false);
+    assert.match(result.error || "", /解析/);
+    assert.equal(stateStore.getState().components.length, 0);
   });
 });

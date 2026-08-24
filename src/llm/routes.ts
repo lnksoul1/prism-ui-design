@@ -5,6 +5,7 @@
  *   PUT  /api/llm/config    — save provider/key/model (key kept if omitted)
  *   POST /api/llm/test      — one-shot connectivity check
  *   POST /api/llm/generate  — synchronous page generation from a prompt
+ *   POST /api/llm/stream    — SSE streaming generation (delta/done/error events)
  */
 
 import express from "express";
@@ -17,7 +18,7 @@ import {
   type LlmConfig,
 } from "./config.js";
 import { chatCompletion } from "./providers.js";
-import { generatePageFromPrompt } from "./agent.js";
+import { generatePageFromPrompt, streamPageGeneration } from "./agent.js";
 
 export function registerLlmRoutes(app: express.Express): void {
   // Current LLM config (masked key only)
@@ -104,5 +105,35 @@ export function registerLlmRoutes(app: express.Express): void {
       return;
     }
     res.json({ success: true, ...result });
+  });
+
+  // M2 NL2UI 流式: SSE 逐 token 推送，完成后应用页面
+  app.post("/api/llm/stream", async (req, res) => {
+    const { prompt } = (req.body || {}) as { prompt?: unknown };
+    const cfg = loadLlmConfig();
+    if (!cfg) {
+      res.status(400).json({ error: "未配置 LLM（请先在 AI 设置中填写 API Key）" });
+      return;
+    }
+    if (typeof prompt !== "string" || !prompt.trim()) {
+      res.status(400).json({ error: "Missing prompt" });
+      return;
+    }
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    });
+    const send = (event: string, data: unknown): void => {
+      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+    try {
+      const result = await streamPageGeneration(prompt, cfg, (text) => send("delta", { text }));
+      send("done", result);
+    } catch (err) {
+      send("error", { message: err instanceof Error ? err.message : String(err) });
+    } finally {
+      res.end();
+    }
   });
 }

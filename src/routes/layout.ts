@@ -1,6 +1,6 @@
 import express from "express";
 import { stateStore } from "../state.js";
-import { autoLayoutPages, autoLayoutTopLevel, ensureTopLevelLayouts } from "../layout-engine.js";
+import { autoLayoutPages, autoLayoutTopLevel } from "../layout-engine.js";
 import { asyncHandler, HttpError } from "./shared.js";
 
 /**
@@ -31,6 +31,17 @@ export function registerLayoutRoutes(): express.Router {
       stateStore.replacePageComponents(page.id, page.components, "user");
     }
     res.json({ success: true, pages: state.pages.length });
+  }));
+
+  // M2 智能布局: 网格吸附
+  router.post("/api/layout/snap", asyncHandler(async (req, res) => {
+    const { ids, grid } = req.body || {};
+    if (!Array.isArray(ids) || ids.length === 0 || ids.some((v) => typeof v !== "string")) {
+      throw new HttpError(400, "ids must be a non-empty string array");
+    }
+    const g = typeof grid === "number" && Number.isFinite(grid) && grid > 0 && grid <= 128 ? grid : 8;
+    const changed = stateStore.snapComponentsToGrid(ids, g, "user");
+    res.json({ success: true, changed, grid: g });
   }));
 
   return router;

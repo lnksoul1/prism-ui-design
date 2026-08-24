@@ -1,6 +1,8 @@
 import { EventEmitter } from "events";
 import { getContrastRatio } from "./utils/color.js";
 import { isBreakpoint as isBreakpointSafe } from "./responsive.js";
+import { runBatch } from "./commands/batch.js";
+import { snapToGrid } from "./layout/snap.js";
 
 // ===== Design State Types =====
 
@@ -1585,6 +1587,29 @@ export class DesignStateStore extends EventEmitter {
 
     this.logActivity("align_components", "component", `${mode} on ${targets.length} components`, source);
     this.commit({ type: "alignComponents", ids, mode });
+    return true;
+  }
+
+  /**
+   * M2 智能布局: 把多个组件的 x/y 吸附到网格（默认 8px）。
+   * 单个 undo 步（runBatch），返回是否有组件被实际修正。
+   */
+  snapComponentsToGrid(ids: string[], grid = 8, source: "ai" | "user" = "user"): boolean {
+    const results = snapToGrid(
+      ids
+        .map((id) => this.findComponent(id))
+        .filter((c): c is ComponentNode => !!c)
+        .map((c) => ({ id: c.id, layout: c.layout })),
+      grid
+    );
+    const moved = results.filter((r) => r.from.x !== r.to.x || r.from.y !== r.to.y);
+    if (moved.length === 0) return results.length > 0;
+    runBatch("snap-to-grid", () => {
+      for (const r of moved) {
+        this.updateComponent(r.id, {}, source, { x: r.to.x, y: r.to.y });
+      }
+    });
+    this.logActivity("snap_to_grid", "layout", `Snapped ${moved.length} components to ${grid}px grid`, source);
     return true;
   }
 

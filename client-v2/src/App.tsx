@@ -7,6 +7,7 @@ import { InspectorPanel } from "./components/Inspector/InspectorPanel";
 import { useDesignStore } from "./stores/design";
 import { connectPrismSocket } from "./ws/client";
 import { api } from "./api";
+import { getCollab } from "./collab/collab";
 import type { DesignStateView } from "./types";
 
 export function App() {
@@ -14,6 +15,15 @@ export function App() {
 
   useEffect(() => {
     void api.getState().then((raw) => applyServerState(raw as DesignStateView));
+    if (import.meta.env.MODE !== "test") {
+      const { ydoc } = getCollab();
+      const rerender = (): void => {
+        const { baseState, applyServerState: apply } = useDesignStore.getState();
+        if (baseState) apply(baseState);
+      };
+      ydoc.getMap("components").observeDeep(rerender);
+      ydoc.getMap("index").observeDeep(rerender);
+    }
     return connectPrismSocket();
   }, [applyServerState]);
 

@@ -1,11 +1,14 @@
 import { create } from "zustand";
 import type { DesignStateView } from "../types";
+import { collabMaps } from "../collab/collab";
+import { mergeCollabIntoState } from "../collab/project";
 
 export type Breakpoint = "desktop" | "tablet" | "mobile";
 const BREAKPOINTS: readonly Breakpoint[] = ["desktop", "tablet", "mobile"];
 
 interface DesignStore {
   state: DesignStateView | null;
+  baseState: DesignStateView | null;
   connected: boolean;
   selection: string[];
   breakpoint: Breakpoint;
@@ -22,11 +25,16 @@ interface DesignStore {
 
 export const useDesignStore = create<DesignStore>((set) => ({
   state: null,
+  baseState: null,
   connected: false,
   selection: [],
   breakpoint: "desktop",
   cqWidth: null,
-  applyServerState: (s) => set({ state: s }),
+  applyServerState: (s) =>
+    set((st) => {
+      const merged = mergeCollabIntoState(s, collabMaps());
+      return { baseState: s, state: merged ?? st.state };
+    }),
   setConnected: (v) => set({ connected: v }),
   select: (id) =>
     set((st) => (st.selection.includes(id) ? st : { selection: [...st.selection, id] })),

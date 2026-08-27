@@ -9,6 +9,7 @@ export default defineConfig({
     proxy: {
       "/api": { target: "http://localhost:3100", changeOrigin: true },
       "/ws": { target: "ws://localhost:3100", ws: true },
+      "/collab": { target: "ws://localhost:3100", ws: true },
     },
   },
   test: {

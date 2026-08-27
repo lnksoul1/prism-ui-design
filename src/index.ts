@@ -35,6 +35,8 @@ import http from "http";
 import path from "path";
 import { fileURLToPath } from "url";
 import { WebSocketServer, WebSocket } from "ws";
+import * as Y from "yjs";
+import { createCollabRoom, attachCollabConnection } from "./collab/server.js";
 import { SERVER_NAME, SERVER_VERSION } from "./constants.js";
 import { stateStore } from "./state.js";
 
@@ -210,7 +212,28 @@ registerPrompts(server);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const httpServer = http.createServer(app);
-const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
+const wss = new WebSocketServer({ noServer: true });
+
+// M3 协同: /collab Yjs 房间（与 /ws 广播通道并行，互不干扰）
+const collabDoc = new Y.Doc();
+const collabRoom = createCollabRoom(collabDoc);
+const collabWss = new WebSocketServer({ noServer: true });
+collabWss.on("connection", (ws: WebSocket) => attachCollabConnection(collabRoom, ws));
+
+// ws 8.x: 多个 WebSocketServer 直接挂同一 httpServer 时，路径不匹配的一方会对连接执行 abortHandshake，
+// 互相破坏（/ws 连接会被 /collab 监听器写坏并销毁）。因此统一在 upgrade 事件里按路径分发。
+httpServer.on("upgrade", (req, socket, head) => {
+  const url = req.url ?? "";
+  const index = url.indexOf("?");
+  const pathname = index === -1 ? url : url.slice(0, index);
+  if (pathname === "/collab") {
+    collabWss.handleUpgrade(req, socket, head, (ws) => collabWss.emit("connection", ws, req));
+  } else if (pathname === "/ws") {
+    wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, req));
+  } else {
+    socket.destroy();
+  }
+});
 
 // Connected dashboard clients (presence + cursor tracking)
 const wsClients = new Map<WebSocket, { id: string; joinedAt: string; cursor?: { x: number; y: number } }>();

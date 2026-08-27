@@ -412,6 +412,9 @@ export class DesignStateStore extends EventEmitter {
   private batchChange: unknown = null;
   private batchSnapshot: StoredState | null = null;
 
+  /** M3 协同: 远端变更投影时置位——此时 commit 走 commitCollab（不入 undo 历史）。 */
+  private suppressHistory = false;
+
   // Pending user prompt (from client dashboard)
   private pendingPrompt: string | null;
 
@@ -495,6 +498,20 @@ export class DesignStateStore extends EventEmitter {
     this.batchDepth = 0;
     this.batchChange = null;
     this.batchSnapshot = null;
+  }
+
+  /**
+   * M3 协同: 远端（Y.Doc）变更的提交通道。与 commit 的区别：不 push 快照历史
+   * （本地快照 undo 只回滚服务端写路径的操作，协同撤销由客户端 Y.UndoManager
+   * 负责——双轨语义见 M3 计划），revision 照常递增以驱动乐观并发检测。
+   */
+  private commitCollab(change: unknown): void {
+    if (this.batchDepth > 0) {
+      this.batchChange = change;
+      return;
+    }
+    this.state.revision = (this.state.revision || 0) + 1;
+    this.emit("change", change);
   }
 
   /**
@@ -1633,6 +1650,87 @@ export class DesignStateStore extends EventEmitter {
       }
     });
     this.logActivity("snap_to_grid", "layout", `Snapped ${moved.length} components to ${grid}px grid`, source);
+    return true;
+  }
+
+  /**
+   * M3 协同: 把 Y.Doc 侧（远端客户端）的组件变更投影进状态树。
+   * changed 中的 node 为平面表示（children 恒为 []）——已有组件做字段合并
+   * （不动 children），新组件按 parentId/index 插入，removed 直接摘除，
+   * 受影响的兄弟序列按 order（ydoc 全量索引）重排。
+   */
+  applyCollabEntries(
+    changed: Array<{ id: string; node: ComponentNode; parentId: string | null; pageId: string; index: number }>,
+    removedIds: string[],
+    order: Map<string, { parentId: string | null; pageId: string; index: number }>
+  ): boolean {
+    if (changed.length === 0 && removedIds.length === 0) return false;
+    const pages = this.state.pages;
+    const pageIds = new Set(pages.map((p) => p.id));
+    const touchedRootPages = new Set<string>();
+    const touchedParents = new Set<string>();
+
+    const detach = (id: string): void => {
+      const visit = (arr: ComponentNode[]): boolean => {
+        for (let i = 0; i < arr.length; i++) {
+          if (arr[i].id === id) {
+            arr.splice(i, 1);
+            return true;
+          }
+          if (visit(arr[i].children ?? [])) return true;
+        }
+        return false;
+      };
+      for (const page of pages) {
+        if (visit(page.components)) return;
+      }
+    };
+
+    for (const id of removedIds) {
+      const meta = order.get(id);
+      if (meta?.parentId) touchedParents.add(meta.parentId);
+      else if (meta) touchedRootPages.add(meta.pageId);
+      detach(id);
+    }
+
+    for (const e of changed) {
+      if (!pageIds.has(e.pageId)) continue;
+      const existing = this.findComponent(e.id);
+      if (existing) {
+        for (const [k, v] of Object.entries(e.node)) {
+          if (k !== "children") (existing as unknown as Record<string, unknown>)[k] = v;
+        }
+      } else {
+        const fresh = { ...(e.node as unknown as ComponentNode), children: [] as ComponentNode[] };
+        if (e.parentId) {
+          const parent = this.findComponent(e.parentId);
+          if (parent) {
+            parent.children = parent.children ?? [];
+            parent.children.push(fresh);
+          }
+        } else {
+          const page = pages.find((p) => p.id === e.pageId);
+          if (page) page.components.push(fresh);
+        }
+      }
+      if (e.parentId) touchedParents.add(e.parentId);
+      else touchedRootPages.add(e.pageId);
+    }
+
+    const sortSiblings = (arr: ComponentNode[]): void => {
+      arr.sort((a, b) => (order.get(a.id)?.index ?? 0) - (order.get(b.id)?.index ?? 0));
+    };
+    for (const pid of touchedParents) {
+      const parent = this.findComponent(pid);
+      if (parent?.children?.length) sortSiblings(parent.children);
+    }
+    for (const pageId of touchedRootPages) {
+      const page = pages.find((p) => p.id === pageId);
+      if (page) sortSiblings(page.components);
+    }
+
+    this.logActivity("collab_sync", "system", `Applied ${changed.length} changed / ${removedIds.length} removed components from collab`, "user");
+    this.commitCollab({ type: "collabSync" });
     return true;
   }
 

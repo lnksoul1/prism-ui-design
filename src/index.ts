@@ -36,6 +36,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { WebSocketServer, WebSocket } from "ws";
 import * as Y from "yjs";
+import { attachCollabBridge } from "./collab/bridge.js";
 import { createCollabRoom, attachCollabConnection } from "./collab/server.js";
 import { SERVER_NAME, SERVER_VERSION } from "./constants.js";
 import { stateStore } from "./state.js";
@@ -234,6 +235,9 @@ httpServer.on("upgrade", (req, socket, head) => {
     socket.destroy();
   }
 });
+
+// M3 协同: stateStore ↔ Y.Doc 双向桥（防回环 + 无历史投影）
+attachCollabBridge(collabDoc);
 
 // Connected dashboard clients (presence + cursor tracking)
 const wsClients = new Map<WebSocket, { id: string; joinedAt: string; cursor?: { x: number; y: number } }>();

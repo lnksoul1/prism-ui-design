@@ -12,7 +12,7 @@ describe("designStore", () => {
     act(() => {
       result.current.applyServerState({
         projectName: "P", style: "minimal", tokens: {},
-        components: [], pages: [], currentPageId: null, comments: [], revision: 3,
+        components: [], pages: [], currentPageId: null, comments: [], pageLinks: [], revision: 3,
       });
     });
     expect(useDesignStore.getState().state?.revision).toBe(3);

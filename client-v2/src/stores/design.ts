@@ -14,6 +14,9 @@ interface DesignStore {
   breakpoint: Breakpoint;
   /** M2 容器查询模拟: 模拟父容器宽度（px），null = 关闭。仅前端状态，不入 Schema。 */
   cqWidth: number | null;
+  /** M3 原型连线模式: 开启后点击组件设为连线源，点目标页 chip 建立跳转。 */
+  linkMode: boolean;
+  pendingLinkSource: string | null;
   applyServerState: (s: DesignStateView) => void;
   setConnected: (v: boolean) => void;
   select: (id: string) => void;
@@ -21,6 +24,8 @@ interface DesignStore {
   clearSelection: () => void;
   setBreakpoint: (bp: Breakpoint) => void;
   setCqWidth: (w: number | null) => void;
+  setLinkMode: (v: boolean) => void;
+  setPendingLinkSource: (id: string | null) => void;
 }
 
 export const useDesignStore = create<DesignStore>((set) => ({
@@ -30,6 +35,8 @@ export const useDesignStore = create<DesignStore>((set) => ({
   selection: [],
   breakpoint: "desktop",
   cqWidth: null,
+  linkMode: false,
+  pendingLinkSource: null,
   applyServerState: (s) =>
     set((st) => {
       const merged = mergeCollabIntoState(s, collabMaps());
@@ -42,6 +49,7 @@ export const useDesignStore = create<DesignStore>((set) => ({
   clearSelection: () => set({ selection: [] }),
   setBreakpoint: (bp) =>
     set((st) => ((BREAKPOINTS as readonly string[]).includes(bp) ? { breakpoint: bp } : st)),
-  setCqWidth: (w) =>
-    set({ cqWidth: typeof w === "number" && w >= 200 && w <= 1200 ? Math.round(w) : null }),
+  setCqWidth: (w) => set({ cqWidth: typeof w === "number" && w >= 200 && w <= 1200 ? Math.round(w) : null }),
+  setLinkMode: (v) => set({ linkMode: v, pendingLinkSource: null }),
+  setPendingLinkSource: (id) => set({ pendingLinkSource: id }),
 }));

@@ -8,6 +8,8 @@ export function Topbar() {
   const connected = useDesignStore((s) => s.connected);
   const breakpoint = useDesignStore((s) => s.breakpoint);
   const setBreakpoint = useDesignStore((s) => s.setBreakpoint);
+  const linkMode = useDesignStore((s) => s.linkMode);
+  const setLinkMode = useDesignStore((s) => s.setLinkMode);
 
   return (
     <header className="topbar">
@@ -25,6 +27,13 @@ export function Topbar() {
           </button>
         ))}
       </div>
+      <button
+        className={`toolbar-btn ${linkMode ? "active" : ""}`}
+        onClick={() => setLinkMode(!linkMode)}
+        title="原型连线模式"
+      >
+        ⇄
+      </button>
       <div className="spacer" />
       <button className="toolbar-btn" onClick={() => undo()} title="撤销（协同）">↶</button>
       <button className="toolbar-btn" onClick={() => redo()} title="重做（协同）">↷</button>

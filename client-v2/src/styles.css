@@ -77,3 +77,13 @@ body {
 .comment-text { font-size: 12px; margin-bottom: 6px; }
 .comment-actions { display: flex; gap: 6px; }
 .comment-actions button { border: 1px solid rgba(0,0,0,0.12); background: #fff; border-radius: 6px; padding: 3px 8px; cursor: pointer; font-size: 11px; }
+.link-layer { position: absolute; inset: 0; pointer-events: none; }
+.link-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.link-curve { pointer-events: auto; cursor: pointer; }
+.link-curve path { fill: none; stroke: #2383e2; stroke-width: 2; }
+.link-curve text { font-size: 11px; fill: #2383e2; }
+.page-chips { position: absolute; right: 8px; top: 40px; display: flex; flex-direction: column; gap: 8px; pointer-events: auto; }
+.page-chip { border: 1px solid rgba(0,0,0,0.15); background: #fff; border-radius: 6px; padding: 6px 12px; cursor: pointer; font-size: 12px; }
+.page-chip.targetable { border-color: #2383e2; color: #2383e2; }
+.link-hint { position: absolute; left: 8px; top: 8px; background: #2383e2; color: #fff; border-radius: 6px; padding: 4px 10px; font-size: 11px; }
+.toolbar-btn.active { background: #2383e2; color: #fff; }

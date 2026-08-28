@@ -14,6 +14,12 @@ async function get<T>(url: string): Promise<T> {
   return (await res.json()) as T;
 }
 
+async function del(url: string): Promise<unknown> {
+  const res = await fetch(url, { method: "DELETE" });
+  if (!res.ok) throw new Error(`${url} → ${res.status}`);
+  return res.json();
+}
+
 export const api = {
   getState: () => get<unknown>("/api/state"),
   undo: () => post("/api/undo", {}),
@@ -31,6 +37,9 @@ export const api = {
     post("/api/comment", { component_id: componentId, text, ...opts }),
   updateComment: (id: string, patch: { text?: string; resolved?: boolean; assignee?: string | null }) =>
     post(`/api/comment/${id}`, patch),
+  addPageLink: (body: { from_page_id: string; to_page_id: string; source_component_id?: string }) =>
+    post("/api/page-links", body),
+  removePageLink: (id: string) => del(`/api/page-links/${id}`),
 };
 
 /** M2 NL2UI 流式: 消费 /api/llm/stream 的 SSE，返回 done 事件的结果。 */

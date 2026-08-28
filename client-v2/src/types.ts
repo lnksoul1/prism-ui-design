@@ -30,6 +30,14 @@ export interface CommentView {
   updatedAt?: string;
 }
 
+export interface PageLinkView {
+  id: string;
+  from_page_id: string;
+  to_page_id: string;
+  label?: string;
+  source_component_id?: string;
+}
+
 export interface DesignStateView {
   projectName: string;
   style: string;
@@ -38,5 +46,6 @@ export interface DesignStateView {
   pages: Array<{ id: string; name: string; components: ComponentNode[] }>;
   currentPageId: string | null;
   comments: CommentView[];
+  pageLinks: PageLinkView[];
   revision: number;
 }

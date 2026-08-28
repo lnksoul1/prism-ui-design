@@ -69,3 +69,11 @@ body {
 .cq-label { display: flex; align-items: center; gap: 6px; color: #666; }
 .cq-value { min-width: 48px; text-align: right; color: #2383e2; font-weight: 600; }
 .cq-reset { border: 1px solid rgba(0,0,0,0.12); background: #fff; border-radius: 6px; padding: 3px 8px; cursor: pointer; font-size: 11px; }
+.comments-layer { position: absolute; inset: 0; pointer-events: none; }
+.comment-anchor { position: absolute; pointer-events: auto; }
+.comment-pin { width: 22px; height: 22px; border-radius: 50%; border: 1px solid #2383e2; background: #fff; color: #2383e2; cursor: pointer; font-size: 11px; line-height: 1; }
+.comment-popover { position: absolute; left: 26px; top: -6px; width: 200px; background: #fff; border: 1px solid rgba(0,0,0,0.12); border-radius: 8px; padding: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+.comment-meta { font-size: 11px; color: #888; margin-bottom: 4px; }
+.comment-text { font-size: 12px; margin-bottom: 6px; }
+.comment-actions { display: flex; gap: 6px; }
+.comment-actions button { border: 1px solid rgba(0,0,0,0.12); background: #fff; border-radius: 6px; padding: 3px 8px; cursor: pointer; font-size: 11px; }

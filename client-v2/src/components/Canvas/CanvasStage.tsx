@@ -1,5 +1,7 @@
 import { useDesignStore } from "../../stores/design";
+import { api } from "../../api";
 import { ComponentView } from "./ComponentView";
+import { CommentsLayer } from "./CommentsLayer";
 import type { ComponentNode } from "../../types";
 
 export function CanvasStage() {
@@ -30,6 +32,7 @@ export function CanvasStage() {
         />
       ))}
       {components.length === 0 && <div className="canvas-empty">从左侧设计库添加组件</div>}
+      <CommentsLayer page={page} />
       {selection.length === 1 && (
         <div className="cq-toolbar" onMouseDown={(e) => e.stopPropagation()}>
           <label className="cq-label">
@@ -43,6 +46,15 @@ export function CanvasStage() {
             <span className="cq-value">{cqWidth === null ? "关闭" : `${cqWidth}px`}</span>
           </label>
           <button className="cq-reset" onClick={() => setCqWidth(null)}>关闭容器模拟</button>
+          <button
+            className="cq-reset"
+            onClick={() => {
+              const text = prompt("评论内容：");
+              if (text) void api.addComment(selection[0], text, { x: 8, y: 8 });
+            }}
+          >
+            添加评论
+          </button>
         </div>
       )}
     </div>

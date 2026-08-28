@@ -17,6 +17,19 @@ export interface ComponentNode {
   boxMode?: { enabled: boolean; internalConfig: Record<string, unknown> };
 }
 
+export interface CommentView {
+  id: string;
+  component_id: string;
+  author: string;
+  text: string;
+  createdAt: string;
+  x?: number;
+  y?: number;
+  resolved?: boolean;
+  assignee?: string;
+  updatedAt?: string;
+}
+
 export interface DesignStateView {
   projectName: string;
   style: string;
@@ -24,6 +37,6 @@ export interface DesignStateView {
   components: ComponentNode[];
   pages: Array<{ id: string; name: string; components: ComponentNode[] }>;
   currentPageId: string | null;
-  comments: unknown[];
+  comments: CommentView[];
   revision: number;
 }

@@ -27,6 +27,10 @@ export const api = {
     post(`/api/component/${id}/breakpoint-style`, { breakpoint, style }),
   setBoxMode: (id: string, patch: { enabled?: boolean; internalConfig?: Record<string, unknown> }) =>
     post(`/api/component/${id}/box-mode`, patch),
+  addComment: (componentId: string, text: string, opts?: { x?: number; y?: number; assignee?: string }) =>
+    post("/api/comment", { component_id: componentId, text, ...opts }),
+  updateComment: (id: string, patch: { text?: string; resolved?: boolean; assignee?: string | null }) =>
+    post(`/api/comment/${id}`, patch),
 };
 
 /** M2 NL2UI 流式: 消费 /api/llm/stream 的 SSE，返回 done 事件的结果。 */

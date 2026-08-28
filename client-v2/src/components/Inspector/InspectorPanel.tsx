@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useDesignStore } from "../../stores/design";
-import { api } from "../../api";
+import { editComponent } from "../../collab/edits";
 import { isBoxModeComponent } from "../../lib/boxMode";
 import type { ComponentNode } from "../../types";
 
@@ -41,11 +41,21 @@ function BoxModeSection({ node }: { node: ComponentNode }) {
   const [error, setError] = useState<string | null>(null);
   const [enabled, setEnabled] = useState(node.boxMode?.enabled ?? true);
 
+  const patchBoxMode = (patch: { enabled?: boolean; internalConfig?: Record<string, unknown> }): void => {
+    editComponent(node.id, (draft) => {
+      const prev = draft.boxMode as { enabled: boolean; internalConfig: Record<string, unknown> } | undefined;
+      draft.boxMode = {
+        enabled: patch.enabled ?? prev?.enabled ?? false,
+        internalConfig: { ...(prev?.internalConfig ?? {}), ...(patch.internalConfig ?? {}) },
+      };
+    });
+  };
+
   const commitJson = (): void => {
     try {
       const parsed = JSON.parse(json) as Record<string, unknown>;
       setError(null);
-      void api.setBoxMode(node.id, { enabled, internalConfig: parsed });
+      patchBoxMode({ enabled, internalConfig: parsed });
     } catch {
       setError("JSON 格式错误，未提交");
     }
@@ -61,7 +71,7 @@ function BoxModeSection({ node }: { node: ComponentNode }) {
           checked={enabled}
           onChange={(e) => {
             setEnabled(e.target.checked);
-            void api.setBoxMode(node.id, { enabled: e.target.checked });
+            patchBoxMode({ enabled: e.target.checked });
           }}
         />
       </label>
@@ -122,14 +132,21 @@ function StyleSection({ node, breakpoint }: { node: ComponentNode; breakpoint: s
 
   const commit = (key: string, value: string): void => {
     if (breakpoint === "desktop") {
-      void api.setBaseStyle(node.id, { ...draft, [key]: value });
+      const next = { ...draft, [key]: value };
+      editComponent(node.id, (entry) => {
+        const prev = (entry.baseStyle as Record<string, string> | undefined) ?? {};
+        entry.baseStyle = { ...prev, ...next };
+      });
     } else {
       // 断点模式只提交与基线不同的键
       const diff: Record<string, string> = {};
       for (const [k, v] of Object.entries({ ...draft, [key]: value })) {
         if (base[k] !== v) diff[k] = v;
       }
-      void api.setBreakpointStyle(node.id, breakpoint, diff);
+      editComponent(node.id, (entry) => {
+        const prev = (entry.breakpointOverrides as Record<string, Record<string, string>> | undefined) ?? {};
+        entry.breakpointOverrides = { ...prev, [breakpoint]: { ...(prev[breakpoint] ?? {}), ...diff } };
+      });
     }
   };
 
@@ -176,10 +193,17 @@ function NewStyleKeyInput({ node, breakpoint, draft, onAdd }: {
         const k = key.trim();
         if (!k || k in draft) return;
         if (breakpoint === "desktop") {
-          // setBaseStyle 为全量替换语义：带上已有样式键，避免覆盖丢失
-          void api.setBaseStyle(node.id, { ...draft, [k]: "" });
+          const next = { ...draft, [k]: "" };
+          editComponent(node.id, (entry) => {
+            const prev = (entry.baseStyle as Record<string, string> | undefined) ?? {};
+            entry.baseStyle = { ...prev, ...next };
+          });
         } else {
-          void api.setBreakpointStyle(node.id, breakpoint, { [k]: "" });
+          const next = { [k]: "" };
+          editComponent(node.id, (entry) => {
+            const prev = (entry.breakpointOverrides as Record<string, Record<string, string>> | undefined) ?? {};
+            entry.breakpointOverrides = { ...prev, [breakpoint]: { ...(prev[breakpoint] ?? {}), ...next } };
+          });
         }
         onAdd(k);
         setKey("");

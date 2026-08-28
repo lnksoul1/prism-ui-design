@@ -1,5 +1,5 @@
 import { useDesignStore } from "../stores/design";
-import { api } from "../api";
+import { undo, redo } from "../collab/edits";
 
 const BP_LABELS = { desktop: "桌面", tablet: "平板", mobile: "手机" } as const;
 
@@ -26,8 +26,8 @@ export function Topbar() {
         ))}
       </div>
       <div className="spacer" />
-      <button className="toolbar-btn" onClick={() => void api.undo()} title="撤销">↶</button>
-      <button className="toolbar-btn" onClick={() => void api.redo()} title="重做">↷</button>
+      <button className="toolbar-btn" onClick={() => undo()} title="撤销（协同）">↶</button>
+      <button className="toolbar-btn" onClick={() => redo()} title="重做（协同）">↷</button>
     </header>
   );
 }

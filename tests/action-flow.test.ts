@@ -2,6 +2,7 @@
 import { test, describe, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { stateStore } from "../src/state.js";
+import { runActionFlow, type ActionFlow } from "../src/action-flow.js";
 
 beforeEach(() => {
   stateStore.resetForTests();
@@ -41,5 +42,43 @@ describe("action flows store", () => {
     assert.equal(stateStore.getState().actionFlows["flow-1"], undefined);
     stateStore.undo(); // 撤销 remove
     assert.ok(stateStore.getState().actionFlows["flow-1"]);
+  });
+});
+
+describe("runActionFlow engine", () => {
+  const flow = (steps: ActionFlow["steps"], enabled = true): ActionFlow => ({
+    id: "f", name: "t", trigger: "click", componentId: "comp", steps, enabled,
+  });
+  const ctx = {
+    hasPage: (id: string) => id === "p2",
+    hasComponent: (id: string) => id === "comp",
+  };
+
+  test("executes steps sequentially and returns effects", () => {
+    const r = runActionFlow(flow([
+      { id: "s1", action: "toast", params: { message: "hi" } },
+      { id: "s2", action: "navigate", params: { page_id: "p2" } },
+      { id: "s3", action: "delay", params: { ms: 500 } },
+    ]), ctx);
+    assert.deepEqual(r.errors, []);
+    assert.deepEqual(r.effects.map((e) => e.type), ["toast", "navigate", "delay"]);
+    assert.deepEqual(r.effects[1], { type: "navigate", pageId: "p2" });
+  });
+
+  test("stops at first invalid step with collected error", () => {
+    const r = runActionFlow(flow([
+      { id: "s1", action: "toast", params: { message: "hi" } },
+      { id: "s2", action: "navigate", params: { page_id: "missing" } },
+      { id: "s3", action: "toast", params: { message: "never" } },
+    ]), ctx);
+    assert.equal(r.errors.length, 1);
+    assert.match(r.errors[0], /unknown page/);
+    assert.deepEqual(r.effects.map((e) => e.type), ["toast"]);
+  });
+
+  test("disabled flow and invalid url are rejected", () => {
+    assert.deepEqual(runActionFlow(flow([], false), ctx).effects, []);
+    const r = runActionFlow(flow([{ id: "s", action: "openUrl", params: { url: "javascript:alert(1)" } }]), ctx);
+    assert.match(r.errors[0], /url/);
   });
 });

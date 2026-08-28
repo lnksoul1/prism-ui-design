@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { useDesignStore } from "../../stores/design";
 import { editComponent } from "../../collab/edits";
 import { isBoxModeComponent } from "../../lib/boxMode";
-import type { ComponentNode } from "../../types";
+import { api } from "../../api";
+import type { ComponentNode, DesignStateView } from "../../types";
 
 const TEXT_PROP_KEYS = ["text", "title", "label", "button_text", "cta_text", "heading", "brand"];
 
@@ -22,6 +23,7 @@ export function InspectorPanel() {
       {isBoxModeComponent(node) && <BoxModeSection node={node} />}
       <PropsSection node={node} />
       <StyleSection node={node} breakpoint={breakpoint} />
+      <ActionFlowSection node={node} />
     </div>
   );
 }
@@ -209,5 +211,71 @@ function NewStyleKeyInput({ node, breakpoint, draft, onAdd }: {
         setKey("");
       }}
     />
+  );
+}
+
+/** M3 ActionFlow: 选中组件的交互流程列表 + JSON 步骤编辑器。 */
+function ActionFlowSection({ node }: { node: ComponentNode }) {
+  const state = useDesignStore((s) => s.state);
+  const flows = Object.values(state?.actionFlows ?? {}).filter(
+    (f) => f.componentId === node.id
+  );
+
+  return (
+    <section className="insp-section">
+      <div className="insp-title">交互流程</div>
+      <button
+        className="insp-btn"
+        onClick={() =>
+          void api.createActionFlow({
+            name: "新流程",
+            componentId: node.id,
+            steps: [{ id: `step_${Date.now()}`, action: "toast", params: { message: "Hello Prism" } }],
+          })
+        }
+      >
+        新建流程
+      </button>
+      {flows.map((f) => (
+        <FlowEditor key={f.id} flow={f} />
+      ))}
+      {flows.length === 0 && <div className="insp-hint">暂无流程，点击「新建流程」创建</div>}
+    </section>
+  );
+}
+
+function FlowEditor({ flow }: { flow: NonNullable<DesignStateView["actionFlows"]>[string] }) {
+  const [json, setJson] = useState(() => JSON.stringify({ name: flow.name, steps: flow.steps }, null, 2));
+  const [error, setError] = useState<string | null>(null);
+
+  const commit = (): void => {
+    try {
+      const parsed = JSON.parse(json) as { name?: string; steps?: unknown[] };
+      setError(null);
+      void api.updateActionFlow(flow.id, { name: parsed.name, steps: parsed.steps });
+    } catch {
+      setError("JSON 格式错误，未提交");
+    }
+  };
+
+  return (
+    <div className="flow-editor">
+      <div className="flow-head">
+        <b>{flow.name}</b>
+        <button className="insp-btn" onClick={() => void api.removeActionFlow(flow.id)}>删除</button>
+      </div>
+      <label className="insp-row insp-row-column">
+        <span>{flow.id}</span>
+        <textarea
+          aria-label={flow.id}
+          className="insp-json"
+          value={json}
+          onChange={(e) => setJson(e.target.value)}
+          onBlur={commit}
+          rows={6}
+        />
+      </label>
+      {error && <div className="insp-error">{error}</div>}
+    </div>
   );
 }

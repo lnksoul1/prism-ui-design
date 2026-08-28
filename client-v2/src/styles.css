@@ -87,3 +87,7 @@ body {
 .page-chip.targetable { border-color: #2383e2; color: #2383e2; }
 .link-hint { position: absolute; left: 8px; top: 8px; background: #2383e2; color: #fff; border-radius: 6px; padding: 4px 10px; font-size: 11px; }
 .toolbar-btn.active { background: #2383e2; color: #fff; }
+.insp-btn { border: 1px solid rgba(0,0,0,0.12); background: #fff; border-radius: 6px; padding: 3px 10px; cursor: pointer; font-size: 11px; }
+.insp-hint { font-size: 11px; color: #aaa; }
+.flow-editor { border: 1px solid rgba(0,0,0,0.08); border-radius: 8px; padding: 6px; margin-top: 6px; }
+.flow-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; margin-bottom: 4px; }

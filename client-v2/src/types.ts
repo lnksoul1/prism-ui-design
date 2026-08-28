@@ -38,6 +38,20 @@ export interface PageLinkView {
   source_component_id?: string;
 }
 
+export interface ActionFlowStepView {
+  id: string;
+  action: string;
+  params: Record<string, unknown>;
+}
+export interface ActionFlowView {
+  id: string;
+  name: string;
+  trigger: string;
+  componentId: string;
+  steps: ActionFlowStepView[];
+  enabled: boolean;
+}
+
 export interface DesignStateView {
   projectName: string;
   style: string;
@@ -48,4 +62,5 @@ export interface DesignStateView {
   comments: CommentView[];
   pageLinks: PageLinkView[];
   revision: number;
+  actionFlows?: Record<string, ActionFlowView>;
 }

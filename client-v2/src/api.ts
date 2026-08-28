@@ -40,6 +40,11 @@ export const api = {
   addPageLink: (body: { from_page_id: string; to_page_id: string; source_component_id?: string }) =>
     post("/api/page-links", body),
   removePageLink: (id: string) => del(`/api/page-links/${id}`),
+  createActionFlow: (body: { name?: string; componentId: string; steps: Array<{ id?: string; action: string; params?: Record<string, unknown> }> }) =>
+    post("/api/action-flows", body),
+  updateActionFlow: (id: string, patch: { name?: string; steps?: unknown[]; enabled?: boolean }) =>
+    post(`/api/action-flows/${id}`, patch),
+  removeActionFlow: (id: string) => del(`/api/action-flows/${id}`),
 };
 
 /** M2 NL2UI 流式: 消费 /api/llm/stream 的 SSE，返回 done 事件的结果。 */

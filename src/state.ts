@@ -4,6 +4,7 @@ import { isBreakpoint as isBreakpointSafe } from "./responsive.js";
 import { runBatch } from "./commands/batch.js";
 import { snapToGrid } from "./layout/snap.js";
 import { smartLayout } from "./layout/smart.js";
+import { isFlowActionType, type ActionFlow } from "./action-flow.js";
 
 // ===== Design State Types =====
 
@@ -269,6 +270,7 @@ export interface DesignState {
   activePlatform: string;
   platforms: Record<string, PlatformSnapshot>;
   comments: DesignComment[];
+  actionFlows: Record<string, ActionFlow>;
   pageLinks: PageLink[];
   revision: number;
   /** 导入记录: pageId → provenance of the "导入 → 调整 → 一键应用" pipeline. */
@@ -390,6 +392,7 @@ type StoredState = {
   activePlatform: string;
   platforms: Record<string, PlatformSnapshot>;
   comments: DesignComment[];
+  actionFlows: Record<string, ActionFlow>;
   pageLinks: PageLink[];
   revision: number;
   /** 导入记录: pageId → provenance of the "导入 → 调整 → 一键应用" pipeline. */
@@ -459,6 +462,7 @@ export class DesignStateStore extends EventEmitter {
       activePlatform: "web-desktop",
       platforms: {},
       comments: [],
+      actionFlows: {},
       pageLinks: [],
       revision: 0,
       imports: {},
@@ -2034,6 +2038,61 @@ export class DesignStateStore extends EventEmitter {
     return c;
   }
 
+  // ===== Action Flows (M3) =====
+
+  addActionFlow(flow: ActionFlow, source: "ai" | "user" = "user"): ActionFlow {
+    if (!this.findComponent(flow.componentId)) {
+      throw new Error(`Component not found: ${flow.componentId}`);
+    }
+    if (!Array.isArray(flow.steps)) {
+      throw new Error("steps must be an array");
+    }
+    for (const s of flow.steps) {
+      if (!s || typeof s.id !== "string" || !isFlowActionType(String(s.action))) {
+        throw new Error(`Invalid step action: ${String((s as { action?: unknown })?.action)}`);
+      }
+    }
+    this.state.actionFlows[flow.id] = { ...flow };
+    this.logActivity("add_action_flow", "action_flow", `Added flow ${flow.name} (${flow.id})`, source);
+    this.commit({ type: "addActionFlow", flowId: flow.id });
+    return flow;
+  }
+
+  updateActionFlow(
+    id: string,
+    patch: Partial<Pick<ActionFlow, "name" | "steps" | "enabled">>,
+    source: "ai" | "user" = "user"
+  ): ActionFlow | null {
+    const flow = this.state.actionFlows[id];
+    if (!flow) return null;
+    if (typeof patch.name === "string" && patch.name.trim()) flow.name = patch.name;
+    if (typeof patch.enabled === "boolean") flow.enabled = patch.enabled;
+    if (Array.isArray(patch.steps)) {
+      for (const s of patch.steps) {
+        if (!s || typeof s.id !== "string" || !isFlowActionType(String(s.action))) {
+          throw new Error(`Invalid step action: ${String((s as { action?: unknown })?.action)}`);
+        }
+      }
+      flow.steps = patch.steps;
+    }
+    this.logActivity("update_action_flow", "action_flow", `Updated flow ${id}`, source);
+    this.commit({ type: "updateActionFlow", flowId: id });
+    return flow;
+  }
+
+  removeActionFlow(id: string, source: "ai" | "user" = "user"): boolean {
+    if (!this.state.actionFlows[id]) return false;
+    delete this.state.actionFlows[id];
+    this.logActivity("remove_action_flow", "action_flow", `Removed flow ${id}`, source);
+    this.commit({ type: "removeActionFlow", flowId: id });
+    return true;
+  }
+
+  getActionFlows(componentId?: string): ActionFlow[] {
+    const all = Object.values(this.state.actionFlows);
+    return componentId ? all.filter((f) => f.componentId === componentId) : all;
+  }
+
   // ===== Page Links (Play Mode) =====
 
   addPageLink(
@@ -2175,6 +2234,10 @@ export class DesignStateStore extends EventEmitter {
         typeof snapshot.activePlatform === "string" ? snapshot.activePlatform : "web-desktop",
       platforms: snapshot.platforms && typeof snapshot.platforms === "object" ? snapshot.platforms : {},
       comments: Array.isArray(snapshot.comments) ? snapshot.comments.slice(0, 200) : [],
+      actionFlows:
+        snapshot.actionFlows && typeof snapshot.actionFlows === "object"
+          ? JSON.parse(JSON.stringify(snapshot.actionFlows))
+          : {},
       pageLinks: Array.isArray(snapshot.pageLinks) ? snapshot.pageLinks.slice(0, 500) : [],
       revision: typeof snapshot.revision === "number" ? snapshot.revision : 0,
       imports:
@@ -2253,6 +2316,7 @@ export class DesignStateStore extends EventEmitter {
       activePlatform: "web-desktop",
       platforms: {},
       comments: [],
+      actionFlows: {},
       pageLinks: [],
       revision: 0,
       imports: {},

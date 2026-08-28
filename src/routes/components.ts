@@ -443,12 +443,31 @@ export function registerComponentsRoutes(): express.Router {
 
   // API: Add a review comment
   router.post("/api/comment", asyncHandler(async (req, res) => {
-    const { component_id, text, author } = req.body || {};
+    const { component_id, text, author, x, y, assignee } = req.body || {};
     if (!component_id || !text) {
       throw new HttpError(400, "Missing component_id or text");
     }
-    const comment = stateStore.addComment(component_id, String(text), typeof author === "string" ? author : "user", "user");
+    const options: { x?: number; y?: number; assignee?: string } = {};
+    if (typeof x === "number" && Number.isFinite(x)) options.x = x;
+    if (typeof y === "number" && Number.isFinite(y)) options.y = y;
+    if (typeof assignee === "string" && assignee) options.assignee = assignee;
+    const comment = stateStore.addComment(component_id, String(text), typeof author === "string" ? author : "user", "user", options);
     res.json({ success: true, comment });
+  }));
+
+  // M3 打点评论: 更新评论（resolved/assignee/text）
+  router.post("/api/comment/:id", asyncHandler(async (req, res) => {
+    const { text, resolved, assignee } = req.body || {};
+    const patch: { text?: string; resolved?: boolean; assignee?: string | null } = {};
+    if (typeof text === "string" && text.trim()) patch.text = text;
+    if (typeof resolved === "boolean") patch.resolved = resolved;
+    if (assignee === null || typeof assignee === "string") patch.assignee = assignee;
+    if (patch.text === undefined && patch.resolved === undefined && patch.assignee === undefined) {
+      throw new HttpError(400, "Nothing to update: provide text, resolved and/or assignee");
+    }
+    const updated = stateStore.updateComment(req.params.id, patch, "user");
+    if (!updated) throw new HttpError(404, `Comment ${req.params.id} not found`);
+    res.json({ success: true, comment: updated });
   }));
 
   // API: List comments (optionally filtered by component)

@@ -347,6 +347,14 @@ export interface DesignComment {
   author: string;
   text: string;
   createdAt: string;
+  /** M3 打点评论: pin 相对组件左上角的偏移（px）。 */
+  x?: number;
+  y?: number;
+  /** M3 打点评论: 已解决。 */
+  resolved?: boolean;
+  /** M3 打点评论: 指派处理人。 */
+  assignee?: string;
+  updatedAt?: string;
 }
 
 /** Play-mode navigation: clicking a component on one page jumps to another. */
@@ -1967,7 +1975,13 @@ export class DesignStateStore extends EventEmitter {
 
   // ===== Comments (C5) =====
 
-  addComment(componentId: string, text: string, author: string = "user", source: "ai" | "user" = "user"): DesignComment {
+  addComment(
+    componentId: string,
+    text: string,
+    author: string = "user",
+    source: "ai" | "user" = "user",
+    options: { x?: number; y?: number; assignee?: string } = {}
+  ): DesignComment {
     const node = this.findComponent(componentId);
     if (!node) {
       throw new Error(`Component not found: ${componentId}`);
@@ -1978,6 +1992,9 @@ export class DesignStateStore extends EventEmitter {
       author,
       text,
       createdAt: new Date().toISOString(),
+      ...(typeof options.x === "number" && Number.isFinite(options.x) ? { x: options.x } : {}),
+      ...(typeof options.y === "number" && Number.isFinite(options.y) ? { y: options.y } : {}),
+      ...(typeof options.assignee === "string" && options.assignee ? { assignee: options.assignee } : {}),
     };
     this.state.comments.push(comment);
     if (this.state.comments.length > 200) {
@@ -1995,6 +2012,26 @@ export class DesignStateStore extends EventEmitter {
     this.logActivity("remove_comment", "comment", `Removed comment ${commentId}`, source);
     this.commit({ type: "removeComment", commentId });
     return true;
+  }
+
+  /** M3 打点评论: 更新文本/解决状态/指派人/坐标（partial patch，入 undo 历史）。 */
+  updateComment(
+    commentId: string,
+    patch: { text?: string; resolved?: boolean; assignee?: string | null; x?: number; y?: number },
+    source: "ai" | "user" = "user"
+  ): DesignComment | null {
+    const c = this.state.comments.find((x) => x.id === commentId);
+    if (!c) return null;
+    if (typeof patch.text === "string" && patch.text.trim()) c.text = patch.text;
+    if (typeof patch.resolved === "boolean") c.resolved = patch.resolved;
+    if (patch.assignee === null) delete c.assignee;
+    else if (typeof patch.assignee === "string" && patch.assignee) c.assignee = patch.assignee;
+    if (typeof patch.x === "number" && Number.isFinite(patch.x)) c.x = patch.x;
+    if (typeof patch.y === "number" && Number.isFinite(patch.y)) c.y = patch.y;
+    c.updatedAt = new Date().toISOString();
+    this.logActivity("update_comment", "comment", `Updated comment ${commentId}`, source);
+    this.commit({ type: "updateComment", commentId });
+    return c;
   }
 
   // ===== Page Links (Play Mode) =====

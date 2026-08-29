@@ -122,6 +122,7 @@ import { registerProjectsRoutes } from "./routes/projects.js";
 import { registerDesignLibraryRoutes } from "./routes/design-library.js";
 import { registerLayoutRoutes } from "./routes/layout.js";
 import { registerActionFlowRoutes } from "./routes/action-flows.js";
+import { registerCodeSyncRoutes } from "./routes/code-sync.js";
 import { ensureTopLevelLayouts, containerWidthForPlatform } from "./layout-engine.js";
 
 import { errorHandler } from "./routes/shared.js";
@@ -264,6 +265,7 @@ app.use(registerTokensRoutes());
 app.use(registerComponentsRoutes());
 app.use(registerProjectsRoutes());
 app.use(registerActionFlowRoutes());
+app.use(registerCodeSyncRoutes());
 
 
 // Built-in LLM channel routes (AI settings + generation)

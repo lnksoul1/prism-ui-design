@@ -10,6 +10,8 @@ export function Topbar() {
   const setBreakpoint = useDesignStore((s) => s.setBreakpoint);
   const linkMode = useDesignStore((s) => s.linkMode);
   const setLinkMode = useDesignStore((s) => s.setLinkMode);
+  const playMode = useDesignStore((s) => s.playMode);
+  const setPlayMode = useDesignStore((s) => s.setPlayMode);
 
   return (
     <header className="topbar">
@@ -33,6 +35,13 @@ export function Topbar() {
         title="原型连线模式"
       >
         ⇄
+      </button>
+      <button
+        className={`toolbar-btn toolbar-btn-text ${playMode ? "active" : ""}`}
+        onClick={() => setPlayMode(!playMode)}
+        title="预览模式"
+      >
+        {playMode ? "退出预览" : "预览"}
       </button>
       <div className="spacer" />
       <button className="toolbar-btn" onClick={() => undo()} title="撤销（协同）">↶</button>

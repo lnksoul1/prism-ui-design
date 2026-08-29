@@ -9,10 +9,12 @@ interface Props {
   selected: boolean;
   breakpoint: "desktop" | "tablet" | "mobile";
   onSelect: (id: string, additive: boolean) => void;
+  playMode?: boolean;
+  onActivate?: (id: string) => void;
 }
 
 /** M1 渲染策略：已知类型给最小保真呈现，未知类型渲染带类型标签的占位盒。 */
-export function ComponentView({ node, selected, breakpoint, onSelect }: Props) {
+export function ComponentView({ node, selected, breakpoint, onSelect, playMode, onActivate }: Props) {
   const layout = node.layout;
   const cqWidth = useDesignStore((s) => s.cqWidth);
   const style: CSSProperties = {
@@ -45,6 +47,10 @@ export function ComponentView({ node, selected, breakpoint, onSelect }: Props) {
       style={style}
       onMouseDown={(e) => {
         e.stopPropagation();
+        if (playMode) {
+          onActivate?.(node.id);
+          return;
+        }
         onSelect(node.id, e.shiftKey);
       }}
     >
@@ -56,6 +62,8 @@ export function ComponentView({ node, selected, breakpoint, onSelect }: Props) {
           selected={false}
           breakpoint={breakpoint}
           onSelect={onSelect}
+          playMode={playMode}
+          onActivate={onActivate}
         />
       ))}
     </div>

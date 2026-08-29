@@ -91,3 +91,5 @@ body {
 .insp-hint { font-size: 11px; color: #aaa; }
 .flow-editor { border: 1px solid rgba(0,0,0,0.08); border-radius: 8px; padding: 6px; margin-top: 6px; }
 .flow-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; margin-bottom: 4px; }
+.toolbar-btn.toolbar-btn-text { width: auto; padding: 0 10px; font-size: 12px; }
+.play-toast { position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); background: rgba(0,0,0,0.78); color: #fff; border-radius: 8px; padding: 8px 16px; font-size: 13px; z-index: 30; }

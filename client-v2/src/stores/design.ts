@@ -17,6 +17,11 @@ interface DesignStore {
   /** M3 原型连线模式: 开启后点击组件设为连线源，点目标页 chip 建立跳转。 */
   linkMode: boolean;
   pendingLinkSource: string | null;
+  /** M3 预览模式: 点击组件走 actionFlow > pageLink > behavior 激活链，仅前端状态，不写服务端。 */
+  playMode: boolean;
+  previewPageId: string | null;
+  hiddenIds: string[];
+  toastMsg: string | null;
   applyServerState: (s: DesignStateView) => void;
   setConnected: (v: boolean) => void;
   select: (id: string) => void;
@@ -26,6 +31,10 @@ interface DesignStore {
   setCqWidth: (w: number | null) => void;
   setLinkMode: (v: boolean) => void;
   setPendingLinkSource: (id: string | null) => void;
+  setPlayMode: (v: boolean) => void;
+  setPreviewPage: (id: string) => void;
+  toggleHidden: (id: string) => void;
+  showToast: (msg: string) => void;
 }
 
 export const useDesignStore = create<DesignStore>((set) => ({
@@ -37,6 +46,10 @@ export const useDesignStore = create<DesignStore>((set) => ({
   cqWidth: null,
   linkMode: false,
   pendingLinkSource: null,
+  playMode: false,
+  previewPageId: null,
+  hiddenIds: [],
+  toastMsg: null,
   applyServerState: (s) =>
     set((st) => {
       const merged = mergeCollabIntoState(s, collabMaps());
@@ -52,4 +65,13 @@ export const useDesignStore = create<DesignStore>((set) => ({
   setCqWidth: (w) => set({ cqWidth: typeof w === "number" && w >= 200 && w <= 1200 ? Math.round(w) : null }),
   setLinkMode: (v) => set({ linkMode: v, pendingLinkSource: null }),
   setPendingLinkSource: (id) => set({ pendingLinkSource: id }),
+  setPlayMode: (v) =>
+    set(v ? { playMode: true, previewPageId: null, hiddenIds: [], toastMsg: null, linkMode: false }
+         : { playMode: false, previewPageId: null, hiddenIds: [], toastMsg: null }),
+  setPreviewPage: (id) => set({ previewPageId: id }),
+  toggleHidden: (id) =>
+    set((st) => ({
+      hiddenIds: st.hiddenIds.includes(id) ? st.hiddenIds.filter((x) => x !== id) : [...st.hiddenIds, id],
+    })),
+  showToast: (msg) => set({ toastMsg: msg }),
 }));

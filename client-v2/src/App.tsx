@@ -12,6 +12,7 @@ import type { DesignStateView } from "./types";
 
 export function App() {
   const applyServerState = useDesignStore((s) => s.applyServerState);
+  const playMode = useDesignStore((s) => s.playMode);
 
   useEffect(() => {
     void api.getState().then((raw) => applyServerState(raw as DesignStateView));
@@ -30,11 +31,11 @@ export function App() {
   return (
     <div className="app-shell">
       <Topbar />
-      <AiPanel />
+      {!playMode && <AiPanel />}
       <div className="main-layout">
-        <aside className="panel panel-left"><DesignLibrary /></aside>
+        {!playMode && <aside className="panel panel-left"><DesignLibrary /></aside>}
         <main className="canvas-host"><CanvasStage /></main>
-        <aside className="panel panel-right"><InspectorPanel /></aside>
+        {!playMode && <aside className="panel panel-right"><InspectorPanel /></aside>}
       </div>
     </div>
   );

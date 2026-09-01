@@ -134,3 +134,163 @@ test.describe("Prism V2 M2 features", () => {
     await expect(page.locator(".box-mode-placeholder")).toBeVisible({ timeout: 10_000 });
   });
 });
+
+// V2 M3 冒烟：打点评论 / 原型连线 / 预览模式跳转 / ActionFlow toast / 代码同步导出。
+// REST 响应体字段以服务端路由实际为准：POST /api/component → { id }、
+// POST /api/page → { page_id }（计划稿假定 { component: { id } } / { page: { id } }）。
+// 画布组件经 /collab ydoc 同步；评论/连线/流程/pages 经 /ws change 广播下发，
+// 因此各用例在发 REST POST 前先等 .status-dot.on（/ws 已连上）。
+test.describe("Prism V2 M3 features", () => {
+  test("comment pin renders on canvas after REST add", async ({ page }) => {
+    await page.goto(`http://127.0.0.1:${port}/v2/`, { waitUntil: "domcontentloaded", timeout: 60000 });
+    await expect(page.locator(".status-dot.on")).toBeVisible();
+    await page.evaluate(async () => {
+      const res = await fetch("/api/component", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "text", props: { text: "评论区" }, parent_id: null }),
+      });
+      const data = (await res.json()) as { id: string };
+      // pin 定位依赖组件 layout（CommentsLayer.rectOf），创建后补一次布局
+      await fetch(`/api/component/${data.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ layout: { x: 120, y: 120, w: 320, h: 80 } }),
+      });
+      await fetch("/api/comment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ component_id: data.id, text: "e2e 打点", x: 8, y: 8 }),
+      });
+    });
+    await page.waitForTimeout(500);
+    await expect(page.locator(".comment-pin").first()).toBeVisible();
+  });
+
+  test("link mode renders bezier path for a page link", async ({ page }) => {
+    await page.goto(`http://127.0.0.1:${port}/v2/`, { waitUntil: "domcontentloaded", timeout: 60000 });
+    await expect(page.locator(".status-dot.on")).toBeVisible();
+    await page.evaluate(async () => {
+      // LinkLayer 只渲染带 source_component_id 的连线，且锚点依赖组件 layout；
+      // 全新项目当前页为空，先建一个带布局的文本组件作连线源。
+      const state0 = await fetch("/api/state").then((r) => r.json()) as { currentPageId: string };
+      const comp = await fetch("/api/component", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "text", props: { text: "连线源" }, parent_id: null }),
+      }).then((r) => r.json()) as { id: string };
+      await fetch(`/api/component/${comp.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ layout: { x: 120, y: 120, w: 320, h: 80 } }),
+      });
+      const created = await fetch("/api/page", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "M3 目标页" }),
+      }).then((r) => r.json()) as { page_id: string };
+      // 服务端 addPage 会把 currentPageId 切到新页；连线源在原页，
+      // 建好 from=原页 的连线后切回原页，画布才能渲染连线。
+      await fetch(`/api/page/${state0.currentPageId}/switch`, { method: "POST" });
+      await fetch("/api/page-links", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          from_page_id: state0.currentPageId,
+          to_page_id: created.page_id,
+          source_component_id: comp.id,
+        }),
+      });
+    });
+    await page.getByRole("button", { name: "⇄" }).click();
+    await expect(page.locator("path[data-testid^='page-link-']").first()).toBeVisible();
+  });
+
+  test("play mode navigates via page link", async ({ page }) => {
+    await page.goto(`http://127.0.0.1:${port}/v2/`, { waitUntil: "domcontentloaded", timeout: 60000 });
+    await expect(page.locator(".status-dot.on")).toBeVisible();
+    const ok = await page.evaluate(async () => {
+      const state0 = await fetch("/api/state").then((r) => r.json()) as { currentPageId: string };
+      const fromPageId = state0.currentPageId;
+      // 1) 目标页 + 目标页内容（先切页添加，再切回）
+      const created = await fetch("/api/page", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "M3 跳转目标" }),
+      }).then((r) => r.json()) as { page_id: string };
+      await fetch(`/api/page/${created.page_id}/switch`, { method: "POST" });
+      await fetch("/api/component", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "text", props: { text: "M3 目标内容" }, parent_id: null }),
+      });
+      await fetch(`/api/page/${fromPageId}/switch`, { method: "POST" });
+      // 2) 源按钮 + 连线
+      const source = await fetch("/api/component", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "button", props: { text: "e2e 跳转按钮" }, parent_id: null }),
+      }).then((r) => r.json()) as { id: string };
+      await fetch("/api/page-links", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          from_page_id: fromPageId,
+          to_page_id: created.page_id,
+          source_component_id: source.id,
+        }),
+      });
+      return true;
+    });
+    expect(ok).toBe(true);
+    await page.waitForTimeout(500);
+    await page.getByRole("button", { name: "预览" }).click();
+    await page.getByText("e2e 跳转按钮").click();
+    await expect(page.getByText("M3 目标内容")).toBeVisible(); // 画布切到目标页
+  });
+
+  test("action flow toast fires in play mode", async ({ page }) => {
+    await page.goto(`http://127.0.0.1:${port}/v2/`, { waitUntil: "domcontentloaded", timeout: 60000 });
+    await expect(page.locator(".status-dot.on")).toBeVisible();
+    await page.evaluate(async () => {
+      const res = await fetch("/api/component", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "button", props: { text: "e2e 流程按钮" }, parent_id: null }),
+      }).then((r) => r.json()) as { id: string };
+      await fetch("/api/action-flows", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "e2e 流程",
+          componentId: res.id,
+          steps: [{ action: "toast", params: { message: "e2e 流程提示" } }],
+        }),
+      });
+    });
+    await page.getByRole("button", { name: "预览" }).click();
+    await page.getByText("e2e 流程按钮").click();
+    await expect(page.locator(".play-toast")).toHaveText("e2e 流程提示");
+  });
+
+  test("code sync export produces protected regions", async ({ page }) => {
+    await page.goto(`http://127.0.0.1:${port}/v2/`, { waitUntil: "domcontentloaded", timeout: 60000 });
+    const result = await page.evaluate(async () => {
+      const state = await fetch("/api/state").then((r) => r.json()) as { currentPageId: string };
+      // @prism-edit 保护区域按组件逐个生成（renderEditRegion），空页导出不含标记，先补一个组件
+      await fetch("/api/component", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "text", props: { text: "同步源" }, parent_id: null }),
+      });
+      const res = await fetch("/api/code-sync/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ page_id: state.currentPageId }),
+      });
+      return (await res.json()) as { code: string };
+    });
+    expect(result.code).toContain("@prism-edit");
+    expect(result.code).toContain("@prism-edit-end");
+  });
+});

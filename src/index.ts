@@ -229,7 +229,9 @@ httpServer.on("upgrade", (req, socket, head) => {
   const url = req.url ?? "";
   const index = url.indexOf("?");
   const pathname = index === -1 ? url : url.slice(0, index);
-  if (pathname === "/collab") {
+  // y-websocket 客户端连接 `${serverUrl}/${roomname}`（/collab/prism-main），
+  // 因此 /collab 需按前缀匹配房间后缀路径，而非精确等值。
+  if (pathname === "/collab" || pathname.startsWith("/collab/")) {
     collabWss.handleUpgrade(req, socket, head, (ws) => collabWss.emit("connection", ws, req));
   } else if (pathname === "/ws") {
     wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, req));

@@ -5,6 +5,8 @@ import { dirname, resolve } from "path";
 import { fileURLToPath } from "url";
 import { stateStore } from "../state.js";
 import { mergePageExport } from "../code-sync/jsx-export.js";
+import { computeCodeSyncChanges } from "../code-sync/jsx-import.js";
+import { applyCodeSyncChanges } from "../code-sync/apply.js";
 import { asyncHandler, HttpError } from "./shared.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -34,6 +36,24 @@ export function registerCodeSyncRoutes(): Router {
     mkdirSync(SYNC_DIR, { recursive: true });
     writeFileSync(file, code, "utf8");
     res.json({ success: true, path: file, code, merged: existing !== null });
+  }));
+
+  // 导入: .design/sync/page-<id>.jsx（或 body.code）→ stateStore；mode=preview 只返回变更
+  router.post("/api/code-sync/import", asyncHandler(async (req, res) => {
+    const { page_id, code, mode } = req.body || {};
+    if (typeof page_id !== "string" || !page_id) throw new HttpError(400, "page_id is required");
+    const page = findPage(page_id);
+    const file = syncPath(page_id);
+    const source =
+      typeof code === "string" && code ? code : existsSync(file) ? readFileSync(file, "utf8") : null;
+    if (!source) throw new HttpError(400, "No code provided and no synced file exists");
+    const changes = computeCodeSyncChanges(page, source);
+    if (mode === "apply") {
+      const result = applyCodeSyncChanges(changes);
+      res.json({ success: true, mode, changes, result });
+      return;
+    }
+    res.json({ success: true, mode: "preview", changes });
   }));
 
   return router;

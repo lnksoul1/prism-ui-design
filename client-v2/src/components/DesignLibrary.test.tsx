@@ -1,5 +1,5 @@
 import { test, expect, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { DesignLibrary } from "./DesignLibrary";
 
@@ -11,6 +11,7 @@ vi.mock("../api", () => ({
 }));
 
 vi.mock("../lib/catalog", () => ({
+  LIBRARY_COMPONENT_MIME: "text/prism-library-component",
   fetchCatalog: vi.fn().mockResolvedValue({
     styles: [
       { id: "minimal", name: "极简", description: "", tags: [], type: "style", props: {} },
@@ -36,4 +37,20 @@ test("renders styles and renderable components, applies style on click", async (
 
   await userEvent.click(screen.getByText("主视觉"));
   await waitFor(() => expect(api.addLibraryComponent).toHaveBeenCalledWith("hero-1"));
+});
+
+test("component card is draggable and writes library MIME payload on drag start", async () => {
+  render(<DesignLibrary />);
+  const card = (await screen.findByText("主视觉")).closest("button") as HTMLElement;
+  expect(card).toBeTruthy();
+  expect(card.draggable).toBe(true);
+
+  // jsdom 未实现 DataTransfer：手工构造 dragstart 事件并挂 dataTransfer 桩
+  const dt = { setData: vi.fn(), effectAllowed: "" };
+  const dragStart = new Event("dragstart", { bubbles: true });
+  (dragStart as unknown as { dataTransfer: unknown }).dataTransfer = dt;
+  fireEvent(card, dragStart);
+
+  expect(dt.setData).toHaveBeenCalledWith("text/prism-library-component", "hero-1");
+  expect(dt.effectAllowed).toBe("copy");
 });

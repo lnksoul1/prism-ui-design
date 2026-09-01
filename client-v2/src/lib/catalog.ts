@@ -1,4 +1,7 @@
 // client-v2/src/lib/catalog.ts
+/** HTML5 拖拽：设计库组件卡片写入 dataTransfer 的自定义 MIME 类型。 */
+export const LIBRARY_COMPONENT_MIME = "text/prism-library-component";
+
 export interface LibraryEntry {
   id: string;
   name: string;

@@ -1,9 +1,21 @@
-import { test, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { test, expect, vi, afterEach } from "vitest";
+import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CanvasStage } from "./CanvasStage";
 import { useDesignStore } from "../../stores/design";
 import type { DesignStateView } from "../../types";
+
+vi.mock("../../api", () => ({
+  api: {
+    addLibraryComponent: vi.fn().mockResolvedValue({
+      success: true,
+      mode: "added",
+      component_id: "comp-9",
+    }),
+  },
+}));
+
+afterEach(() => vi.clearAllMocks());
 
 const stateWithButton = {
   projectName: "P", style: "s", tokens: {},
@@ -37,4 +49,55 @@ test("click selects component; mobile breakpoint applies override", async () => 
   // 断点合并：mobile 覆盖 background
   const wrapper = document.querySelector('[data-prism-oid="comp-1"]') as HTMLElement;
   expect(wrapper.style.background).toBe("rgb(255, 77, 79)");
+});
+
+/** jsdom 未实现 DataTransfer：手工构造带 getData/setData 桩的 drop 事件。 */
+function makeDropEvent(componentId: string | null): Event {
+  const store = new Map<string, string>();
+  if (componentId) store.set("text/prism-library-component", componentId);
+  const drop = new Event("drop", { bubbles: true });
+  (drop as unknown as { dataTransfer: unknown }).dataTransfer = {
+    getData: (type: string): string => store.get(type) ?? "",
+    setData: (type: string, value: string): void => void store.set(type, value),
+  };
+  return drop;
+}
+
+test("drop with library payload adds the component and selects returned component_id", async () => {
+  useDesignStore.setState({ state: stateWithButton, breakpoint: "desktop", selection: [], playMode: false });
+  const { container } = render(<CanvasStage />);
+  const stage = container.querySelector(".canvas-stage") as HTMLElement;
+
+  // act 包裹: drop 的异步续体里会 setState 选中新组件
+  await act(async () => {
+    fireEvent(stage, makeDropEvent("navbar_default"));
+  });
+
+  const { api } = await import("../../api");
+  await waitFor(() => expect(api.addLibraryComponent).toHaveBeenCalledWith("navbar_default"));
+  expect(useDesignStore.getState().selection).toEqual(["comp-9"]);
+});
+
+test("drop without library payload does not call the API", async () => {
+  useDesignStore.setState({ state: stateWithButton, breakpoint: "desktop", selection: [], playMode: false });
+  const { container } = render(<CanvasStage />);
+  const stage = container.querySelector(".canvas-stage") as HTMLElement;
+
+  fireEvent(stage, makeDropEvent(null));
+
+  const { api } = await import("../../api");
+  expect(api.addLibraryComponent).not.toHaveBeenCalled();
+  expect(useDesignStore.getState().selection).toEqual([]);
+});
+
+test("drop is ignored when play mode is on", async () => {
+  useDesignStore.setState({ state: stateWithButton, breakpoint: "desktop", selection: [], playMode: true });
+  const { container } = render(<CanvasStage />);
+  const stage = container.querySelector(".canvas-stage") as HTMLElement;
+
+  fireEvent(stage, makeDropEvent("navbar_default"));
+
+  const { api } = await import("../../api");
+  expect(api.addLibraryComponent).not.toHaveBeenCalled();
+  expect(useDesignStore.getState().selection).toEqual([]);
 });

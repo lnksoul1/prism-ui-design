@@ -1,4 +1,4 @@
-import type { MouseEvent as ReactMouseEvent } from "react";
+import type { DragEvent as ReactDragEvent, MouseEvent as ReactMouseEvent } from "react";
 import { useDesignStore } from "../../stores/design";
 import { api } from "../../api";
 import { editComponent } from "../../collab/edits";
@@ -8,6 +8,7 @@ import { LinkLayer } from "./LinkLayer";
 import { runActionFlow, type ActionFlow, type FlowEffect } from "../../lib/actionFlow";
 import { snapValue } from "../../lib/snap";
 import { computeAlignmentGuides, snapToGuides } from "../../lib/guides";
+import { LIBRARY_COMPONENT_MIME } from "../../lib/catalog";
 import type { ComponentNode } from "../../types";
 
 export function CanvasStage() {
@@ -115,10 +116,30 @@ export function CanvasStage() {
     document.addEventListener("mouseup", up);
   };
 
+  /** M4 设计库拖拽: 画布接收 HTML5 drop，加入组件并选中新节点（预览模式下禁用）。 */
+  const handleDragOver = (e: ReactDragEvent<HTMLDivElement>): void => {
+    if (playMode) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  };
+
+  const handleDrop = (e: ReactDragEvent<HTMLDivElement>): void => {
+    if (playMode) return;
+    e.preventDefault();
+    const id = e.dataTransfer.getData(LIBRARY_COMPONENT_MIME);
+    if (!id) return;
+    void api.addLibraryComponent(id).then((res) => {
+      const componentId = (res as { component_id?: string } | null)?.component_id;
+      if (componentId) useDesignStore.setState({ selection: [componentId] });
+    });
+  };
+
   return (
     <div
       className="canvas-stage"
       onMouseDown={() => clearSelection()}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
       style={{ width: breakpoint === "mobile" ? 390 : breakpoint === "tablet" ? 834 : 1200 }}
     >
       {components.map((node) => (

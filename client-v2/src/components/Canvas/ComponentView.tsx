@@ -2,6 +2,7 @@ import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode } from "re
 import type { ComponentNode } from "../../types";
 import { resolveStyle } from "../../lib/style";
 import { isBoxModeComponent } from "../../lib/boxMode";
+import { renderLibraryContent } from "./LibraryView";
 import { useDesignStore } from "../../stores/design";
 
 interface Props {
@@ -74,25 +75,8 @@ export function ComponentView({ node, selected, breakpoint, onSelect, playMode, 
   );
 }
 
+/** M2 渲染策略：button/text/heading/image 旧类型保持原样，其余派发给
+ * LibraryView 的设计库渲染器；未知类型由其回退到 .cv-placeholder。 */
 function renderContent(node: ComponentNode): ReactNode {
-  const text = pickText(node.props);
-  switch (node.type) {
-    case "button":
-      return <button className="cv-button">{text}</button>;
-    case "text":
-    case "heading":
-      return <span className="cv-text">{text}</span>;
-    case "image":
-      return <div className="cv-image">{text || node.type}</div>;
-    default:
-      return <div className="cv-placeholder">{text || node.type}</div>;
-  }
-}
-
-function pickText(props: Record<string, unknown>): string {
-  for (const key of ["text", "title", "label", "button_text", "cta_text", "heading", "brand"]) {
-    const v = props[key];
-    if (typeof v === "string" && v.trim()) return v;
-  }
-  return "";
+  return renderLibraryContent(node);
 }

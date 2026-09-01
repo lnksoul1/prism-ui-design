@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { fetchCatalog, type LibraryEntry } from "../lib/catalog";
+import { fetchCatalog, LIBRARY_COMPONENT_MIME, type LibraryEntry } from "../lib/catalog";
 import { api } from "../api";
 
 export function DesignLibrary() {
@@ -46,7 +46,16 @@ export function DesignLibrary() {
       <div className="lib-section">
         <div className="lib-section-title">组件（{components.length}）</div>
         {components.map((c) => (
-          <button key={c.id} className="lib-item" onClick={() => void api.addLibraryComponent(c.id)}>
+          <button
+            key={c.id}
+            className="lib-item"
+            draggable
+            onDragStart={(e) => {
+              e.dataTransfer.setData(LIBRARY_COMPONENT_MIME, c.id);
+              e.dataTransfer.effectAllowed = "copy";
+            }}
+            onClick={() => void api.addLibraryComponent(c.id)}
+          >
             <span className="lib-item-name">{c.name}</span>
             <span className="lib-item-desc">{c.description}</span>
           </button>

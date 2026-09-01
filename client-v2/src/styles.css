@@ -93,3 +93,7 @@ body {
 .flow-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; margin-bottom: 4px; }
 .toolbar-btn.toolbar-btn-text { width: auto; padding: 0 10px; font-size: 12px; }
 .play-toast { position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); background: rgba(0,0,0,0.78); color: #fff; border-radius: 8px; padding: 8px 16px; font-size: 13px; z-index: 30; }
+/* M3 对齐辅助线（canvas-stage 已有 position: relative） */
+.guide { position: absolute; background: #f0a020; z-index: 20; pointer-events: none; }
+.guide-v { top: 0; bottom: 0; width: 1px; }
+.guide-h { left: 0; right: 0; height: 1px; }

@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from "react";
+import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import type { ComponentNode } from "../../types";
 import { resolveStyle } from "../../lib/style";
 import { isBoxModeComponent } from "../../lib/boxMode";
@@ -11,16 +11,19 @@ interface Props {
   onSelect: (id: string, additive: boolean) => void;
   playMode?: boolean;
   onActivate?: (id: string) => void;
+  /** M3 拖拽: 拖动期间的实时位置覆盖（仅根组件）。 */
+  dragPos?: { x: number; y: number };
+  onDragStart?: (id: string, e: ReactMouseEvent) => void;
 }
 
 /** M1 渲染策略：已知类型给最小保真呈现，未知类型渲染带类型标签的占位盒。 */
-export function ComponentView({ node, selected, breakpoint, onSelect, playMode, onActivate }: Props) {
+export function ComponentView({ node, selected, breakpoint, onSelect, playMode, onActivate, dragPos, onDragStart }: Props) {
   const layout = node.layout;
   const cqWidth = useDesignStore((s) => s.cqWidth);
   const style: CSSProperties = {
     position: "absolute",
-    left: layout?.x ?? 16,
-    top: layout?.y ?? 0,
+    left: dragPos?.x ?? layout?.x ?? 16,
+    top: dragPos?.y ?? layout?.y ?? 0,
     width: layout?.w ?? 320,
     minHeight: layout?.h,
     ...(resolveStyle(node, breakpoint) as CSSProperties),
@@ -52,6 +55,7 @@ export function ComponentView({ node, selected, breakpoint, onSelect, playMode, 
           return;
         }
         onSelect(node.id, e.shiftKey);
+        onDragStart?.(node.id, e);
       }}
     >
       {content}

@@ -22,6 +22,8 @@ interface DesignStore {
   previewPageId: string | null;
   hiddenIds: string[];
   toastMsg: string | null;
+  /** M3 拖拽中: 被拖组件当前位置 + 对齐辅助线（拖拽期间用 setState 直接写，无需 action）。 */
+  dragState: { id: string; x: number; y: number; guides: { xs: number[]; ys: number[] } } | null;
   applyServerState: (s: DesignStateView) => void;
   setConnected: (v: boolean) => void;
   select: (id: string) => void;
@@ -50,6 +52,7 @@ export const useDesignStore = create<DesignStore>((set) => ({
   previewPageId: null,
   hiddenIds: [],
   toastMsg: null,
+  dragState: null,
   applyServerState: (s) =>
     set((st) => {
       const merged = mergeCollabIntoState(s, collabMaps());

@@ -1,9 +1,13 @@
+import type { MouseEvent as ReactMouseEvent } from "react";
 import { useDesignStore } from "../../stores/design";
 import { api } from "../../api";
+import { editComponent } from "../../collab/edits";
 import { ComponentView } from "./ComponentView";
 import { CommentsLayer } from "./CommentsLayer";
 import { LinkLayer } from "./LinkLayer";
 import { runActionFlow, type ActionFlow, type FlowEffect } from "../../lib/actionFlow";
+import { snapValue } from "../../lib/snap";
+import { computeAlignmentGuides, snapToGuides } from "../../lib/guides";
 import type { ComponentNode } from "../../types";
 
 export function CanvasStage() {
@@ -20,6 +24,7 @@ export function CanvasStage() {
   const previewPageId = useDesignStore((s) => s.previewPageId);
   const hiddenIds = useDesignStore((s) => s.hiddenIds);
   const toastMsg = useDesignStore((s) => s.toastMsg);
+  const dragState = useDesignStore((s) => s.dragState);
 
   const page = state?.pages?.find((p) => p.id === (playMode ? (previewPageId ?? state.currentPageId) : state.currentPageId)) ?? state?.pages?.[0];
   const components: ComponentNode[] = (page?.components ?? []).filter((c) => !hiddenIds.includes(c.id));
@@ -73,6 +78,43 @@ export function CanvasStage() {
     else if (behavior?.type === "link" && behavior.url) window.open(behavior.url, "_blank");
   };
 
+  /** M3 拖拽: 按住已选中组件拖动——网格吸附 + 对齐辅助线，松手单 undo 步提交 ydoc。 */
+  const startDrag = (id: string, e: ReactMouseEvent): void => {
+    if (playMode) return;
+    const node = components.find((c) => c.id === id);
+    if (!node?.layout) return;
+    const origin = { x: e.clientX, y: e.clientY };
+    const base = { x: node.layout.x ?? 0, y: node.layout.y ?? 0 };
+    const w = node.layout.w ?? 320;
+    const h = node.layout.h ?? 80;
+    const others = components
+      .filter((c) => c.id !== id && c.layout)
+      .map((c) => ({ x: c.layout!.x ?? 0, y: c.layout!.y ?? 0, w: c.layout!.w ?? 320, h: c.layout!.h ?? 80 }));
+    const move = (ev: MouseEvent): void => {
+      if (Math.abs(ev.clientX - origin.x) + Math.abs(ev.clientY - origin.y) < 3) return;
+      const raw = { x: base.x + ev.clientX - origin.x, y: base.y + ev.clientY - origin.y };
+      const snapped = { x: snapValue(raw.x), y: snapValue(raw.y) };
+      const guides = computeAlignmentGuides({ x: snapped.x, y: snapped.y, w, h }, others);
+      const guided = snapToGuides(snapped.x, snapped.y, guides);
+      useDesignStore.setState({ dragState: { id, x: guided.x, y: guided.y, guides } });
+    };
+    const up = (): void => {
+      document.removeEventListener("mousemove", move);
+      document.removeEventListener("mouseup", up);
+      const st = useDesignStore.getState().dragState;
+      if (st?.id === id) {
+        const final = snapToGuides(st.x, st.y, st.guides); // 提交前再吸附一次辅助线
+        editComponent(id, (draft) => {
+          const layout = (draft.layout as Record<string, number> | undefined) ?? {};
+          draft.layout = { ...layout, x: final.x, y: final.y };
+        });
+      }
+      useDesignStore.setState({ dragState: null });
+    };
+    document.addEventListener("mousemove", move);
+    document.addEventListener("mouseup", up);
+  };
+
   return (
     <div
       className="canvas-stage"
@@ -87,6 +129,8 @@ export function CanvasStage() {
           breakpoint={breakpoint}
           playMode={playMode}
           onActivate={activate}
+          dragPos={dragState?.id === node.id ? { x: dragState.x, y: dragState.y } : undefined}
+          onDragStart={startDrag}
           onSelect={(id, additive) => {
             if (linkMode) {
               setPendingLinkSource(id);
@@ -97,6 +141,13 @@ export function CanvasStage() {
             else useDesignStore.setState({ selection: [id] });
           }}
         />
+      ))}
+      {/* M3 对齐辅助线 */}
+      {dragState?.guides.xs.map((x) => (
+        <div key={`gx-${x}`} className="guide guide-v" style={{ left: x }} />
+      ))}
+      {dragState?.guides.ys.map((y) => (
+        <div key={`gy-${y}`} className="guide guide-h" style={{ top: y }} />
       ))}
       {components.length === 0 && <div className="canvas-empty">从左侧设计库添加组件</div>}
       {!playMode && <CommentsLayer page={page} />}

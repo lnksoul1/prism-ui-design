@@ -25,8 +25,8 @@ export const api = {
   undo: () => post("/api/undo", {}),
   redo: () => post("/api/redo", {}),
   applyStyle: (styleId: string) => post("/api/design-library/style", { style_id: styleId }),
-  addLibraryComponent: (componentId: string) =>
-    post("/api/design-library/component", { component_id: componentId }),
+  addLibraryComponent: (componentId: string, variant?: string) =>
+    post("/api/design-library/component", { component_id: componentId, variant }),
   setBaseStyle: (id: string, style: Record<string, string>) =>
     post(`/api/component/${id}/base-style`, { style }),
   setBreakpointStyle: (id: string, breakpoint: string, style: Record<string, string>) =>

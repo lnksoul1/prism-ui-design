@@ -23,6 +23,12 @@ function firstText(props: Record<string, unknown>): string {
   return "";
 }
 
+/** 变体解析：node.variant 优先，回退 props.variant（服务端会把变体写进两处）。 */
+function nodeVariant(node: ComponentNode): string {
+  const fromProps = node.props?.variant;
+  return node.variant || (typeof fromProps === "string" ? fromProps : "");
+}
+
 /** label + 控件 的通用字段布局（input/select 等表单族）。 */
 function fieldBox(label: string, control: ReactNode): ReactNode {
   return (
@@ -47,46 +53,77 @@ export function renderLibraryContent(node: ComponentNode): ReactNode {
   const p = node.props ?? {};
   switch (node.type) {
     // ---- 旧类型（保持既有 cv-* 呈现） ----
-    case "button":
-      return <button className="cv-button">{firstText(p)}</button>;
+    case "button": {
+      const v = nodeVariant(node) || "primary";
+      return <button className={`cv-button cv-button--${v}`}>{firstText(p)}</button>;
+    }
     case "text":
     case "heading":
       return <span className="cv-text">{firstText(p)}</span>;
 
     // ---- 页面区块 ----
-    case "navbar":
+    case "navbar": {
+      const v = nodeVariant(node);
+      const ctaText = str(p.cta_text) || (v === "with_cta" ? "开始使用" : "");
       return (
-        <div className="lv-navbar">
+        <div className={v ? `lv-navbar lv-navbar--${v}` : "lv-navbar"}>
           <span className="lv-navbar-brand">{str(p.brand)}</span>
           <div className="lv-navbar-links">
             {strArr(p.links).map((l, i) => (
               <span key={i} className="lv-navbar-link">{l}</span>
             ))}
           </div>
-          {str(p.cta_text) && (
-            <button className="lv-btn lv-btn-primary lv-btn-sm">{str(p.cta_text)}</button>
-          )}
+          {ctaText && <button className="lv-btn lv-btn-primary lv-btn-sm">{ctaText}</button>}
         </div>
       );
-    case "hero":
+    }
+    case "hero": {
+      const v = nodeVariant(node);
+      if (v === "split" || v === "image_right") {
+        return (
+          <div className="lv-hero lv-hero--split">
+            <div className="lv-hero-copy">
+              <div className="lv-hero-title">{str(p.title)}</div>
+              {str(p.subtitle) && <div className="lv-hero-subtitle">{str(p.subtitle)}</div>}
+              {str(p.button_text) && <button className="lv-btn lv-btn-primary">{str(p.button_text)}</button>}
+            </div>
+            <div className="lv-hero-figure" />
+          </div>
+        );
+      }
       return (
-        <div className="lv-hero">
+        <div className={v ? `lv-hero lv-hero--${v}` : "lv-hero"}>
           <div className="lv-hero-title">{str(p.title)}</div>
           {str(p.subtitle) && <div className="lv-hero-subtitle">{str(p.subtitle)}</div>}
           {str(p.button_text) && <button className="lv-btn lv-btn-primary">{str(p.button_text)}</button>}
         </div>
       );
-    case "cta":
+    }
+    case "cta": {
+      const v = nodeVariant(node);
+      if (v === "split") {
+        return (
+          <div className="lv-cta lv-cta--split">
+            <div className="lv-cta-copy">
+              <div className="lv-cta-title">{str(p.title)}</div>
+              {str(p.subtitle) && <div className="lv-cta-subtitle">{str(p.subtitle)}</div>}
+            </div>
+            {str(p.button_text) && <button className="lv-btn">{str(p.button_text)}</button>}
+          </div>
+        );
+      }
       return (
-        <div className="lv-cta">
+        <div className={v ? `lv-cta lv-cta--${v}` : "lv-cta"}>
           <div className="lv-cta-title">{str(p.title)}</div>
           {str(p.subtitle) && <div className="lv-cta-subtitle">{str(p.subtitle)}</div>}
           {str(p.button_text) && <button className="lv-btn lv-btn-primary">{str(p.button_text)}</button>}
         </div>
       );
-    case "card":
+    }
+    case "card": {
+      const v = nodeVariant(node);
       return (
-        <div className="lv-card">
+        <div className={v ? `lv-card lv-card--${v}` : "lv-card"}>
           {str(p.image_url) && <img className="lv-card-image" src={str(p.image_url)} alt="" />}
           <div className="lv-card-body">
             <div className="lv-card-title">{str(p.title)}</div>
@@ -95,6 +132,7 @@ export function renderLibraryContent(node: ComponentNode): ReactNode {
           </div>
         </div>
       );
+    }
     case "footer":
       return (
         <div className="lv-footer">

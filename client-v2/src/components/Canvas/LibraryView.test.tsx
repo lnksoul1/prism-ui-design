@@ -71,6 +71,62 @@ test("unknown type falls back to cv-placeholder with type label", () => {
   expect(ph.textContent).toContain("mystery_widget");
 });
 
+// ---- 变体感知渲染：node.variant || props.variant ----
+
+test("button renders distinct class per variant (ghost vs primary)", () => {
+  const { unmount } = render(
+    <div>{renderLibraryContent({ id: "b1", type: "button", variant: "ghost", props: { text: "幽灵按钮" }, children: [] })}</div>
+  );
+  expect(document.querySelector(".cv-button--ghost")).toBeTruthy();
+  expect(document.querySelector(".cv-button--primary")).toBeNull();
+  unmount();
+
+  render(
+    <div>{renderLibraryContent({ id: "b2", type: "button", variant: "primary", props: { text: "主要按钮" }, children: [] })}</div>
+  );
+  expect(document.querySelector(".cv-button--primary")).toBeTruthy();
+  expect(document.querySelector(".cv-button--ghost")).toBeNull();
+});
+
+test("button variant falls back to props.variant when node.variant is absent", () => {
+  render(
+    <div>{renderLibraryContent({ id: "b3", type: "button", props: { text: "线框按钮", variant: "outline" }, children: [] })}</div>
+  );
+  expect(document.querySelector(".cv-button--outline")).toBeTruthy();
+});
+
+test("navbar centered variant renders the centered class", () => {
+  render(
+    <div>{renderLibraryContent({ id: "n2", type: "navbar", variant: "centered", props: { brand: "Prism", links: ["首页"], cta_text: "" }, children: [] })}</div>
+  );
+  expect(document.querySelector(".lv-navbar--centered")).toBeTruthy();
+});
+
+test("card elevated variant renders the elevated class", () => {
+  render(
+    <div>{renderLibraryContent({ id: "c1", type: "card", variant: "elevated", props: { title: "卡片标题" }, children: [] })}</div>
+  );
+  expect(document.querySelector(".lv-card--elevated")).toBeTruthy();
+  expect(document.querySelector(".lv-card")).toBeTruthy();
+});
+
+test("hero split variant renders copy plus right placeholder figure", () => {
+  render(
+    <div>{renderLibraryContent({ id: "h1", type: "hero", variant: "split", props: { title: "主标题", subtitle: "副标题" }, children: [] })}</div>
+  );
+  expect(document.querySelector(".lv-hero--split")).toBeTruthy();
+  expect(document.querySelector(".lv-hero-figure")).toBeTruthy();
+  expect(screen.getByText("主标题")).toBeTruthy();
+});
+
+test("cta split variant renders text left and button right", () => {
+  render(
+    <div>{renderLibraryContent({ id: "ct1", type: "cta", variant: "split", props: { title: "准备好了吗？", button_text: "立即开始" }, children: [] })}</div>
+  );
+  expect(document.querySelector(".lv-cta--split")).toBeTruthy();
+  expect(screen.getByRole("button", { name: "立即开始" })).toBeTruthy();
+});
+
 test("form renders title and labeled input fields", () => {
   renderNode("form", {
     title: "表单标题",

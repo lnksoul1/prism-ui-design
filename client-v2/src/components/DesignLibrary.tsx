@@ -1,6 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchCatalog, LIBRARY_COMPONENT_MIME, type LibraryEntry } from "../lib/catalog";
 import { api } from "../api";
+import { renderLibraryContent } from "./Canvas/LibraryView";
+import type { ComponentNode } from "../types";
+
+/** 卡片预览用假节点：复用画布渲染器 renderLibraryContent（无子组件）。 */
+function previewNode(c: LibraryEntry): ComponentNode {
+  return {
+    id: `preview-${c.id}`,
+    type: c.type,
+    variant: c.variant,
+    props: c.props,
+    children: [],
+  };
+}
 
 export function DesignLibrary() {
   const [catalog, setCatalog] = useState<Awaited<ReturnType<typeof fetchCatalog>> | null>(null);
@@ -46,19 +59,38 @@ export function DesignLibrary() {
       <div className="lib-section">
         <div className="lib-section-title">组件（{components.length}）</div>
         {components.map((c) => (
-          <button
-            key={c.id}
-            className="lib-item"
-            draggable
-            onDragStart={(e) => {
-              e.dataTransfer.setData(LIBRARY_COMPONENT_MIME, c.id);
-              e.dataTransfer.effectAllowed = "copy";
-            }}
-            onClick={() => void api.addLibraryComponent(c.id)}
-          >
-            <span className="lib-item-name">{c.name}</span>
-            <span className="lib-item-desc">{c.description}</span>
-          </button>
+          <div key={c.id} className="lib-item lib-item--component" onClick={() => void api.addLibraryComponent(c.id)}>
+            <button
+              className="lib-card-main"
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData(LIBRARY_COMPONENT_MIME, c.id);
+                e.dataTransfer.effectAllowed = "copy";
+              }}
+            >
+              <span className="lib-item-name">{c.name}</span>
+              <span className="lib-item-desc">{c.description}</span>
+            </button>
+            <span className="lib-preview">
+              <span className="lib-preview-inner">{renderLibraryContent(previewNode(c))}</span>
+            </span>
+            {(c.variants ?? []).length > 0 && (
+              <span className="lib-variants">
+                {(c.variants ?? []).slice(0, 4).map((v) => (
+                  <span
+                    key={v.name}
+                    className="lib-variant-chip"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void api.addLibraryComponent(c.id, v.name);
+                    }}
+                  >
+                    {v.name}
+                  </span>
+                ))}
+              </span>
+            )}
+          </div>
         ))}
       </div>
     </div>

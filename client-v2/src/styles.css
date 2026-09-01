@@ -348,3 +348,39 @@ body {
 .lv-divider-text span { font-size: 12px; color: #999; white-space: nowrap; }
 .lv-link { color: #2383e2; font-size: 13px; text-decoration: underline; }
 .lv-label { display: inline-flex; align-items: center; font-size: 12px; color: #666; background: rgba(0,0,0,0.05); border-radius: 4px; padding: 2px 8px; }
+
+/* ===== M4 设计库卡片：活预览 + 变体 chips ===== */
+/* 组件卡片 = 标题按钮（可拖拽）+ 缩放预览 + 变体 chips；标题按钮不与预览内的按钮嵌套 */
+.lib-item--component { padding: 0; gap: 0; }
+.lib-card-main { display: flex; flex-direction: column; gap: 2px; text-align: left; border: none; background: transparent; padding: 8px 10px 6px; cursor: pointer; font: inherit; width: 100%; }
+.lib-item--component .lib-preview { margin: 0 10px; }
+.lib-item--component .lib-variants { padding: 6px 10px 8px; }
+/* 预览盒：内层 200% 宽 + scale(0.5) 缩小一半，顶部对齐，禁止交互 */
+.lib-preview { display: block; height: 64px; overflow: hidden; border: 1px solid rgba(0,0,0,0.08); border-radius: 6px; background: #fff; }
+.lib-preview-inner { display: block; width: 200%; transform: scale(0.5); transform-origin: top left; pointer-events: none; }
+.lib-variants { display: flex; flex-wrap: wrap; gap: 4px; }
+.lib-variant-chip { display: inline-block; font-size: 11px; line-height: 1; padding: 4px 9px; border-radius: 999px; border: 1px solid rgba(35,131,226,0.35); background: rgba(35,131,226,0.07); color: #1c5fa8; cursor: pointer; }
+.lib-variant-chip:hover { background: #2383e2; border-color: #2383e2; color: #fff; }
+
+/* 按钮变体：primary 实底 / ghost 纯文字 / outline 线框（置于 .cv-button 的 all:unset 之后以覆盖） */
+.cv-button--primary { background: #2383e2; color: #fff; border-radius: 6px; }
+.cv-button--ghost { background: transparent; color: #2383e2; }
+.cv-button--outline { background: transparent; color: #2383e2; border: 1px solid #2383e2; border-radius: 6px; }
+
+/* navbar 变体：centered 品牌与链接整体居中；with_cta 按钮靠右 */
+.lv-navbar--centered { justify-content: center; }
+.lv-navbar--centered .lv-navbar-links { flex: 0 0 auto; }
+.lv-navbar--with_cta { justify-content: space-between; }
+
+/* hero 变体：split / image_right 左文右图 */
+.lv-hero--split { flex-direction: row; align-items: center; text-align: left; }
+.lv-hero--split .lv-hero-copy { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; flex: 1; min-width: 0; }
+.lv-hero-figure { width: 38%; min-height: 96px; background: #f0f0ee; border: 1px dashed rgba(0,0,0,0.12); border-radius: 10px; flex-shrink: 0; }
+
+/* cta 变体：split 左文右按钮 */
+.lv-cta--split { flex-direction: row; text-align: left; }
+.lv-cta--split .lv-cta-copy { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0; }
+
+/* card 变体：elevated 投影无边框；article 无边框 */
+.lv-card--elevated { border: none; box-shadow: 0 6px 18px rgba(0,0,0,0.14); }
+.lv-card--article { border: none; }

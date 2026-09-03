@@ -9,6 +9,7 @@ import { runActionFlow, type ActionFlow, type FlowEffect } from "../../lib/actio
 import { snapValue } from "../../lib/snap";
 import { computeAlignmentGuides, snapToGuides } from "../../lib/guides";
 import { LIBRARY_COMPONENT_MIME } from "../../lib/catalog";
+import { waitForComponent } from "../../lib/placement";
 import type { ComponentNode } from "../../types";
 
 export function CanvasStage() {
@@ -26,6 +27,7 @@ export function CanvasStage() {
   const hiddenIds = useDesignStore((s) => s.hiddenIds);
   const toastMsg = useDesignStore((s) => s.toastMsg);
   const dragState = useDesignStore((s) => s.dragState);
+  const resizeState = useDesignStore((s) => s.resizeState);
 
   const page = state?.pages?.find((p) => p.id === (playMode ? (previewPageId ?? state.currentPageId) : state.currentPageId)) ?? state?.pages?.[0];
   const components: ComponentNode[] = (page?.components ?? []).filter((c) => !hiddenIds.includes(c.id));
@@ -79,15 +81,16 @@ export function CanvasStage() {
     else if (behavior?.type === "link" && behavior.url) window.open(behavior.url, "_blank");
   };
 
-  /** M3 拖拽: 按住已选中组件拖动——网格吸附 + 对齐辅助线，松手单 undo 步提交 ydoc。 */
+  /** M3 拖拽: 按住已选中组件拖动——网格吸附 + 对齐辅助线，松手单 undo 步提交 ydoc。
+   * 无布局的组件（服务端 addComponent 不落布局）用回退几何，拖动即创建布局。 */
   const startDrag = (id: string, e: ReactMouseEvent): void => {
     if (playMode) return;
     const node = components.find((c) => c.id === id);
-    if (!node?.layout) return;
+    if (!node) return;
     const origin = { x: e.clientX, y: e.clientY };
-    const base = { x: node.layout.x ?? 0, y: node.layout.y ?? 0 };
-    const w = node.layout.w ?? 320;
-    const h = node.layout.h ?? 80;
+    const base = { x: node.layout?.x ?? 16, y: node.layout?.y ?? 0 };
+    const w = node.layout?.w ?? 320;
+    const h = node.layout?.h ?? 80;
     const others = components
       .filter((c) => c.id !== id && c.layout)
       .map((c) => ({ x: c.layout!.x ?? 0, y: c.layout!.y ?? 0, w: c.layout!.w ?? 320, h: c.layout!.h ?? 80 }));
@@ -107,7 +110,7 @@ export function CanvasStage() {
         const final = snapToGuides(st.x, st.y, st.guides); // 提交前再吸附一次辅助线
         editComponent(id, (draft) => {
           const layout = (draft.layout as Record<string, number> | undefined) ?? {};
-          draft.layout = { ...layout, x: final.x, y: final.y };
+          draft.layout = { ...layout, x: final.x, y: final.y, w: layout.w ?? 320, h: layout.h ?? 80 };
         });
       }
       useDesignStore.setState({ dragState: null });
@@ -116,7 +119,35 @@ export function CanvasStage() {
     document.addEventListener("mouseup", up);
   };
 
-  /** M4 设计库拖拽: 画布接收 HTML5 drop，加入组件并选中新节点（预览模式下禁用）。 */
+  /** M4 调整大小: SE 角手柄拖动——resizeState 实时覆盖宽高（最小 32×32），
+   * 松手按网格吸附 w/h 后单 undo 步提交 ydoc；与拖拽辅助线互不相关。 */
+  const startResize = (id: string, e: ReactMouseEvent): void => {
+    if (playMode) return;
+    const node = components.find((c) => c.id === id);
+    const origin = { x: e.clientX, y: e.clientY };
+    const base = { x: node?.layout?.x ?? 16, y: node?.layout?.y ?? 0, w: node?.layout?.w ?? 320, h: node?.layout?.h ?? 80 };
+    const move = (ev: MouseEvent): void => {
+      const w = Math.max(32, base.w + ev.clientX - origin.x);
+      const h = Math.max(32, base.h + ev.clientY - origin.y);
+      useDesignStore.setState({ resizeState: { id, x: base.x, y: base.y, w, h } });
+    };
+    const up = (): void => {
+      document.removeEventListener("mousemove", move);
+      document.removeEventListener("mouseup", up);
+      const st = useDesignStore.getState().resizeState;
+      if (st?.id === id) {
+        editComponent(id, (draft) => {
+          const layout = (draft.layout as Record<string, number> | undefined) ?? {};
+          draft.layout = { ...layout, w: snapValue(st.w), h: snapValue(st.h) };
+        });
+      }
+      useDesignStore.setState({ resizeState: null });
+    };
+    document.addEventListener("mousemove", move);
+    document.addEventListener("mouseup", up);
+  };
+
+  /** M4 设计库拖拽: 画布接收 HTML5 drop，加入组件、选中新节点并把落点提交为布局。 */
   const handleDragOver = (e: ReactDragEvent<HTMLDivElement>): void => {
     if (playMode) return;
     e.preventDefault();
@@ -128,9 +159,19 @@ export function CanvasStage() {
     e.preventDefault();
     const id = e.dataTransfer.getData(LIBRARY_COMPONENT_MIME);
     if (!id) return;
-    void api.addLibraryComponent(id).then((res) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = snapValue(e.clientX - rect.left);
+    const y = snapValue(e.clientY - rect.top);
+    void api.addLibraryComponent(id).then(async (res) => {
       const componentId = (res as { component_id?: string } | null)?.component_id;
-      if (componentId) useDesignStore.setState({ selection: [componentId] });
+      if (!componentId) return;
+      useDesignStore.setState({ selection: [componentId] });
+      // 服务端广播先于本地写路径到达：等组件投影进 ydoc 再提交布局
+      await waitForComponent(componentId);
+      editComponent(componentId, (draft) => {
+        const layout = (draft.layout as Record<string, number> | undefined) ?? {};
+        draft.layout = { ...layout, x, y, w: 320, h: 80 };
+      });
     });
   };
 
@@ -152,6 +193,9 @@ export function CanvasStage() {
           onActivate={activate}
           dragPos={dragState?.id === node.id ? { x: dragState.x, y: dragState.y } : undefined}
           onDragStart={startDrag}
+          resizeHandle={selection.length === 1 && selection[0] === node.id && !playMode}
+          resizeBox={resizeState?.id === node.id ? { w: resizeState.w, h: resizeState.h } : undefined}
+          onResizeStart={startResize}
           onSelect={(id, additive) => {
             if (linkMode) {
               setPendingLinkSource(id);

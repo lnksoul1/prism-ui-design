@@ -24,6 +24,8 @@ interface DesignStore {
   toastMsg: string | null;
   /** M3 拖拽中: 被拖组件当前位置 + 对齐辅助线（拖拽期间用 setState 直接写，无需 action）。 */
   dragState: { id: string; x: number; y: number; guides: { xs: number[]; ys: number[] } } | null;
+  /** M4 调整大小中: 被调整组件的实时盒子（调整期间用 setState 直接写，无需 action）。 */
+  resizeState: { id: string; x: number; y: number; w: number; h: number } | null;
   applyServerState: (s: DesignStateView) => void;
   setConnected: (v: boolean) => void;
   select: (id: string) => void;
@@ -53,6 +55,7 @@ export const useDesignStore = create<DesignStore>((set) => ({
   hiddenIds: [],
   toastMsg: null,
   dragState: null,
+  resizeState: null,
   applyServerState: (s) =>
     set((st) => {
       const merged = mergeCollabIntoState(s, collabMaps());

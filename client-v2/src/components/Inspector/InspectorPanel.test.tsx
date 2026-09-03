@@ -47,3 +47,24 @@ test("mobile breakpoint shows override editor and writes breakpoint override int
   const entry = collabMaps()!.components.get("comp-1") as { breakpointOverrides?: Record<string, Record<string, string>> };
   expect(entry.breakpointOverrides?.mobile).toEqual({ width: "80px" });
 });
+
+test("geometry section renders x/y/w/h from layout and commits edits on blur", async () => {
+  useDesignStore.setState({ state, selection: ["comp-1"], breakpoint: "desktop" });
+  render(<InspectorPanel />);
+
+  const x = screen.getByTestId("insp-x") as HTMLInputElement;
+  const y = screen.getByTestId("insp-y") as HTMLInputElement;
+  const w = screen.getByTestId("insp-w") as HTMLInputElement;
+  const h = screen.getByTestId("insp-h") as HTMLInputElement;
+  expect(x.value).toBe("16");
+  expect(y.value).toBe("16");
+  expect(w.value).toBe("120");
+  expect(h.value).toBe("40");
+
+  await userEvent.clear(x);
+  await userEvent.type(x, "32");
+  await userEvent.tab(); // blur → 提交
+
+  const entry = collabMaps()!.components.get("comp-1") as { layout?: Record<string, number> };
+  expect(entry.layout).toEqual({ x: 32, y: 16, w: 120, h: 40 });
+});

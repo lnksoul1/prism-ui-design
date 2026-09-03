@@ -22,9 +22,64 @@ export function InspectorPanel() {
       <h3 className="panel-title">{node.name || node.type}{node.variant ? ` · ${node.variant}` : ""}</h3>
       {isBoxModeComponent(node) && <BoxModeSection node={node} />}
       <PropsSection node={node} />
+      <GeometrySection node={node} />
       <StyleSection node={node} breakpoint={breakpoint} />
       <ActionFlowSection node={node} />
     </div>
+  );
+}
+
+const GEOMETRY_FIELDS = [
+  { key: "x", label: "X", testid: "insp-x" },
+  { key: "y", label: "Y", testid: "insp-y" },
+  { key: "w", label: "宽", testid: "insp-w" },
+  { key: "h", label: "高", testid: "insp-h" },
+] as const;
+
+type GeometryKey = (typeof GEOMETRY_FIELDS)[number]["key"];
+
+/** M4 几何区: X/Y/宽/高 数字输入，blur 或 Enter 提交（merge 进 layout，无布局则创建）。 */
+function GeometrySection({ node }: { node: ComponentNode }) {
+  const [values, setValues] = useState<Record<GeometryKey, string>>({ x: "", y: "", w: "", h: "" });
+
+  useEffect(() => {
+    const l = node.layout;
+    setValues({
+      x: l ? String(l.x ?? "") : "",
+      y: l ? String(l.y ?? "") : "",
+      w: l ? String(l.w ?? "") : "",
+      h: l ? String(l.h ?? "") : "",
+    });
+  }, [node.id, node.layout]);
+
+  const commit = (key: GeometryKey, raw: string): void => {
+    const n = Number(raw);
+    if (raw.trim() === "" || !Number.isFinite(n)) return;
+    editComponent(node.id, (entry) => {
+      const prev = (entry.layout as Record<string, number> | undefined) ?? {};
+      entry.layout = { ...prev, [key]: n };
+    });
+  };
+
+  return (
+    <section className="insp-section">
+      <div className="insp-title">位置与尺寸</div>
+      {GEOMETRY_FIELDS.map(({ key, label, testid }) => (
+        <label key={key} className="insp-row">
+          <span>{label}</span>
+          <input
+            data-testid={testid}
+            type="number"
+            value={values[key]}
+            onChange={(e) => setValues({ ...values, [key]: e.target.value })}
+            onBlur={(e) => commit(key, e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commit(key, e.currentTarget.value);
+            }}
+          />
+        </label>
+      ))}
+    </section>
   );
 }
 

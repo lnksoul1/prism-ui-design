@@ -15,18 +15,22 @@ interface Props {
   /** M3 拖拽: 拖动期间的实时位置覆盖（仅根组件）。 */
   dragPos?: { x: number; y: number };
   onDragStart?: (id: string, e: ReactMouseEvent) => void;
+  /** M4 调整大小: 单选根组件渲染 SE 角手柄；调整期间实时覆盖宽高（最小 32×32）。 */
+  resizeHandle?: boolean;
+  resizeBox?: { w: number; h: number };
+  onResizeStart?: (id: string, e: ReactMouseEvent) => void;
 }
 
 /** M1 渲染策略：已知类型给最小保真呈现，未知类型渲染带类型标签的占位盒。 */
-export function ComponentView({ node, selected, breakpoint, onSelect, playMode, onActivate, dragPos, onDragStart }: Props) {
+export function ComponentView({ node, selected, breakpoint, onSelect, playMode, onActivate, dragPos, onDragStart, resizeHandle, resizeBox, onResizeStart }: Props) {
   const layout = node.layout;
   const cqWidth = useDesignStore((s) => s.cqWidth);
   const style: CSSProperties = {
     position: "absolute",
     left: dragPos?.x ?? layout?.x ?? 16,
     top: dragPos?.y ?? layout?.y ?? 0,
-    width: layout?.w ?? 320,
-    minHeight: layout?.h,
+    width: resizeBox?.w ?? layout?.w ?? 320,
+    minHeight: resizeBox?.h ?? layout?.h,
     ...(resolveStyle(node, breakpoint) as CSSProperties),
     ...(selected && cqWidth !== null
       ? { containerType: "inline-size" as const, width: cqWidth }
@@ -71,6 +75,16 @@ export function ComponentView({ node, selected, breakpoint, onSelect, playMode, 
           onActivate={onActivate}
         />
       ))}
+      {resizeHandle && (
+        <div
+          className="resize-handle"
+          data-testid="resize-handle"
+          onMouseDown={(e) => {
+            e.stopPropagation();
+            onResizeStart?.(node.id, e);
+          }}
+        />
+      )}
     </div>
   );
 }

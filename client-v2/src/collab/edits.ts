@@ -32,3 +32,35 @@ export function redo(): boolean {
   um.redo();
   return true;
 }
+
+interface IndexEntry {
+  parentId: string | null;
+  pageId: string;
+  index: number;
+}
+
+/**
+ * 图层面板 z 序拖拽: 按给定顺序（底→顶）重写某页根层级（parentId=null）
+ * 的 index 条目为 0..n-1。整个重写在一个事务（origin=LOCAL_ORIGIN）中
+ * 完成 = 单 undo 步；只改 index 实际变化的条目（顺序未变时零操作、零 undo）。
+ * 非根层级 / 他页 / 未知 id 被过滤，不受影响。
+ */
+export function reorderComponents(pageId: string, orderedIds: string[]): void {
+  const { ydoc } = getCollab();
+  const index = ydoc.getMap<IndexEntry>("index");
+  // 先读后写：收集该页根层级的现有条目
+  const roots = new Map<string, IndexEntry>();
+  for (const [id, entry] of index.entries()) {
+    if (entry.parentId === null && entry.pageId === pageId) roots.set(id, entry);
+  }
+  const ids = [...new Set(orderedIds)].filter((id) => roots.has(id));
+  const writes: Array<[string, IndexEntry]> = [];
+  ids.forEach((id, i) => {
+    const entry = roots.get(id)!;
+    if (entry.index !== i) writes.push([id, { ...entry, index: i }]);
+  });
+  if (writes.length === 0) return;
+  ydoc.transact(() => {
+    for (const [id, entry] of writes) index.set(id, entry);
+  }, LOCAL_ORIGIN);
+}

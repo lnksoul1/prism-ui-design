@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Topbar } from "./components/Topbar";
 import { AiPanel } from "./components/AiPanel";
 import { DesignLibrary } from "./components/DesignLibrary";
+import { Layers } from "./components/Layers";
 import { CanvasStage } from "./components/Canvas/CanvasStage";
 import { InspectorPanel } from "./components/Inspector/InspectorPanel";
 import { useDesignStore } from "./stores/design";
@@ -33,7 +34,12 @@ export function App() {
       <Topbar />
       {!playMode && <AiPanel />}
       <div className="main-layout">
-        {!playMode && <aside className="panel panel-left"><DesignLibrary /></aside>}
+        {!playMode && (
+          <aside className="panel panel-left">
+            <DesignLibrary />
+            <Layers />
+          </aside>
+        )}
         <main className="canvas-host"><CanvasStage /></main>
         {!playMode && <aside className="panel panel-right"><InspectorPanel /></aside>}
       </div>

@@ -40,6 +40,8 @@ export const api = {
   addPageLink: (body: { from_page_id: string; to_page_id: string; source_component_id?: string }) =>
     post("/api/page-links", body),
   removePageLink: (id: string) => del(`/api/page-links/${id}`),
+  deleteComponent: (id: string) => del(`/api/component/${id}`),
+  duplicateComponent: (id: string) => post<{ id: string; type: string }>(`/api/component/${id}/duplicate`, {}),
   createActionFlow: (body: { name?: string; componentId: string; steps: Array<{ id?: string; action: string; params?: Record<string, unknown> }> }) =>
     post("/api/action-flows", body),
   updateActionFlow: (id: string, patch: { name?: string; steps?: unknown[]; enabled?: boolean }) =>

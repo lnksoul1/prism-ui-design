@@ -9,11 +9,13 @@ import { useDesignStore } from "./stores/design";
 import { connectPrismSocket } from "./ws/client";
 import { api } from "./api";
 import { getCollab } from "./collab/collab";
+import { useCanvasShortcuts } from "./lib/shortcuts";
 import type { DesignStateView } from "./types";
 
 export function App() {
   const applyServerState = useDesignStore((s) => s.applyServerState);
   const playMode = useDesignStore((s) => s.playMode);
+  useCanvasShortcuts();
 
   useEffect(() => {
     void api.getState().then((raw) => applyServerState(raw as DesignStateView));

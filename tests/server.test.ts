@@ -865,6 +865,72 @@ test(
 );
 
 test(
+  "remove-component REST endpoint deletes a component",
+  { timeout: 60000 },
+  async () => {
+    const port = await getFreePort();
+    const child = spawn(process.execPath, [SERVER_ENTRY], {
+      cwd: path.resolve(__dirname, "..", ".."),
+      env: {
+        ...process.env,
+        DASHBOARD_PORT: String(port),
+        PRISM_PROJECT_DIR: path.join(os.tmpdir(), "prism-remove-server"),
+        PRISM_AUTOIMPORT: "off",
+        PRISM_AUTOLOAD: "off",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let logs = "";
+    child.stderr?.on("data", (d) => (logs += d.toString()));
+    const base = `http://127.0.0.1:${port}`;
+    const headers = { "Content-Type": "application/json" };
+
+    try {
+      await waitForHealth(`${base}/health`, 20000);
+
+      const addRes = await fetch(`${base}/api/component`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ type: "button", props: { text: "Go" } }),
+      });
+      const added = (await addRes.json()) as { id: string };
+
+      const delRes = await fetch(`${base}/api/component/${added.id}`, { method: "DELETE" });
+      assert.equal(delRes.status, 200);
+      const del = (await delRes.json()) as { success: boolean };
+      assert.equal(del.success, true);
+
+      const state = (await (await fetch(`${base}/api/state`)).json()) as {
+        components: Array<{ id: string }>;
+      };
+      assert.equal(state.components.length, 0, "deleted component is gone from state");
+
+      const missing = await fetch(`${base}/api/component/comp_nope`, { method: "DELETE" });
+      assert.equal(missing.status, 200);
+      const missingBody = (await missing.json()) as { success: boolean };
+      assert.equal(missingBody.success, false, "unknown id reports success: false");
+    } catch (error) {
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}\n--- server logs ---\n${logs}`,
+        { cause: error }
+      );
+    } finally {
+      child.kill();
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(() => {
+          child.kill("SIGKILL");
+          resolve();
+        }, 3000);
+        child.once("exit", () => {
+          clearTimeout(timer);
+          resolve();
+        });
+      });
+    }
+  }
+);
+
+test(
   "WS change broadcasts carry affected_ids for incremental rendering (Phase 2.4)",
   { timeout: 60000 },
   async () => {

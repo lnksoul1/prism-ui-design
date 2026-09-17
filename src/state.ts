@@ -367,6 +367,24 @@ export interface PageLink {
   label?: string;
   /** Optional component whose click triggers the navigation. */
   source_component_id?: string;
+  /** M4 转场: enter animation of the target page in play mode (default "fade"). */
+  transition?: PageLinkTransition;
+}
+
+/** M4 页面转场类型: play mode 进入目标页时的动画。 */
+export const PAGE_LINK_TRANSITIONS = [
+  "fade",
+  "slide-left",
+  "slide-right",
+  "slide-up",
+  "slide-down",
+  "expand",
+  "none",
+] as const;
+export type PageLinkTransition = (typeof PAGE_LINK_TRANSITIONS)[number];
+
+export function isPageLinkTransition(value: string): value is PageLinkTransition {
+  return (PAGE_LINK_TRANSITIONS as readonly string[]).includes(value);
 }
 
 // ===== State Store (Singleton) =====
@@ -2100,12 +2118,16 @@ export class DesignStateStore extends EventEmitter {
     toPageId: string,
     label?: string,
     sourceComponentId?: string,
-    source: "ai" | "user" = "user"
+    source: "ai" | "user" = "user",
+    transition?: string
   ): PageLink {
     const fromPage = this.state.pages.find((p) => p.id === fromPageId);
     if (!fromPage) throw new Error(`Source page must exist: ${fromPageId}`);
     const toPage = this.state.pages.find((p) => p.id === toPageId);
     if (!toPage) throw new Error(`Target page must exist: ${toPageId}`);
+    if (transition !== undefined && (typeof transition !== "string" || !isPageLinkTransition(transition))) {
+      throw new Error(`Invalid transition: ${String(transition)}`);
+    }
 
     // One link per source component: re-linking replaces the old link.
     if (sourceComponentId) {
@@ -2127,6 +2149,7 @@ export class DesignStateStore extends EventEmitter {
       id: `link_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       from_page_id: fromPageId,
       to_page_id: toPageId,
+      transition: transition ?? "fade",
     };
     if (label) link.label = label;
     if (sourceComponentId) link.source_component_id = sourceComponentId;
@@ -2141,6 +2164,26 @@ export class DesignStateStore extends EventEmitter {
       source
     );
     this.commit({ type: "addPageLink", link });
+    return link;
+  }
+
+  /** M4 转场: 更新连线的转场类型/标签（partial patch，入 undo 历史）。 */
+  updatePageLink(
+    linkId: string,
+    patch: { label?: string; transition?: string },
+    source: "ai" | "user" = "user"
+  ): PageLink | null {
+    const link = this.state.pageLinks.find((l) => l.id === linkId);
+    if (!link) return null;
+    if (patch.transition !== undefined) {
+      if (typeof patch.transition !== "string" || !isPageLinkTransition(patch.transition)) {
+        throw new Error(`Invalid transition: ${String(patch.transition)}`);
+      }
+      link.transition = patch.transition;
+    }
+    if (typeof patch.label === "string" && patch.label.trim()) link.label = patch.label;
+    this.logActivity("update_page_link", "page_link", `Updated page link ${linkId}`, source);
+    this.commit({ type: "updatePageLink", linkId });
     return link;
   }
 

@@ -1,5 +1,5 @@
 import express from "express";
-import { stateStore, type ComponentNode } from "../state.js";
+import { stateStore, isPageLinkTransition, type ComponentNode } from "../state.js";
 import { isBreakpoint } from "../responsive.js";
 import * as designService from "../service/design-service.js";
 import { exportComponentCode } from "../tools/design-tools.js";
@@ -494,9 +494,13 @@ export function registerComponentsRoutes(): express.Router {
 
   // API: Create a play-mode page link (click a component -> jump to another page)
   router.post("/api/page-links", asyncHandler(async (req, res) => {
-    const { from_page_id, to_page_id, label, source_component_id } = req.body || {};
+    const { from_page_id, to_page_id, label, source_component_id, transition } = req.body || {};
     if (!from_page_id || !to_page_id || typeof from_page_id !== "string" || typeof to_page_id !== "string") {
       throw new HttpError(400, "Missing from_page_id or to_page_id");
+    }
+    // M4 转场: optional enter animation of the target page (fade / slide-* / expand / none).
+    if (transition !== undefined && (typeof transition !== "string" || !isPageLinkTransition(transition))) {
+      throw new HttpError(400, `Invalid transition: ${String(transition)}`);
     }
     let link: ReturnType<typeof stateStore.addPageLink>;
     try {
@@ -505,12 +509,34 @@ export function registerComponentsRoutes(): express.Router {
         to_page_id,
         typeof label === "string" ? label : undefined,
         typeof source_component_id === "string" ? source_component_id : undefined,
-        "user"
+        "user",
+        typeof transition === "string" ? transition : undefined
       );
     } catch (error) {
       throw new HttpError(400, error instanceof Error ? error.message : String(error));
     }
     res.json({ success: true, link });
+  }));
+
+  // API: Update a play-mode page link (transition / label)
+  router.post("/api/page-links/:id", asyncHandler(async (req, res) => {
+    const { label, transition } = req.body || {};
+    if (transition !== undefined && (typeof transition !== "string" || !isPageLinkTransition(transition))) {
+      throw new HttpError(400, `Invalid transition: ${String(transition)}`);
+    }
+    const patch: { label?: string; transition?: string } = {};
+    if (typeof label === "string" && label.trim()) patch.label = label;
+    if (typeof transition === "string") patch.transition = transition;
+    let updated: ReturnType<typeof stateStore.updatePageLink>;
+    try {
+      updated = stateStore.updatePageLink(req.params.id, patch, "user");
+    } catch (error) {
+      throw new HttpError(400, error instanceof Error ? error.message : String(error));
+    }
+    if (!updated) {
+      throw new HttpError(404, `Page link ${req.params.id} not found`);
+    }
+    res.json({ success: true, link: updated });
   }));
 
   // API: Remove a play-mode page link

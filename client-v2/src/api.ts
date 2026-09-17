@@ -37,8 +37,10 @@ export const api = {
     post("/api/comment", { component_id: componentId, text, ...opts }),
   updateComment: (id: string, patch: { text?: string; resolved?: boolean; assignee?: string | null }) =>
     post(`/api/comment/${id}`, patch),
-  addPageLink: (body: { from_page_id: string; to_page_id: string; source_component_id?: string }) =>
+  addPageLink: (body: { from_page_id: string; to_page_id: string; source_component_id?: string; transition?: string }) =>
     post("/api/page-links", body),
+  updatePageLink: (id: string, patch: { label?: string; transition?: string }) =>
+    post(`/api/page-links/${id}`, patch),
   removePageLink: (id: string) => del(`/api/page-links/${id}`),
   deleteComponent: (id: string) => del(`/api/component/${id}`),
   duplicateComponent: (id: string) => post<{ id: string; type: string }>(`/api/component/${id}/duplicate`, {}),

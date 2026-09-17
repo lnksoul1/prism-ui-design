@@ -21,6 +21,8 @@ interface DesignStore {
   /** M3 预览模式: 点击组件走 actionFlow > pageLink > behavior 激活链，仅前端状态，不写服务端。 */
   playMode: boolean;
   previewPageId: string | null;
+  /** M4 转场: 与 previewPageId 一起写入，驱动目标页入场动画类（pt-*）。 */
+  previewTransition: string | null;
   hiddenIds: string[];
   toastMsg: string | null;
   /** M3 拖拽中: 被拖组件当前位置 + 对齐辅助线（拖拽期间用 setState 直接写，无需 action）。 */
@@ -44,7 +46,7 @@ interface DesignStore {
   setLinkMode: (v: boolean) => void;
   setPendingLinkSource: (id: string | null) => void;
   setPlayMode: (v: boolean) => void;
-  setPreviewPage: (id: string) => void;
+  setPreviewPage: (id: string, transition?: string) => void;
   toggleHidden: (id: string) => void;
   showToast: (msg: string) => void;
 }
@@ -60,6 +62,7 @@ export const useDesignStore = create<DesignStore>((set) => ({
   pendingLinkSource: null,
   playMode: false,
   previewPageId: null,
+  previewTransition: null,
   hiddenIds: [],
   toastMsg: null,
   dragState: null,
@@ -85,9 +88,9 @@ export const useDesignStore = create<DesignStore>((set) => ({
   setLinkMode: (v) => set({ linkMode: v, pendingLinkSource: null }),
   setPendingLinkSource: (id) => set({ pendingLinkSource: id }),
   setPlayMode: (v) =>
-    set(v ? { playMode: true, previewPageId: null, hiddenIds: [], toastMsg: null, linkMode: false }
-         : { playMode: false, previewPageId: null, hiddenIds: [], toastMsg: null }),
-  setPreviewPage: (id) => set({ previewPageId: id }),
+    set(v ? { playMode: true, previewPageId: null, previewTransition: null, hiddenIds: [], toastMsg: null, linkMode: false }
+         : { playMode: false, previewPageId: null, previewTransition: null, hiddenIds: [], toastMsg: null }),
+  setPreviewPage: (id, transition) => set({ previewPageId: id, previewTransition: transition ?? "fade" }),
   toggleHidden: (id) =>
     set((st) => ({
       hiddenIds: st.hiddenIds.includes(id) ? st.hiddenIds.filter((x) => x !== id) : [...st.hiddenIds, id],

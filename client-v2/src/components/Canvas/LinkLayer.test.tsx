@@ -25,7 +25,7 @@ const state = {
   currentPageId: "page-1",
   comments: [],
   pageLinks: [
-    { id: "link-1", from_page_id: "page-1", to_page_id: "page-2", source_component_id: "comp-1" },
+    { id: "link-1", from_page_id: "page-1", to_page_id: "page-2", source_component_id: "comp-1", transition: "slide-left" },
   ],
   revision: 1,
 } as unknown as DesignStateView;
@@ -39,12 +39,28 @@ test("renders a bezier path for the page link anchored at the component", () => 
   expect(path.getAttribute("d")).toContain("M 220 120");
 });
 
-test("clicking a target page chip with pending source creates the link", async () => {
+test("shows the transition as a tiny label on the link", () => {
+  useDesignStore.setState({ state, selection: [], breakpoint: "desktop", linkMode: true, pendingLinkSource: null });
+  render(<LinkLayer page={state.pages[0]} />);
+  expect(screen.getByText("详情页 · 左滑")).toBeTruthy();
+});
+
+test("clicking a target page chip with pending source creates the link with the default transition", async () => {
   const { api } = await import("../../api");
   useDesignStore.setState({ state, selection: [], breakpoint: "desktop", linkMode: true, pendingLinkSource: "comp-1" });
   render(<LinkLayer page={state.pages[0]} />);
   await userEvent.click(screen.getByTestId("page-chip-page-2"));
   expect(api.addPageLink).toHaveBeenCalledWith({
-    from_page_id: "page-1", to_page_id: "page-2", source_component_id: "comp-1",
+    from_page_id: "page-1", to_page_id: "page-2", source_component_id: "comp-1", transition: "fade",
   });
+});
+
+test("clicking a link path selects its source component instead of deleting", async () => {
+  const { api } = await import("../../api");
+  useDesignStore.setState({ state, selection: [], breakpoint: "desktop", linkMode: true, pendingLinkSource: "comp-1" });
+  render(<LinkLayer page={state.pages[0]} />);
+  await userEvent.click(screen.getByTestId("page-link-link-1"));
+  expect(useDesignStore.getState().selection).toEqual(["comp-1"]);
+  expect(useDesignStore.getState().pendingLinkSource).toBeNull();
+  expect(api.removePageLink).not.toHaveBeenCalled();
 });

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useDesignStore } from "../../stores/design";
 import { editComponent } from "../../collab/edits";
 import { isBoxModeComponent } from "../../lib/boxMode";
+import { PAGE_LINK_TRANSITIONS, DEFAULT_LINK_TRANSITION } from "../../lib/transitions";
 import { api } from "../../api";
 import type { ComponentNode, DesignStateView } from "../../types";
 
@@ -25,6 +26,7 @@ export function InspectorPanel() {
       <GeometrySection node={node} />
       <StyleSection node={node} breakpoint={breakpoint} />
       <ActionFlowSection node={node} />
+      <LinksSection node={node} />
     </div>
   );
 }
@@ -332,5 +334,37 @@ function FlowEditor({ flow }: { flow: NonNullable<DesignStateView["actionFlows"]
       </label>
       {error && <div className="insp-error">{error}</div>}
     </div>
+  );
+}
+
+/** M4 链接区: 选中组件的出边连线列表——转场下拉（api.updatePageLink）+ 删除。 */
+function LinksSection({ node }: { node: ComponentNode }) {
+  const state = useDesignStore((s) => s.state);
+  const links = (state?.pageLinks ?? []).filter((l) => l.source_component_id === node.id);
+  if (links.length === 0) return null;
+
+  return (
+    <section className="insp-section">
+      <div className="insp-title">链接</div>
+      {links.map((l) => {
+        const target = state?.pages?.find((p) => p.id === l.to_page_id);
+        return (
+          <div key={l.id} className="insp-row link-row">
+            <span>{target?.name ?? l.to_page_id}</span>
+            <select
+              data-testid="link-transition"
+              aria-label={`转场 ${l.id}`}
+              value={l.transition ?? DEFAULT_LINK_TRANSITION}
+              onChange={(e) => void api.updatePageLink(l.id, { transition: e.target.value })}
+            >
+              {PAGE_LINK_TRANSITIONS.map((t) => (
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
+            </select>
+            <button className="insp-btn" onClick={() => void api.removePageLink(l.id)}>删除</button>
+          </div>
+        );
+      })}
+    </section>
   );
 }

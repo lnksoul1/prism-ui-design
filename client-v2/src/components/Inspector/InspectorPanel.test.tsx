@@ -1,10 +1,17 @@
-import { test, expect, beforeEach } from "vitest";
+import { test, expect, beforeEach, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { InspectorPanel } from "./InspectorPanel";
 import { useDesignStore } from "../../stores/design";
 import { initLocalCollabForTests, collabMaps } from "../../collab/collab";
 import type { DesignStateView } from "../../types";
+
+vi.mock("../../api", () => ({
+  api: {
+    updatePageLink: vi.fn().mockResolvedValue({ success: true }),
+    removePageLink: vi.fn().mockResolvedValue({ success: true }),
+  },
+}));
 
 const state = {
   projectName: "P", style: "s", tokens: {},
@@ -15,8 +22,11 @@ const state = {
       layout: { x: 16, y: 16, w: 120, h: 40 },
       baseStyle: { background: "#1890ff", width: "120px" },
     }],
+  }, {
+    id: "page-2", name: "详情页", components: [],
   }],
   currentPageId: "page-1", comments: [], revision: 1,
+  pageLinks: [{ id: "link-1", from_page_id: "page-1", to_page_id: "page-2", source_component_id: "comp-1", transition: "fade" }],
 } as unknown as DesignStateView;
 
 beforeEach(() => {
@@ -67,4 +77,17 @@ test("geometry section renders x/y/w/h from layout and commits edits on blur", a
 
   const entry = collabMaps()!.components.get("comp-1") as { layout?: Record<string, number> };
   expect(entry.layout).toEqual({ x: 32, y: 16, w: 120, h: 40 });
+});
+
+test("link section lists outgoing links and commits transition changes", async () => {
+  const { api } = await import("../../api");
+  useDesignStore.setState({ state, selection: ["comp-1"], breakpoint: "desktop" });
+  render(<InspectorPanel />);
+
+  expect(screen.getByText("链接")).toBeTruthy();
+  const select = screen.getByTestId("link-transition") as HTMLSelectElement;
+  expect(select.value).toBe("fade");
+
+  await userEvent.selectOptions(select, "slide-left");
+  expect(api.updatePageLink).toHaveBeenCalledWith("link-1", { transition: "slide-left" });
 });

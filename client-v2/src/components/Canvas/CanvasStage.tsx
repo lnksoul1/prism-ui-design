@@ -31,6 +31,7 @@ export function CanvasStage() {
   const setPendingLinkSource = useDesignStore((s) => s.setPendingLinkSource);
   const playMode = useDesignStore((s) => s.playMode);
   const previewPageId = useDesignStore((s) => s.previewPageId);
+  const previewTransition = useDesignStore((s) => s.previewTransition);
   const hiddenIds = useDesignStore((s) => s.hiddenIds);
   const toastMsg = useDesignStore((s) => s.toastMsg);
   const dragState = useDesignStore((s) => s.dragState);
@@ -84,12 +85,12 @@ export function CanvasStage() {
     const link = (s.pageLinks ?? []).find(
       (l) => l.source_component_id === componentId && l.from_page_id === page.id
     );
-    if (link) { st.setPreviewPage(link.to_page_id); return; }
+    if (link) { st.setPreviewPage(link.to_page_id, link.transition ?? "fade"); return; }
 
     const behavior = findAny(componentId)?.behavior as
       | { type: string; page_id?: string; message?: string; target_component_id?: string; url?: string }
       | undefined;
-    if (behavior?.type === "navigate" && behavior.page_id) st.setPreviewPage(behavior.page_id);
+    if (behavior?.type === "navigate" && behavior.page_id) st.setPreviewPage(behavior.page_id, "fade");
     else if (behavior?.type === "toast" && behavior.message) st.showToast(behavior.message);
     else if (behavior?.type === "toggle" && behavior.target_component_id) st.toggleHidden(behavior.target_component_id);
     else if (behavior?.type === "link" && behavior.url) window.open(behavior.url, "_blank");
@@ -300,6 +301,31 @@ export function CanvasStage() {
     });
   };
 
+  const componentNodes = components.map((node) => (
+    <ComponentView
+      key={node.id}
+      node={node}
+      selected={selection.includes(node.id)}
+      breakpoint={breakpoint}
+      playMode={playMode}
+      onActivate={activate}
+      dragPos={dragState?.id === node.id ? { x: dragState.x, y: dragState.y } : undefined}
+      onDragStart={startDrag}
+      resizeHandle={selection.length === 1 && selection[0] === node.id && !playMode}
+      resizeBox={resizeState?.id === node.id ? { w: resizeState.w, h: resizeState.h } : undefined}
+      onResizeStart={startResize}
+      onSelect={(id, additive) => {
+        if (linkMode) {
+          setPendingLinkSource(id);
+          useDesignStore.setState({ selection: [id] });
+          return;
+        }
+        if (additive) select(id);
+        else useDesignStore.setState({ selection: [id] });
+      }}
+    />
+  ));
+
   return (
     <div
       ref={viewportRef}
@@ -319,30 +345,19 @@ export function CanvasStage() {
           transformOrigin: "0 0",
         }}
       >
-        {components.map((node) => (
-          <ComponentView
-            key={node.id}
-            node={node}
-            selected={selection.includes(node.id)}
-            breakpoint={breakpoint}
-            playMode={playMode}
-            onActivate={activate}
-            dragPos={dragState?.id === node.id ? { x: dragState.x, y: dragState.y } : undefined}
-            onDragStart={startDrag}
-            resizeHandle={selection.length === 1 && selection[0] === node.id && !playMode}
-            resizeBox={resizeState?.id === node.id ? { w: resizeState.w, h: resizeState.h } : undefined}
-            onResizeStart={startResize}
-            onSelect={(id, additive) => {
-              if (linkMode) {
-                setPendingLinkSource(id);
-                useDesignStore.setState({ selection: [id] });
-                return;
-              }
-              if (additive) select(id);
-              else useDesignStore.setState({ selection: [id] });
-            }}
-          />
-        ))}
+        {/* M4 转场: play mode 下当前页组件挂在 preview-page 容器内，key 跟随
+            previewPageId —— 跳页即重挂载，CSS 入场动画（pt-*）随之重放。 */}
+        {playMode ? (
+          <div
+            key={previewPageId ?? "current"}
+            data-testid="preview-page"
+            className={`preview-page pt-${previewTransition ?? "fade"}`}
+          >
+            {componentNodes}
+          </div>
+        ) : (
+          componentNodes
+        )}
         {/* M3 对齐辅助线（内容坐标渲染，随视口变换） */}
         {dragState?.guides.xs.map((x) => (
           <div key={`gx-${x}`} className="guide guide-v" style={{ left: x }} />

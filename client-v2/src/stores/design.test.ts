@@ -4,7 +4,10 @@ import { useDesignStore } from "./design";
 
 describe("designStore", () => {
   beforeEach(() => {
-    useDesignStore.setState({ state: null, selection: [], breakpoint: "desktop" });
+    useDesignStore.setState({
+      state: null, selection: [], breakpoint: "desktop",
+      playMode: false, previewPageId: null, previewTransition: null,
+    });
   });
 
   test("applyServerState replaces state and resets revision tracking", () => {
@@ -35,5 +38,25 @@ describe("designStore", () => {
     expect(useDesignStore.getState().breakpoint).toBe("mobile");
     act(() => result.current.setBreakpoint("watch" as never));
     expect(useDesignStore.getState().breakpoint).toBe("mobile");
+  });
+
+  test("setPreviewPage records the transition and defaults to fade", () => {
+    const { result } = renderHook(() => useDesignStore());
+    act(() => result.current.setPreviewPage("page-2", "slide-left"));
+    expect(useDesignStore.getState().previewPageId).toBe("page-2");
+    expect(useDesignStore.getState().previewTransition).toBe("slide-left");
+    act(() => result.current.setPreviewPage("page-1"));
+    expect(useDesignStore.getState().previewPageId).toBe("page-1");
+    expect(useDesignStore.getState().previewTransition).toBe("fade");
+  });
+
+  test("exiting play mode clears preview page and transition", () => {
+    const { result } = renderHook(() => useDesignStore());
+    act(() => result.current.setPlayMode(true));
+    act(() => result.current.setPreviewPage("page-2", "expand"));
+    expect(useDesignStore.getState().previewTransition).toBe("expand");
+    act(() => result.current.setPlayMode(false));
+    expect(useDesignStore.getState().previewPageId).toBeNull();
+    expect(useDesignStore.getState().previewTransition).toBeNull();
   });
 });

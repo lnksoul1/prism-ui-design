@@ -36,6 +36,8 @@ export interface PageLinkView {
   to_page_id: string;
   label?: string;
   source_component_id?: string;
+  /** M4 转场: play mode 进入目标页的动画类型（服务端默认 "fade"）。 */
+  transition?: string;
 }
 
 export interface ActionFlowStepView {

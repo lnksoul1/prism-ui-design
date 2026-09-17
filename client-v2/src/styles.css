@@ -98,6 +98,23 @@ body {
 .flow-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; margin-bottom: 4px; }
 .toolbar-btn.toolbar-btn-text { width: auto; padding: 0 10px; font-size: 12px; }
 .play-toast { position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); background: rgba(0,0,0,0.78); color: #fff; border-radius: 8px; padding: 8px 16px; font-size: 13px; z-index: 30; }
+/* M4 页面转场: play mode 下当前页容器（key=previewPageId，跳页重挂载触发入场动画） */
+.preview-page { position: absolute; inset: 0; }
+.pt-fade { animation: pt-fade 0.28s ease both; }
+@keyframes pt-fade { from { opacity: 0; } to { opacity: 1; } }
+.pt-slide-left { animation: pt-slide-left 0.32s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+@keyframes pt-slide-left { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: translateX(0); } }
+.pt-slide-right { animation: pt-slide-right 0.32s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+@keyframes pt-slide-right { from { opacity: 0; transform: translateX(-24px); } to { opacity: 1; transform: translateX(0); } }
+.pt-slide-up { animation: pt-slide-up 0.32s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+@keyframes pt-slide-up { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
+.pt-slide-down { animation: pt-slide-down 0.32s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+@keyframes pt-slide-down { from { opacity: 0; transform: translateY(-24px); } to { opacity: 1; transform: translateY(0); } }
+.pt-expand { animation: pt-expand 0.32s ease both; }
+@keyframes pt-expand { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: scale(1); } }
+.pt-none { animation: none; }
+/* M4 链接区（检查器）: 目标页 + 转场下拉 + 删除 */
+.link-row select { flex: 1; border: 1px solid rgba(0,0,0,0.12); border-radius: 6px; padding: 4px 6px; font-size: 12px; min-width: 0; }
 /* M3 对齐辅助线（canvas-stage 已有 position: relative） */
 .guide { position: absolute; background: #f0a020; z-index: 20; pointer-events: none; }
 .guide-v { top: 0; bottom: 0; width: 1px; }

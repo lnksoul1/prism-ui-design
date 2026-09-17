@@ -49,6 +49,8 @@ export const api = {
   updateActionFlow: (id: string, patch: { name?: string; steps?: unknown[]; enabled?: boolean }) =>
     post(`/api/action-flows/${id}`, patch),
   removeActionFlow: (id: string) => del(`/api/action-flows/${id}`),
+  promptBrief: (body?: { stack?: "react" | "html"; page_ids?: string[] }) =>
+    post<{ success: boolean; brief: string }>("/api/prompt-brief", body ?? {}),
 };
 
 /** M2 NL2UI 流式: 消费 /api/llm/stream 的 SSE，返回 done 事件的结果。 */

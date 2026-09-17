@@ -1,7 +1,54 @@
+import { useRef, useState } from "react";
 import { useDesignStore } from "../stores/design";
 import { undo, redo } from "../collab/edits";
+import { api } from "../api";
 
 const BP_LABELS = { desktop: "桌面", tablet: "平板", mobile: "手机" } as const;
+
+/** 提示词简报弹层: 只读 textarea + 复制（优先剪贴板 API，回退选中文本复制）。 */
+function PromptModal({ brief, onClose }: { brief: string; onClose: () => void }) {
+  const showToast = useDesignStore((s) => s.showToast);
+  const taRef = useRef<HTMLTextAreaElement>(null);
+
+  const copy = async (): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(brief);
+      showToast("提示词已复制");
+    } catch {
+      const ta = taRef.current;
+      if (ta) {
+        ta.focus();
+        ta.select();
+        showToast(document.execCommand("copy") ? "提示词已复制" : "复制失败，请手动选择复制");
+      } else {
+        showToast("复制失败，请手动选择复制");
+      }
+    }
+  };
+
+  return (
+    <div
+      className="prompt-modal"
+      data-testid="prompt-modal"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="prompt-modal-card">
+        <div className="prompt-modal-head">
+          <span>提示词简报</span>
+          <button className="prompt-modal-close" onClick={onClose}>关闭</button>
+        </div>
+        <textarea ref={taRef} className="prompt-textarea" readOnly value={brief} />
+        <div className="prompt-modal-actions">
+          <button className="prompt-copy-btn" data-testid="prompt-copy" onClick={() => void copy()}>
+            复制
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function Topbar() {
   const state = useDesignStore((s) => s.state);
@@ -12,6 +59,21 @@ export function Topbar() {
   const setLinkMode = useDesignStore((s) => s.setLinkMode);
   const playMode = useDesignStore((s) => s.playMode);
   const setPlayMode = useDesignStore((s) => s.setPlayMode);
+  const showToast = useDesignStore((s) => s.showToast);
+  const [brief, setBrief] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const openPrompt = async (): Promise<void> => {
+    setLoading(true);
+    try {
+      const res = await api.promptBrief();
+      setBrief(res.brief);
+    } catch {
+      showToast("提示词生成失败");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <header className="topbar">
@@ -43,9 +105,18 @@ export function Topbar() {
       >
         {playMode ? "退出预览" : "预览"}
       </button>
+      <button
+        className="toolbar-btn toolbar-btn-text"
+        disabled={loading}
+        onClick={() => void openPrompt()}
+        title="导出给 AI 编码工具的提示词简报"
+      >
+        {loading ? "生成中" : "提示词"}
+      </button>
       <div className="spacer" />
       <button className="toolbar-btn" onClick={() => undo()} title="撤销（协同）">↶</button>
       <button className="toolbar-btn" onClick={() => redo()} title="重做（协同）">↷</button>
+      {brief !== null && <PromptModal brief={brief} onClose={() => setBrief(null)} />}
     </header>
   );
 }

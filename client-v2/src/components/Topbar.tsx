@@ -75,6 +75,15 @@ export function Topbar() {
     }
   };
 
+  const tidy = async (): Promise<void> => {
+    try {
+      const res = await api.tidyLayout();
+      showToast(`已整理 ${res.applied} 个组件`);
+    } catch {
+      showToast("整理失败");
+    }
+  };
+
   return (
     <header className="topbar">
       <span className="logo">✦ Prism V2</span>
@@ -104,6 +113,13 @@ export function Topbar() {
         title="预览模式"
       >
         {playMode ? "退出预览" : "预览"}
+      </button>
+      <button
+        className="toolbar-btn toolbar-btn-text"
+        onClick={() => void tidy()}
+        title="一键整理页面布局（重叠成组移动 + 语义间距）"
+      >
+        整理
       </button>
       <button
         className="toolbar-btn toolbar-btn-text"

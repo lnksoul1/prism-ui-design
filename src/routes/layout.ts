@@ -1,6 +1,8 @@
 import express from "express";
 import { stateStore } from "../state.js";
-import { autoLayoutPages, autoLayoutTopLevel } from "../layout-engine.js";
+import { autoLayoutPages, autoLayoutTopLevel, containerWidthForPlatform } from "../layout-engine.js";
+import { tidyPageLayout } from "../layout/tidy.js";
+import { runBatch } from "../commands/batch.js";
 import { asyncHandler, HttpError } from "./shared.js";
 
 /**
@@ -63,6 +65,43 @@ export function registerLayoutRoutes(): express.Router {
     const ok = stateStore.applySmartLayout(ids, opts, "user");
     if (!ok) throw new HttpError(404, "No valid components found");
     res.json({ success: true, count: ids.length, ...opts });
+  }));
+
+  // 一键整理: overlap-cluster cohesion + anchored bars + semantic gaps.
+  // 整页重排在单个 undo 步内完成（runBatch）。
+  router.post("/api/layout/tidy", asyncHandler(async (req, res) => {
+    const { page_id } = req.body || {};
+    const state = stateStore.getState();
+    const current = state.pages.find((p) => p.id === state.currentPageId) || state.pages[0];
+    const page =
+      typeof page_id === "string" && page_id
+        ? state.pages.find((p) => p.id === page_id)
+        : current;
+    if (!page) throw new HttpError(404, "Page not found");
+
+    const updates = tidyPageLayout(page, containerWidthForPlatform(state.activePlatform));
+    let applied = 0;
+    if (updates.length > 0) {
+      if (current && page.id === current.id) {
+        runBatch("tidy-layout", () => {
+          for (const u of updates) {
+            if (stateStore.updateComponent(u.id, {}, "user", u.layout)) applied++;
+          }
+        });
+      } else {
+        // updateComponent 只作用于当前页: 非当前页改用整页替换（同样单个 undo 步）
+        const byId = new Map(page.components.map((c) => [c.id, c]));
+        for (const u of updates) {
+          const node = byId.get(u.id);
+          if (node) node.layout = u.layout;
+        }
+        runBatch("tidy-layout", () => {
+          stateStore.replacePageComponents(page.id, page.components, "user");
+        });
+        applied = updates.length;
+      }
+    }
+    res.json({ success: true, applied, page_id: page.id });
   }));
 
   return router;

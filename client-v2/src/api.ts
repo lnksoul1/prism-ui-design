@@ -51,6 +51,7 @@ export const api = {
   removeActionFlow: (id: string) => del(`/api/action-flows/${id}`),
   promptBrief: (body?: { stack?: "react" | "html"; page_ids?: string[] }) =>
     post<{ success: boolean; brief: string }>("/api/prompt-brief", body ?? {}),
+  tidyLayout: () => post<{ success: boolean; applied: number }>("/api/layout/tidy", {}),
 };
 
 /** M2 NL2UI 流式: 消费 /api/llm/stream 的 SSE，返回 done 事件的结果。 */

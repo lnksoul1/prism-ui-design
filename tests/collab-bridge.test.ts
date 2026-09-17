@@ -56,6 +56,24 @@ describe("collab bridge", () => {
     assert.equal(stateStore.getState().components.find((c) => c.id === a.id), undefined);
   });
 
+  test("ydoc index-only rewrite reorders server page components (client z-order drag)", () => {
+    const a = stateStore.addComponent("text", undefined, { text: "a" }, null, "user");
+    const b = stateStore.addComponent("text", undefined, { text: "b" }, null, "user");
+    const c = stateStore.addComponent("text", undefined, { text: "c" }, null, "user");
+    const doc = new Y.Doc();
+    attachCollabBridge(doc);
+    const pageId = stateStore.getState().currentPageId!;
+    // 客户端图层面板拖拽: 单事务只重写受影响的根层级 index 条目（b 顺序不变）
+    doc.transact(() => {
+      doc.getMap("index").set(a.id, { parentId: null, pageId, index: 2 });
+      doc.getMap("index").set(c.id, { parentId: null, pageId, index: 0 });
+    }, "remote-client");
+    assert.deepEqual(
+      stateStore.getState().components.map((x: { id: string }) => x.id),
+      [c.id, b.id, a.id]
+    );
+  });
+
   test("reconcile after server undo aligns ydoc to the restored snapshot", () => {
     const node = stateStore.addComponent("text", undefined, { text: "v1" }, null, "user");
     const doc = new Y.Doc();

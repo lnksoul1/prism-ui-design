@@ -86,10 +86,13 @@ export function attachCollabBridge(doc: Y.Doc): void {
     try {
       const entries = readCollabEntries(doc);
       const existing = flattenPages(stateStore.getState().pages);
+      // index 参与比较: 客户端图层面板的 z 序拖拽只改写 index 条目，
+      // 变化须进入 changed 才能触发 applyCollabEntries 的兄弟序列重排
       const sameEntry = (a: FlatEntry | undefined, b: FlatEntry): boolean =>
         !!a &&
         a.parentId === b.parentId &&
         a.pageId === b.pageId &&
+        a.index === b.index &&
         JSON.stringify({ ...a.node, children: [] }) === JSON.stringify({ ...b.node, children: [] });
       const changed: Array<{ id: string } & FlatEntry> = [];
       for (const [id, e] of entries) {

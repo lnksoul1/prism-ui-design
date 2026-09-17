@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type { DesignStateView } from "../types";
 import { collabMaps } from "../collab/collab";
 import { mergeCollabIntoState } from "../collab/project";
+import { zoomAtPoint, type CanvasView } from "../lib/viewport";
 
 export type Breakpoint = "desktop" | "tablet" | "mobile";
 const BREAKPOINTS: readonly Breakpoint[] = ["desktop", "tablet", "mobile"];
@@ -26,6 +27,13 @@ interface DesignStore {
   dragState: { id: string; x: number; y: number; guides: { xs: number[]; ys: number[] } } | null;
   /** M4 调整大小中: 被调整组件的实时盒子（调整期间用 setState 直接写，无需 action）。 */
   resizeState: { id: string; x: number; y: number; w: number; h: number } | null;
+  /** 无限画布视口: translate(x,y) scale(z)，仅前端状态不入 Schema、不同步。 */
+  view: CanvasView;
+  setView: (v: CanvasView) => void;
+  panBy: (dx: number, dy: number) => void;
+  /** 以视口坐标 (cx, cy) 为锚点缩放（cx/cy 相对视口容器左上角）。 */
+  zoomAt: (cx: number, cy: number, factor: number) => void;
+  resetView: () => void;
   applyServerState: (s: DesignStateView) => void;
   setConnected: (v: boolean) => void;
   select: (id: string) => void;
@@ -56,6 +64,11 @@ export const useDesignStore = create<DesignStore>((set) => ({
   toastMsg: null,
   dragState: null,
   resizeState: null,
+  view: { x: 0, y: 0, z: 1 },
+  setView: (v) => set({ view: v }),
+  panBy: (dx, dy) => set((st) => ({ view: { ...st.view, x: st.view.x + dx, y: st.view.y + dy } })),
+  zoomAt: (cx, cy, factor) => set((st) => ({ view: zoomAtPoint(st.view, cx, cy, factor) })),
+  resetView: () => set({ view: { x: 0, y: 0, z: 1 } }),
   applyServerState: (s) =>
     set((st) => {
       const merged = mergeCollabIntoState(s, collabMaps());

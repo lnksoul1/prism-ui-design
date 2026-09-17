@@ -16,8 +16,8 @@ export interface ShortcutContext {
   exitLinkMode: () => void;
 }
 
-/** 输入控件内敲键不触发快捷键（保留原生编辑行为）。 */
-function isTypingTarget(t: EventTarget | null): boolean {
+/** 输入控件内敲键不触发快捷键（保留原生编辑行为）。画布平移/缩放键共用同一守卫。 */
+export function isTypingTarget(t: EventTarget | null): boolean {
   return (
     t instanceof HTMLElement &&
     (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)

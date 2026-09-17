@@ -16,7 +16,7 @@ body {
 .panel { background: #ffffff; border-right: 1px solid rgba(0,0,0,0.08); overflow-y: auto; }
 .panel-left { width: 280px; }
 .panel-right { width: 300px; border-right: none; border-left: 1px solid rgba(0,0,0,0.08); }
-.canvas-host { flex: 1; overflow: auto; padding: 24px; }
+.canvas-host { flex: 1; overflow: hidden; position: relative; }
 .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #bbb; }
 .status-dot.on { background: #22c55e; }
 .bp-switcher { display: flex; gap: 4px; margin-left: 8px; }
@@ -35,7 +35,12 @@ body {
 .lib-item-desc { font-size: 11px; color: #999; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lib-error { padding: 12px; color: #d4380d; font-size: 13px; }
 .lib-loading { padding: 12px; color: #999; font-size: 13px; }
-.canvas-stage { position: relative; min-height: 800px; background: #fff; border-radius: 12px; margin: 0 auto; box-shadow: 0 1px 4px rgba(0,0,0,0.06); overflow: hidden; }
+/* 无限画布视口: 平移/缩放的工作区容器（滚轮平移，ctrl/cmd+滚轮缩放，空格或中键拖拽手型平移） */
+.canvas-viewport { position: absolute; inset: 0; overflow: hidden; background: #f7f7f5; }
+.canvas-viewport.space-pan { cursor: grab; }
+.canvas-viewport.panning { cursor: grabbing; }
+/* 画布内容层: 位移由视口 transform 驱动（translate + scale, origin 0 0），故不用 auto 边距定位 */
+.canvas-stage { position: relative; min-height: 800px; background: #fff; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); overflow: hidden; }
 .comp-wrapper { outline: 1px solid transparent; }
 .comp-wrapper:hover { outline: 1px dashed rgba(35,131,226,0.5); }
 .comp-wrapper.selected { outline: 2px solid #2383e2; }
@@ -97,6 +102,13 @@ body {
 .guide { position: absolute; background: #f0a020; z-index: 20; pointer-events: none; }
 .guide-v { top: 0; bottom: 0; width: 1px; }
 .guide-h { left: 0; right: 0; height: 1px; }
+
+/* 无限画布缩放 HUD: 视口右下角覆盖层（不随画布变换，任意缩放下可用） */
+.zoom-hud { position: absolute; right: 16px; bottom: 16px; z-index: 10; display: flex; align-items: center; gap: 4px; background: #fff; border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; padding: 4px 6px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+.zoom-btn { border: 1px solid rgba(0,0,0,0.12); background: #fff; border-radius: 6px; width: 24px; height: 24px; cursor: pointer; font-size: 13px; line-height: 1; display: flex; align-items: center; justify-content: center; padding: 0; }
+.zoom-btn:hover { background: #f0f0ee; }
+.zoom-reset-btn { width: auto; padding: 0 8px; font-size: 11px; }
+.zoom-pct { min-width: 40px; text-align: center; font-size: 11px; color: #666; font-variant-numeric: tabular-nums; }
 
 /* M4 调整大小手柄: 选中组件右下角小方块（comp-wrapper 为 absolute 定位容器） */
 .resize-handle {

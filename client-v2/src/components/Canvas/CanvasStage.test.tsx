@@ -1,4 +1,4 @@
-import { test, expect, vi, afterEach } from "vitest";
+import { test, expect, vi, afterEach, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CanvasStage } from "./CanvasStage";
@@ -15,6 +15,11 @@ vi.mock("../../api", () => ({
     }),
   },
 }));
+
+// 视口复位放在挂载前（afterEach 里 setState 会重渲染尚未卸载的组件，触发 act 告警）
+beforeEach(() => {
+  useDesignStore.setState({ view: { x: 0, y: 0, z: 1 } });
+});
 
 afterEach(() => vi.clearAllMocks());
 
@@ -160,4 +165,169 @@ test("drop is ignored when play mode is on", async () => {
   const { api } = await import("../../api");
   expect(api.addLibraryComponent).not.toHaveBeenCalled();
   expect(useDesignStore.getState().selection).toEqual([]);
+});
+
+// ---- 无限画布 pan/zoom ----
+
+function renderStage(): { container: HTMLElement; viewport: HTMLElement } {
+  const { container } = render(<CanvasStage />);
+  const viewport = container.querySelector(".canvas-viewport") as HTMLElement;
+  expect(viewport).toBeTruthy();
+  return { container, viewport };
+}
+
+test("plain wheel pans the viewport view", () => {
+  useDesignStore.setState({ state: stateWithButton, breakpoint: "desktop", selection: [], playMode: false, view: { x: 0, y: 0, z: 1 } });
+  const { viewport } = renderStage();
+
+  fireEvent.wheel(viewport, { deltaX: 12, deltaY: 34 });
+
+  // 滚轮向下/向右 = 内容向可视区下方/右方移动（视口位移取反）
+  expect(useDesignStore.getState().view).toEqual({ x: -12, y: -34, z: 1 });
+});
+
+test("ctrl+wheel zooms at the cursor and keeps the content under it fixed", () => {
+  useDesignStore.setState({ state: stateWithButton, breakpoint: "desktop", selection: [], playMode: false, view: { x: 100, y: 50, z: 1 } });
+  const { viewport } = renderStage();
+
+  // jsdom 的 getBoundingClientRect 全 0 → 光标视口坐标 = clientX/clientY
+  fireEvent.wheel(viewport, { ctrlKey: true, clientX: 300, clientY: 200, deltaY: -100 });
+
+  const v = useDesignStore.getState().view;
+  expect(v.z).toBeCloseTo(Math.exp(0.15), 6); // factor = exp(-deltaY * 0.0015)
+  // 光标下的内容点缩放前后不变: (300-x)/z 前后都是 200，(200-y)/z 前后都是 150
+  expect((300 - v.x) / v.z).toBeCloseTo(200, 6);
+  expect((200 - v.y) / v.z).toBeCloseTo(150, 6);
+});
+
+test("drop with a non-default view lands at the correct content coords", async () => {
+  const { ydoc } = initLocalCollabForTests();
+  ydoc.getMap("components").set("comp_v", { id: "comp_v", type: "navbar", props: {}, children: [] });
+  ydoc.getMap("index").set("comp_v", { parentId: null, pageId: "page-1", index: 1 });
+
+  const { api } = await import("../../api");
+  vi.mocked(api.addLibraryComponent).mockResolvedValueOnce({ success: true, component_id: "comp_v" });
+
+  useDesignStore.setState({
+    state: stateWithButton, breakpoint: "desktop", selection: [], playMode: false,
+    view: { x: 40, y: 20, z: 2 },
+  });
+  const { container } = renderStage();
+  const stage = container.querySelector(".canvas-stage") as HTMLElement;
+
+  // 内容坐标 = (clientX - rect.left - view.x) / view.z = (100-40)/2, (50-20)/2 = (30,15) → snap → (32,16)
+  await act(async () => {
+    fireEvent(stage, makeDropEvent("navbar_default", { clientX: 100, clientY: 50 }));
+  });
+
+  await waitFor(() => {
+    expect((collabMaps()!.components.get("comp_v") as { layout?: unknown }).layout).toEqual({
+      x: 32, y: 16, w: 320, h: 80,
+    });
+  });
+});
+
+test("dragging at zoom divides pointer deltas by the zoom level", () => {
+  const { ydoc } = initLocalCollabForTests();
+  ydoc.getMap("components").set("c1", { id: "c1", type: "text", props: { text: "缩放拖拽" }, children: [], layout: { x: 16, y: 16, w: 100, h: 40 } });
+  ydoc.getMap("index").set("c1", { parentId: null, pageId: "page-1", index: 0 });
+
+  const base = {
+    projectName: "P", style: "s", tokens: {},
+    pages: [{ id: "page-1", name: "首页", components: [] }],
+    currentPageId: "page-1", comments: [], revision: 1,
+  } as unknown as DesignStateView;
+  useDesignStore.setState({ state: null, baseState: base, selection: [], breakpoint: "desktop", playMode: false, view: { x: 0, y: 0, z: 2 } });
+  useDesignStore.getState().applyServerState(base);
+
+  const { container } = renderStage();
+  const wrapper = container.querySelector('[data-prism-oid="c1"]') as HTMLElement;
+
+  fireEvent.mouseDown(wrapper, { clientX: 20, clientY: 20 });
+  fireEvent.mouseMove(document, { clientX: 100, clientY: 36 }); // 屏幕位移 (80,16)，z=2 → 内容位移 (40,8) → (56,24)
+  fireEvent.mouseUp(document);
+
+  const entry = collabMaps()!.components.get("c1") as { layout?: { x: number; y: number } };
+  expect(entry.layout?.x).toBe(56);
+  expect(entry.layout?.y).toBe(24);
+});
+
+test("+ / - keys zoom at the viewport center and 0 resets the view", () => {
+  useDesignStore.setState({ state: stateWithButton, breakpoint: "desktop", selection: [], playMode: false, view: { x: 100, y: 50, z: 1 } });
+  renderStage(); // jsdom rect 全 0 → 视口中心 = (0,0)
+
+  fireEvent.keyDown(document, { key: "+" });
+  let v = useDesignStore.getState().view;
+  expect(v.z).toBeCloseTo(1.2, 10);
+  expect(v.x).toBeCloseTo(120, 9); // 0 - (0-100)*1.2
+  expect(v.y).toBeCloseTo(60, 9); // 0 - (0-50)*1.2
+
+  fireEvent.keyDown(document, { key: "-" });
+  v = useDesignStore.getState().view;
+  expect(v.z).toBeCloseTo(1, 9);
+  expect(v.x).toBeCloseTo(100, 9);
+  expect(v.y).toBeCloseTo(50, 9);
+
+  fireEvent.keyDown(document, { key: "+" });
+  fireEvent.keyDown(document, { key: "0" }); // 复位
+  expect(useDesignStore.getState().view).toEqual({ x: 0, y: 0, z: 1 });
+});
+
+test("zoom keys are ignored while typing in an input", () => {
+  useDesignStore.setState({ state: stateWithButton, breakpoint: "desktop", selection: [], playMode: false, view: { x: 100, y: 50, z: 1 } });
+  renderStage();
+  const input = document.createElement("input");
+  document.body.append(input);
+
+  fireEvent.keyDown(input, { key: "+" });
+  expect(useDesignStore.getState().view).toEqual({ x: 100, y: 50, z: 1 });
+  input.remove();
+});
+
+test("space+drag pans with the hand tool and keeps the selection", () => {
+  useDesignStore.setState({ state: stateWithButton, breakpoint: "desktop", selection: ["comp-1"], playMode: false, view: { x: 0, y: 0, z: 1 } });
+  const { viewport } = renderStage();
+
+  fireEvent.keyDown(document, { code: "Space" });
+  expect(viewport.className).toContain("space-pan");
+
+  fireEvent.mouseDown(viewport, { button: 0, clientX: 100, clientY: 80 });
+  expect(viewport.className).toContain("panning");
+  fireEvent.mouseMove(document, { clientX: 140, clientY: 96 });
+  fireEvent.mouseUp(document);
+  fireEvent.keyUp(document, { code: "Space" });
+
+  expect(useDesignStore.getState().view).toEqual({ x: 40, y: 16, z: 1 });
+  expect(useDesignStore.getState().selection).toEqual(["comp-1"]); // 手型平移不清空选区
+  expect(viewport.className).not.toContain("space-pan");
+});
+
+test("middle-mouse drag pans and does not clear the selection", () => {
+  useDesignStore.setState({ state: stateWithButton, breakpoint: "desktop", selection: ["comp-1"], playMode: false, view: { x: 0, y: 0, z: 1 } });
+  const { viewport } = renderStage();
+
+  fireEvent.mouseDown(viewport, { button: 1, clientX: 10, clientY: 10 });
+  fireEvent.mouseMove(document, { clientX: 30, clientY: 10 });
+  fireEvent.mouseUp(document);
+
+  expect(useDesignStore.getState().view).toEqual({ x: 20, y: 0, z: 1 });
+  expect(useDesignStore.getState().selection).toEqual(["comp-1"]);
+});
+
+test("zoom hud shows the percent and its buttons zoom and reset", () => {
+  useDesignStore.setState({ state: stateWithButton, breakpoint: "desktop", selection: [], playMode: false, view: { x: 0, y: 0, z: 1.5 } });
+  renderStage();
+
+  expect(screen.getByTestId("zoom-pct").textContent).toBe("150%");
+
+  fireEvent.click(screen.getByTestId("zoom-out"));
+  expect(useDesignStore.getState().view.z).toBeCloseTo(1.25, 9);
+  expect(screen.getByTestId("zoom-pct").textContent).toBe("125%");
+
+  fireEvent.click(screen.getByTestId("zoom-in"));
+  expect(useDesignStore.getState().view.z).toBeCloseTo(1.5, 9);
+
+  fireEvent.click(screen.getByTestId("zoom-reset"));
+  expect(useDesignStore.getState().view).toEqual({ x: 0, y: 0, z: 1 });
+  expect(screen.getByTestId("zoom-pct").textContent).toBe("100%");
 });

@@ -24,6 +24,7 @@ export function InspectorPanel() {
       {isBoxModeComponent(node) && <BoxModeSection node={node} />}
       <PropsSection node={node} />
       <GeometrySection node={node} />
+      <ConstraintsSection node={node} />
       <StyleSection node={node} breakpoint={breakpoint} />
       <ActionFlowSection node={node} />
       <LinksSection node={node} />
@@ -92,6 +93,65 @@ function findNode(nodes: ComponentNode[], id: string): ComponentNode | null {
     if (found) return found;
   }
   return null;
+}
+
+/** R1 M2 修正记忆: 页面布局约束区——把当前组件「记为约束」+ 本页约束列表（可删）。 */
+function ConstraintsSection({ node }: { node: ComponentNode }) {
+  const state = useDesignStore((s) => s.state);
+  const page = state?.pages?.find((p) => p.id === state.currentPageId) ?? state?.pages?.[0];
+  const constraints = page?.constraints ?? [];
+  const [message, setMessage] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const add = async (): Promise<void> => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const res = await api.addPageConstraint(node.id);
+      setMessage(`已记为约束（${res.constraint.component_type}）`);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "记录约束失败");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="insp-section">
+      <div className="insp-title">布局约束（AI 生成时保留这些位置）</div>
+      {node.layout ? (
+        <button
+          className="insp-btn"
+          data-testid="insp-add-constraint"
+          disabled={busy}
+          onClick={() => void add()}
+        >
+          记为约束
+        </button>
+      ) : (
+        <div className="insp-hint">无布局组件不能记约束</div>
+      )}
+      {constraints.length > 0 && (
+        <div className="insp-constraints" data-testid="insp-constraints">
+          {constraints.map((c) => (
+            <div key={c.id} className="insp-constraint-row">
+              <span className="insp-constraint-label">
+                {c.component_type} {Math.round(c.layout.x)},{Math.round(c.layout.y)} · {Math.round(c.layout.w)}×{Math.round(c.layout.h)}
+              </span>
+              <button
+                className="insp-btn"
+                data-testid={`insp-remove-constraint-${c.id}`}
+                onClick={() => void api.removePageConstraint(c.id)}
+              >
+                删
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {message && <div className="insp-hint" data-testid="insp-constraint-message">{message}</div>}
+    </section>
+  );
 }
 
 /** 盒子模式区：编辑器只控外层容器，内部配置以 JSON 形式维护、预览时挂载。 */

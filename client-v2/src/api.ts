@@ -52,6 +52,12 @@ export const api = {
   promptBrief: (body?: { stack?: "react" | "html"; page_ids?: string[] }) =>
     post<{ success: boolean; brief: string }>("/api/prompt-brief", body ?? {}),
   tidyLayout: () => post<{ success: boolean; applied: number }>("/api/layout/tidy", {}),
+  addPageConstraint: (componentId: string) =>
+    post<{ success: boolean; constraint: { id: string; component_type: string } }>(
+      "/api/page-constraints",
+      { component_id: componentId }
+    ),
+  removePageConstraint: (id: string) => del(`/api/page-constraints/${id}`),
 };
 
 /** R1 多候选：done 事件携带的候选视图（服务端 CandidateResult 的子集）。 */

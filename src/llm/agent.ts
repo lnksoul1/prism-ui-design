@@ -10,7 +10,7 @@
  * tree (undoable via the normal history).
  */
 
-import { stateStore, type ComponentNode, type PageDef } from "../state.js";
+import { stateStore, type ComponentLayout, type ComponentNode, type PageDef } from "../state.js";
 import { applyStyleTokenSet } from "../tokens.js";
 import { COMPONENT_TYPES } from "../service/design-service.js";
 import { containerWidthForPlatform, ensureTopLevelLayouts } from "../layout-engine.js";
@@ -23,6 +23,7 @@ import {
 } from "../layout/tidy.js";
 import { chatCompletion, streamChatCompletion, LlmError, type ChatMessage } from "./providers.js";
 import { createCandidateBatch } from "./candidates.js";
+import { compilePageBrief } from "../prompt-brief.js";
 import type { LlmConfig } from "./config.js";
 
 export interface SpecComponent {
@@ -201,6 +202,26 @@ export function countNodes(nodes: ComponentNode[]): number {
 }
 
 /**
+ * R1 M2 修正记忆: 页面约束 → locked 矩形。按 component_type 匹配新生成的
+ * 顶层组件（首个未消费匹配），锁定其矩形——人工调准的位置在 AI 重生成后
+ * 得以保留。约束是页面级的：新页面（page:"new"）不继承。
+ */
+function lockedFromPage(page: PageDef, nodes: ComponentNode[]): Map<string, ComponentLayout> {
+  const constraints = page.constraints || [];
+  if (constraints.length === 0) return new Map();
+  const locked = new Map<string, ComponentLayout>();
+  const used = new Set<number>();
+  for (const n of nodes) {
+    const idx = constraints.findIndex((c, i) => !used.has(i) && c.component_type === n.type);
+    if (idx !== -1) {
+      used.add(idx);
+      locked.set(n.id, { ...constraints[idx].layout });
+    }
+  }
+  return locked;
+}
+
+/**
  * R1 M1 落位管线: 节点创建后由服务端统一布局——AI 不再输出坐标。
  * 流式列初始 layout → tidy 同源规则（锚定/聚簇/语义间距 + 意图/约束）→ 体检。
  * @returns 体检报告（重叠对数/越界数），进生成 summary
@@ -213,15 +234,22 @@ function placeNodes(page: PageDef, entries: NodeEntry[]): LayoutReport {
   for (const e of entries) {
     if (e.intent) intents.set(e.node.id, e.intent);
   }
+  const locked = lockedFromPage(page, nodes);
   ensureTopLevelLayouts(nodes, pageWidth);
   const probe: PageDef = { id: page.id, name: page.name, components: nodes };
-  const updates = tidyPageLayout(probe, pageWidth, { intents });
+  const updates = tidyPageLayout(probe, pageWidth, { intents, locked });
   const byId = new Map(nodes.map((n) => [n.id, n]));
   for (const u of updates) {
     const n = byId.get(u.id);
     if (n) n.layout = u.layout;
   }
-  return verifyLayout(probe, pageWidth, { intents });
+  // 约束矩形强制写回（tidy 跳过 locked 组件不产生 update，而
+  // ensureTopLevelLayouts 可能已给它们设过初始布局）
+  for (const [id, rect] of locked) {
+    const n = byId.get(id);
+    if (n) n.layout = { ...rect };
+  }
+  return verifyLayout(probe, pageWidth, { intents, locked });
 }
 
 /** Apply a parsed spec through the shared state layer. Returns component count. */
@@ -265,6 +293,31 @@ function layoutSummaryPart(report: LayoutReport | null): string {
 }
 
 /**
+ * R1 M2 修正记忆: 页面约束 → 系统提示词附加段。让 AI 知道当前页哪些区块
+ * 位置已被人工锁定（落位时系统会按 component_type 强制对齐）。
+ */
+export function buildConstraintsExtra(pageId: string | null): string {
+  if (!pageId) return "";
+  const state = stateStore.getState();
+  const page = state.pages.find((p) => p.id === pageId);
+  const constraints = page?.constraints || [];
+  if (constraints.length === 0) return "";
+  const lines = constraints.map(
+    (c) =>
+      `- ${c.component_type}：固定在 x=${c.layout.x}，y=${c.layout.y}，${c.layout.w}×${c.layout.h}`
+  );
+  const parts = [
+    "当前页面存在人工锁定的布局约束（仅当输出 page:\"current\" 修改本页时需遵守；",
+    `输出 page:\"new\" 生成新页面时可忽略）。共 ${constraints.length} 条，同类组件会由系统强制对齐到这些位置：`,
+    ...lines,
+  ];
+  // few-shot: 单页简报帮 AI 理解人工调准后的页面结构（仅在有约束时注入）
+  const brief = compilePageBrief(state, pageId);
+  if (brief) parts.push("", "当前页面结构简报：", brief);
+  return parts.join("\n");
+}
+
+/**
  * 流式生成 + 解析 spec（不落地 stateStore）。streamPageGeneration 与
  * 多候选 batch 共用：systemExtra 追加到系统提示词尾部（候选风格倾向 /
  * M2 页面约束都从这里注入）。
@@ -295,7 +348,8 @@ export async function streamPageGeneration(
   onDelta: (text: string) => void
 ): Promise<LlmGenerateResult> {
   try {
-    const spec = await streamSpecOnly(prompt, cfg, "", onDelta);
+    const systemExtra = buildConstraintsExtra(stateStore.getState().currentPageId);
+    const spec = await streamSpecOnly(prompt, cfg, systemExtra, onDelta);
     const { nodes, targetPageId, report } = applySpec(spec);
     const count = countNodes(nodes);
     return {
@@ -328,8 +382,9 @@ export async function generatePageFromPrompt(
   cfg: LlmConfig
 ): Promise<LlmGenerateResult> {
   try {
+    const systemExtra = buildConstraintsExtra(stateStore.getState().currentPageId);
     const messages: ChatMessage[] = [
-      { role: "system", content: buildSystemPrompt() },
+      { role: "system", content: buildSystemPrompt() + (systemExtra ? `\n\n${systemExtra}` : "") },
       { role: "user", content: buildUserPrompt(prompt) },
     ];
     const raw = await chatCompletion(messages, cfg);

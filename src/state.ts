@@ -255,6 +255,23 @@ export interface PageDef {
   id: string;
   name: string;
   components: ComponentNode[];
+  /** R1 M2 修正记忆: 页面级布局约束（AI 重新生成时同类组件锁定这些矩形）。 */
+  constraints?: PageConstraint[];
+}
+
+/**
+ * R1 M2 修正记忆: 页面级布局约束。用户把某组件「记为约束」后，AI 下次生成
+ * 该页时，按 component_type 匹配新生成的同类组件（首个未消费匹配），锁定其
+ * 矩形——人工调整的精准布局在 AI 重生成后得以保留。
+ */
+export interface PageConstraint {
+  id: string;
+  /** 约束绑定的组件类型（生成匹配的依据，不依赖组件 id）。 */
+  component_type: string;
+  /** 锁定的布局矩形。 */
+  layout: ComponentLayout;
+  /** 创建约束时参考的组件 id（仅溯源，匹配不用它）。 */
+  source_component_id?: string;
 }
 
 export interface DesignState {
@@ -2194,6 +2211,68 @@ export class DesignStateStore extends EventEmitter {
     this.logActivity("remove_page_link", "page_link", `Removed page link ${linkId}`, source);
     this.commit({ type: "removePageLink", linkId });
     return true;
+  }
+
+  // ===== Page Constraints (R1 M2 修正记忆) =====
+
+  /** 每页约束上限（防止无限堆积）。 */
+  static readonly MAX_PAGE_CONSTRAINTS = 20;
+
+  /**
+   * R1 M2: 把当前组件的布局记为所在页面的约束（按 component_type 生效）。
+   * 组件无 layout 时不记（返回 null）；同一组件重复记 → 替换旧约束；
+   * 超上限时淘汰最早的约束。
+   */
+  addPageConstraint(componentId: string, source: "ai" | "user" = "user"): PageConstraint | null {
+    const state = this.state;
+    for (const page of state.pages) {
+      const find = (nodes: ComponentNode[]): ComponentNode | null => {
+        for (const n of nodes) {
+          if (n.id === componentId) return n;
+          const found = find(n.children || []);
+          if (found) return found;
+        }
+        return null;
+      };
+      const comp = find(page.components);
+      if (!comp) continue;
+      if (!comp.layout) return null; // 无布局（流式子项）不能记约束
+      if (!page.constraints) page.constraints = [];
+      // 同一组件重复记 → 替换
+      const dupIdx = page.constraints.findIndex((c) => c.source_component_id === componentId);
+      if (dupIdx !== -1) page.constraints.splice(dupIdx, 1);
+      const constraint: PageConstraint = {
+        id: `pc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        component_type: comp.type,
+        layout: { ...comp.layout },
+        source_component_id: componentId,
+      };
+      page.constraints.push(constraint);
+      while (page.constraints.length > DesignStateStore.MAX_PAGE_CONSTRAINTS) {
+        page.constraints.shift();
+      }
+      this.logActivity(
+        "add_page_constraint",
+        "page_constraint",
+        `Locked ${comp.type} at ${Math.round(comp.layout.x)},${Math.round(comp.layout.y)} (${Math.round(comp.layout.w)}×${Math.round(comp.layout.h)})`,
+        source
+      );
+      this.commit({ type: "addPageConstraint", constraint });
+      return constraint;
+    }
+    return null;
+  }
+
+  removePageConstraint(constraintId: string, source: "ai" | "user" = "user"): boolean {
+    for (const page of this.state.pages) {
+      const idx = (page.constraints || []).findIndex((c) => c.id === constraintId);
+      if (idx === -1) continue;
+      page.constraints!.splice(idx, 1);
+      this.logActivity("remove_page_constraint", "page_constraint", `Removed page constraint ${constraintId}`, source);
+      this.commit({ type: "removePageConstraint", constraintId });
+      return true;
+    }
+    return false;
   }
 
   // ===== Clear All =====

@@ -1,5 +1,5 @@
 import { test, expect, beforeEach, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { InspectorPanel } from "./InspectorPanel";
 import { useDesignStore } from "../../stores/design";
@@ -10,6 +10,8 @@ vi.mock("../../api", () => ({
   api: {
     updatePageLink: vi.fn().mockResolvedValue({ success: true }),
     removePageLink: vi.fn().mockResolvedValue({ success: true }),
+    addPageConstraint: vi.fn().mockResolvedValue({ success: true, constraint: { id: "pc-1", component_type: "button" } }),
+    removePageConstraint: vi.fn().mockResolvedValue({ success: true }),
   },
 }));
 
@@ -90,4 +92,33 @@ test("link section lists outgoing links and commits transition changes", async (
 
   await userEvent.selectOptions(select, "slide-left");
   expect(api.updatePageLink).toHaveBeenCalledWith("link-1", { transition: "slide-left" });
+});
+
+test("constraints section: lists existing, records via button, deletes", async () => {
+  const { api } = await import("../../api");
+  const stateWithConstraints = {
+    ...state,
+    pages: [
+      {
+        ...state.pages[0],
+        constraints: [
+          { id: "pc-9", component_type: "navbar", layout: { x: 0, y: 0, w: 1200, h: 64 } },
+        ],
+      },
+      state.pages[1],
+    ],
+  } as unknown as DesignStateView;
+  useDesignStore.setState({ state: stateWithConstraints, selection: ["comp-1"], breakpoint: "desktop" });
+  render(<InspectorPanel />);
+
+  // 既有约束渲染（类型 + 矩形）
+  expect(screen.getByTestId("insp-constraints")).toBeTruthy();
+  expect(screen.getByText(/navbar 0,0 · 1200×64/)).toBeTruthy();
+
+  // 记为约束 → api.addPageConstraint + 提示
+  await userEvent.click(screen.getByTestId("insp-add-constraint"));
+  await waitFor(() =>
+    expect(screen.getByTestId("insp-constraint-message").textContent).toContain("已记为约束")
+  );
+  expect(api.addPageConstraint).toHaveBeenCalledWith("comp-1");
 });

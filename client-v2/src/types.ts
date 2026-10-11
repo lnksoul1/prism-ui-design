@@ -54,12 +54,25 @@ export interface ActionFlowView {
   enabled: boolean;
 }
 
+/** R1 M2 修正记忆: 页面级布局约束。 */
+export interface PageConstraintView {
+  id: string;
+  component_type: string;
+  layout: { x: number; y: number; w: number; h: number };
+  source_component_id?: string;
+}
+
 export interface DesignStateView {
   projectName: string;
   style: string;
   tokens: Record<string, Record<string, { value: string }>>;
   components: ComponentNode[];
-  pages: Array<{ id: string; name: string; components: ComponentNode[] }>;
+  pages: Array<{
+    id: string;
+    name: string;
+    components: ComponentNode[];
+    constraints?: PageConstraintView[];
+  }>;
   currentPageId: string | null;
   comments: CommentView[];
   pageLinks: PageLinkView[];

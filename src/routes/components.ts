@@ -548,6 +548,44 @@ export function registerComponentsRoutes(): express.Router {
     res.json({ success: true, link_id: req.params.id });
   }));
 
+  // ===== R1 M2 修正记忆: 页面布局约束 =====
+
+  // API: List page constraints (default: current page)
+  router.get("/api/page-constraints", asyncHandler(async (req, res) => {
+    const state = stateStore.getState();
+    const pageId =
+      typeof req.query.page_id === "string" && req.query.page_id
+        ? req.query.page_id
+        : state.currentPageId;
+    const page = state.pages.find((p) => p.id === pageId);
+    if (!page) {
+      throw new HttpError(404, `Page ${pageId} not found`);
+    }
+    res.json({ success: true, page_id: page.id, constraints: page.constraints || [] });
+  }));
+
+  // API: Record the current layout of a component as a page constraint
+  router.post("/api/page-constraints", asyncHandler(async (req, res) => {
+    const { component_id } = req.body || {};
+    if (!component_id || typeof component_id !== "string") {
+      throw new HttpError(400, "Missing component_id");
+    }
+    const constraint = stateStore.addPageConstraint(component_id, "user");
+    if (!constraint) {
+      throw new HttpError(400, `组件 ${component_id} 不存在或没有布局（流式子项不能记约束）`);
+    }
+    res.json({ success: true, constraint });
+  }));
+
+  // API: Remove a page constraint
+  router.delete("/api/page-constraints/:id", asyncHandler(async (req, res) => {
+    const ok = stateStore.removePageConstraint(req.params.id, "user");
+    if (!ok) {
+      throw new HttpError(404, `Page constraint ${req.params.id} not found`);
+    }
+    res.json({ success: true, constraint_id: req.params.id });
+  }));
+
   // M2 盒子模式: 更新组件盒子配置
   router.post("/api/component/:id/box-mode", asyncHandler(async (req, res) => {
     const { enabled, internalConfig } = req.body || {};

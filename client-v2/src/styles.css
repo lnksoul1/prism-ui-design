@@ -105,6 +105,9 @@ body {
 .toolbar-btn.active { background: #2383e2; color: #fff; }
 .insp-btn { border: 1px solid rgba(0,0,0,0.12); background: #fff; border-radius: 6px; padding: 3px 10px; cursor: pointer; font-size: 11px; }
 .insp-hint { font-size: 11px; color: #aaa; }
+.insp-constraints { display: flex; flex-direction: column; gap: 4px; }
+.insp-constraint-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 11px; color: #555; }
+.insp-constraint-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .flow-editor { border: 1px solid rgba(0,0,0,0.08); border-radius: 8px; padding: 6px; margin-top: 6px; }
 .flow-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; margin-bottom: 4px; }
 .toolbar-btn.toolbar-btn-text { width: auto; padding: 0 10px; font-size: 12px; }

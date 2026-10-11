@@ -231,6 +231,16 @@ function pageSection(page: PageDef, state: DesignState): string[] {
     lines.push("（暂无组件）");
     return lines;
   }
+  // R1 M2 修正记忆: 人工锁定的布局约束随简报输出（AI 修改本页时保持位置）
+  if (page.constraints && page.constraints.length > 0) {
+    lines.push("");
+    lines.push("### 布局约束（人工锁定，AI 修改本页时保持这些区块的位置）");
+    for (const c of page.constraints) {
+      lines.push(
+        `- ${c.component_type}：固定在 x=${c.layout.x}，y=${c.layout.y}，${c.layout.w}×${c.layout.h}`
+      );
+    }
+  }
   const { w: pw, h: ph } = pageBounds(page);
   const walk = (nodes: ComponentNode[], depth: number): void => {
     for (const n of nodes) {
@@ -293,4 +303,14 @@ export function compilePromptBrief(state: DesignState, opts?: PromptBriefOptions
   lines.push("- 文案：所有文案原样保留，不要改写或翻译");
   lines.push("- 交互：交互行为按上述描述实现（跳转 / 弹提示 / 切换显隐 / 打开链接）");
   return lines.join("\n");
+}
+
+/**
+ * R1 M2 修正记忆: 单页简报——作为 AI 修正记忆的 few-shot 上下文注入生成
+ * 系统提示词（约束行由 pageSection 输出）。页面不存在返回空串。
+ */
+export function compilePageBrief(state: DesignState, pageId: string): string {
+  const page = (Array.isArray(state.pages) ? state.pages : []).find((p) => p.id === pageId);
+  if (!page) return "";
+  return pageSection(page, state).join("\n");
 }

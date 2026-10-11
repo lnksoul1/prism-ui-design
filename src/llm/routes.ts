@@ -26,6 +26,12 @@ import {
   streamPageGeneration,
 } from "./agent.js";
 import { takeCandidateSpec } from "./candidates.js";
+import {
+  applyEditOperations,
+  collectPageComponents,
+  requestPageEdit,
+  takePendingEdit,
+} from "./edit.js";
 import { stateStore } from "../state.js";
 
 export function registerLlmRoutes(app: express.Express): void {
@@ -199,6 +205,68 @@ export function registerLlmRoutes(app: express.Express): void {
       page_id: targetPageId,
       layout_report: report ?? undefined,
       summary: `已应用候选 ${index + 1}：AI 已生成页面（${count} 个组件，布局已自动对齐）`,
+    });
+  });
+
+  // R2 对话式精准修改: 选中组件 → 自然语言局部修改建议（不落地，返回 diff
+  // 预览 + edit_id）。客户端确认后 POST /api/llm/edit/apply 经 runBatch 单
+  // undo 步应用。
+  app.post("/api/llm/edit", async (req, res) => {
+    const { prompt, component_ids } = (req.body || {}) as {
+      prompt?: unknown;
+      component_ids?: unknown;
+    };
+    const cfg = loadLlmConfig();
+    if (!cfg) {
+      res.status(400).json({ error: "未配置 LLM（请先在 AI 设置中填写 API Key）" });
+      return;
+    }
+    if (typeof prompt !== "string" || !prompt.trim()) {
+      res.status(400).json({ error: "Missing prompt" });
+      return;
+    }
+    const ids = Array.isArray(component_ids)
+      ? component_ids.filter((x): x is string => typeof x === "string" && !!x)
+      : [];
+    if (ids.length === 0) {
+      res.status(400).json({ error: "Missing component_ids" });
+      return;
+    }
+    const st = stateStore.getState();
+    const page = st.pages.find((p) => p.id === st.currentPageId);
+    if (collectPageComponents(page?.components || [], ids).length === 0) {
+      res.status(400).json({ error: "选中的组件不存在或已被删除" });
+      return;
+    }
+    try {
+      const preview = await requestPageEdit(prompt, ids, cfg);
+      res.json({ success: true, ...preview });
+    } catch (err) {
+      res.status(502).json({ success: false, error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  // R2: 应用一处已确认的修改建议（一次性消费，单 undo 步）。
+  app.post("/api/llm/edit/apply", (req, res) => {
+    const { edit_id } = (req.body || {}) as { edit_id?: unknown };
+    if (typeof edit_id !== "string" || !edit_id) {
+      res.status(400).json({ error: "Missing edit_id" });
+      return;
+    }
+    const pending = takePendingEdit(edit_id);
+    if (!pending) {
+      res.status(404).json({ error: "修改建议不存在或已过期" });
+      return;
+    }
+    const result = applyEditOperations(pending);
+    res.json({
+      success: true,
+      applied: result.applied,
+      skipped: result.skipped,
+      added: result.added,
+      summary: `已应用 ${result.applied} 处修改${
+        result.skipped > 0 ? `（${result.skipped} 处因组件已不存在跳过）` : ""
+      }`,
     });
   });
 }

@@ -138,7 +138,7 @@ test.describe("Prism V2 M2 features", () => {
 // V2 M3 冒烟：打点评论 / 原型连线 / 预览模式跳转 / ActionFlow toast / 代码同步导出。
 // REST 响应体字段以服务端路由实际为准：POST /api/component → { id }、
 // POST /api/page → { page_id }（计划稿假定 { component: { id } } / { page: { id } }）。
-// 画布组件经 /collab ydoc 同步；评论/连线/流程/pages 经 /ws change 广播下发，
+// 画布组件与评论（P3a）经 /collab ydoc 同步；连线/流程/pages 经 /ws change 广播下发，
 // 因此各用例在发 REST POST 前先等 .status-dot.on（/ws 已连上）。
 test.describe("Prism V2 M3 features", () => {
   test("comment pin renders on canvas after REST add", async ({ page }) => {

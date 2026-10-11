@@ -3,6 +3,7 @@ import type { DragEvent as ReactDragEvent, MouseEvent as ReactMouseEvent } from 
 import { useDesignStore } from "../../stores/design";
 import { api } from "../../api";
 import { editComponent } from "../../collab/edits";
+import { upsertCollabComment } from "../../collab/collab";
 import { ComponentView } from "./ComponentView";
 import { CommentsLayer } from "./CommentsLayer";
 import { LinkLayer } from "./LinkLayer";
@@ -387,7 +388,17 @@ export function CanvasStage() {
             className="cq-reset"
             onClick={() => {
               const text = prompt("评论内容：");
-              if (text) void api.addComment(selection[0], text, { x: 8, y: 8 });
+              if (!text) return;
+              // P3a: 评论直写协作 Map（近端即时渲染；服务端经投影入全量 state）
+              upsertCollabComment({
+                id: `comment_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+                component_id: selection[0],
+                author: "user",
+                text,
+                createdAt: new Date().toISOString(),
+                x: 8,
+                y: 8,
+              });
             }}
           >
             添加评论

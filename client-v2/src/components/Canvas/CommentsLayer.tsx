@@ -1,6 +1,5 @@
-import { useState } from "react";
-import { useDesignStore } from "../../stores/design";
-import { api } from "../../api";
+import { useEffect, useState } from "react";
+import { observeCollabComments, readCollabComments, upsertCollabComment } from "../../collab/collab";
 import type { ComponentNode, CommentView } from "../../types";
 
 interface PageLike {
@@ -9,13 +8,24 @@ interface PageLike {
   components: ComponentNode[];
 }
 
-/** M3 打点评论: 未解决评论渲染为组件上的 pin（◈），点击弹出处理气泡。 */
+/**
+ * M3 打点评论: 未解决评论渲染为组件上的 pin（◈），点击弹出处理气泡。
+ * P3a 评论迁入 Y.Doc: 数据源为协作 Map（近端写即时渲染、远端写经广播同步），
+ * 服务端 REST 保留给 MCP/AI 路径并经 reconcile 汇入同一 Map。
+ */
 export function CommentsLayer({ page }: { page: PageLike | undefined }) {
-  const state = useDesignStore((s) => s.state);
+  const [all, setAll] = useState<CommentView[]>([]);
   const [openId, setOpenId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const refresh = (): void => setAll(readCollabComments());
+    refresh();
+    return observeCollabComments(refresh);
+  }, []);
+
   if (!page) return null;
 
-  const comments = (state?.comments ?? []).filter((c) => !c.resolved && isOn(page, c));
+  const comments = all.filter((c) => !c.resolved && isOn(page, c));
   if (comments.length === 0) return null;
 
   const rectOf = (componentId: string): { x: number; y: number } | null => {
@@ -28,6 +38,11 @@ export function CommentsLayer({ page }: { page: PageLike | undefined }) {
     };
     walk(page.components);
     return found;
+  };
+
+  const patch = (c: CommentView, p: Partial<CommentView>): void => {
+    upsertCollabComment({ ...c, ...p, updatedAt: new Date().toISOString() });
+    setOpenId(null);
   };
 
   return (
@@ -55,11 +70,11 @@ export function CommentsLayer({ page }: { page: PageLike | undefined }) {
                 </div>
                 <div className="comment-text">{c.text}</div>
                 <div className="comment-actions">
-                  <button onClick={() => void api.updateComment(c.id, { resolved: true })}>解决</button>
+                  <button onClick={() => patch(c, { resolved: true })}>解决</button>
                   <button
                     onClick={() => {
                       const assignee = prompt("指派给：");
-                      if (assignee) void api.updateComment(c.id, { assignee });
+                      if (assignee) patch(c, { assignee });
                     }}
                   >
                     指派

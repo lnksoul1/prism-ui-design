@@ -2,7 +2,7 @@ import { test, describe, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import * as Y from "yjs";
 import { stateStore } from "../src/state.js";
-import { attachCollabBridge, reconcileStateIntoYDoc } from "../src/collab/bridge.js";
+import { attachCollabBridge, reconcileStateIntoYDoc, SERVER_ORIGIN } from "../src/collab/bridge.js";
 
 beforeEach(() => {
   stateStore.resetForTests();
@@ -83,5 +83,92 @@ describe("collab bridge", () => {
     reconcileStateIntoYDoc(doc);
     const inDoc = doc.getMap("components").get(node.id) as { props: { text: string } };
     assert.equal(inDoc.props.text, "v1");
+  });
+});
+
+describe("collab bridge comments (P3a)", () => {
+  beforeEach(() => {
+    stateStore.resetForTests();
+  });
+
+  test("server comment writes reconcile into the ydoc comments map", () => {
+    const node = stateStore.addComponent("text", undefined, { text: "hi" }, null, "user");
+    const doc = new Y.Doc();
+    attachCollabBridge(doc);
+    assert.equal(doc.getMap("comments").size, 0);
+    const c = stateStore.addComment(node.id, "字太小", "alice", "user", { x: 8, y: 8 });
+    assert.ok(doc.getMap("comments").get(c.id));
+  });
+
+  test("ydoc comment writes project into stateStore without undo history", () => {
+    const node = stateStore.addComponent("text", undefined, { text: "hi" }, null, "user");
+    const doc = new Y.Doc();
+    attachCollabBridge(doc);
+    const canUndoBefore = stateStore.canUndo();
+    const comment = {
+      id: "comment_test_1",
+      component_id: node.id,
+      author: "alice",
+      text: "来自客户端",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    };
+    doc.transact(() => {
+      (doc.getMap("comments") as Y.Map<unknown>).set(comment.id, comment);
+    }, "remote-client");
+    const stored = stateStore.getState().comments.find((x) => x.id === comment.id);
+    assert.equal(stored?.text, "来自客户端");
+    // 双轨: 评论协作变更不进服务端快照 undo 历史
+    assert.equal(stateStore.canUndo(), canUndoBefore);
+  });
+
+  test("ydoc comment update and delete project into stateStore", () => {
+    const node = stateStore.addComponent("text", undefined, {}, null, "user");
+    const c = stateStore.addComment(node.id, "改一下", "alice", "user");
+    const doc = new Y.Doc();
+    attachCollabBridge(doc);
+    const map = doc.getMap("comments");
+    doc.transact(() => {
+      map.set(c.id, { ...(map.get(c.id) as object), resolved: true, updatedAt: "2026-01-01T00:00:00.000Z" });
+    }, "remote-client");
+    assert.equal(stateStore.getState().comments.find((x) => x.id === c.id)?.resolved, true);
+    doc.transact(() => {
+      map.delete(c.id);
+    }, "remote-client");
+    assert.equal(stateStore.getState().comments.find((x) => x.id === c.id), undefined);
+  });
+
+  test("comment projection never bounces back as a server-origin ydoc write", () => {
+    const node = stateStore.addComponent("text", undefined, {}, null, "user");
+    const doc = new Y.Doc();
+    attachCollabBridge(doc);
+    let serverOriginWrites = 0;
+    doc.on("afterTransaction", (tr) => {
+      if (tr.origin === SERVER_ORIGIN) serverOriginWrites++;
+    });
+    doc.transact(() => {
+      (doc.getMap("comments") as Y.Map<unknown>).set("comment_c1", {
+        id: "comment_c1",
+        component_id: node.id,
+        author: "alice",
+        text: "t",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      });
+    }, "remote-client");
+    assert.ok(stateStore.getState().comments.find((x) => x.id === "comment_c1"));
+    // 投影只落在 stateStore，不产生 SERVER_ORIGIN 回写（幂等 reconcile 兜底）
+    assert.equal(serverOriginWrites, 0);
+  });
+
+  test("server undo restores comments and reconcile re-aligns ydoc", () => {
+    const node = stateStore.addComponent("text", undefined, {}, null, "user");
+    const doc = new Y.Doc();
+    attachCollabBridge(doc);
+    const c = stateStore.addComment(node.id, "x", "alice", "user");
+    stateStore.removeComment(c.id, "user");
+    assert.equal(stateStore.getState().comments.length, 0);
+    assert.equal(doc.getMap("comments").get(c.id), undefined);
+    stateStore.undo(); // 评论随快照恢复
+    assert.equal(stateStore.getState().comments.length, 1);
+    assert.ok(doc.getMap("comments").get(c.id));
   });
 });

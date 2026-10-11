@@ -1782,6 +1782,28 @@ export class DesignStateStore extends EventEmitter {
   }
 
   /**
+   * P3a 协同: 把 Y.Doc 侧（远端客户端）的评论变更投影进状态（无历史）。
+   * 全量列表比对（按 createdAt+id 排序保证双侧一致），无差异返回 false；
+   * 超过 200 条按 addComment 同款上限裁剪（裁剪差值随后由 reconcile 从
+   * Y.Doc 删除，保持双侧最终一致）。
+   */
+  applyCollabComments(comments: DesignComment[]): boolean {
+    const sorted = [...comments].sort(
+      (a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)
+    );
+    const clipped = sorted.length > 200 ? sorted.slice(-200) : sorted;
+    const prev = this.state.comments;
+    const same =
+      prev.length === clipped.length &&
+      prev.every((c, i) => JSON.stringify(c) === JSON.stringify(clipped[i]));
+    if (same) return false;
+    this.state.comments = clipped.map((c) => ({ ...c }));
+    this.logActivity("collab_sync", "system", `Applied ${clipped.length} comments from collab`, "user");
+    this.commitCollab({ type: "collabCommentsSync" });
+    return true;
+  }
+
+  /**
    * M2 智能布局: 对选中组件做确定性重排（等间距堆叠 + 左对齐 + 可选容器 clamp）。
    */
   applySmartLayout(

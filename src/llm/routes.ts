@@ -22,6 +22,7 @@ import {
   applySpec,
   countNodes,
   generatePageFromPrompt,
+  layoutFlatFields,
   streamCandidateBatch,
   streamPageGeneration,
 } from "./agent.js";
@@ -206,6 +207,8 @@ export function registerLlmRoutes(app: express.Express): void {
       page_count: stateStore.getState().pages.length,
       page_id: targetPageId,
       layout_report: report ?? undefined,
+      // R9: 扁平体检字段与编辑管线同款（客户端体检卡直接消费）
+      ...layoutFlatFields(report),
       summary: `已应用候选 ${index + 1}：AI 已生成页面（${count} 个组件，布局已自动对齐）`,
     });
   });

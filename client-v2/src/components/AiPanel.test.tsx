@@ -382,6 +382,107 @@ test("R8 layout report card: split overlap/oob counts and tidy button", async ()
   expect(tidyCall).toBeTruthy();
 });
 
+test("R9 生成落位后体检异常挂卡，一键整理收起", async () => {
+  const fetchMock = vi.fn(async (url: string) => {
+    if (url === "/api/layout/tidy") {
+      return jsonResponse({ success: true, applied: 4 });
+    }
+    return sseResponse([
+      ["delta", { text: "{}" }],
+      [
+        "done",
+        {
+          ok: true,
+          component_count: 3,
+          page_count: 1,
+          page_id: "page_1",
+          layout_issues: 2,
+          layout_overlaps: 1,
+          layout_out_of_bounds: 1,
+          summary: "AI 已流式生成页面（3 个组件，1 处布局重叠/越界待处理）",
+        },
+      ],
+    ]);
+  }) as unknown as typeof fetch;
+  vi.stubGlobal("fetch", fetchMock);
+
+  render(<AiPanel />);
+  await userEvent.type(screen.getByPlaceholderText(/描述你想要的页面/), "做一个落地页");
+  await userEvent.click(screen.getByRole("button", { name: "生成" }));
+
+  // 体检卡: 生成路径同样挂出结构化卡片（拆分重叠/越界计数）
+  await waitFor(() => expect(screen.getByTestId("ai-layout-report")).toBeTruthy());
+  const card = screen.getByTestId("ai-layout-report");
+  expect(card.textContent).toContain("布局体检");
+  expect(card.textContent).toContain("1 处重叠");
+  expect(card.textContent).toContain("1 处越界");
+
+  // 一键整理 → 卡片收起 + 状态栏提示
+  await userEvent.click(screen.getByTestId("ai-layout-tidy"));
+  await waitFor(() => expect(screen.queryByTestId("ai-layout-report")).toBeNull());
+  await waitFor(() => expect(screen.getByText(/已一键整理布局（4 处调整）/)).toBeTruthy());
+});
+
+test("R9 应用候选后体检异常同样挂卡", async () => {
+  const fetchMock = vi.fn(async (url: string) => {
+    if (url === "/api/llm/stream") {
+      return sseResponse([
+        ["candidate_start", { index: 0, total: 2, label: "均衡版", angle: "" }],
+        [
+          "candidate_done",
+          {
+            index: 0,
+            label: "均衡版",
+            angle: "",
+            ok: true,
+            component_count: 2,
+            summary: "",
+            preview: [{ type: "hero", title: "主标题" }],
+          },
+        ],
+        [
+          "done",
+          {
+            ok: true,
+            batch_id: "batch_r9",
+            candidates: [],
+            component_count: 0,
+            page_count: 0,
+            page_id: null,
+            summary: "已生成 1 个候选，请选择一个应用（其余丢弃）",
+          },
+        ],
+      ]);
+    }
+    // POST /api/llm/apply: 落位后体检出重叠
+    return jsonResponse({
+      success: true,
+      ok: true,
+      component_count: 2,
+      page_count: 1,
+      page_id: "page_1",
+      layout_issues: 2,
+      layout_overlaps: 2,
+      layout_out_of_bounds: 0,
+      summary: "已应用候选 1：AI 已生成页面（2 个组件，布局已自动对齐）",
+    });
+  }) as unknown as typeof fetch;
+  vi.stubGlobal("fetch", fetchMock);
+
+  render(<AiPanel />);
+  await userEvent.type(screen.getByPlaceholderText(/描述你想要的页面/), "做一个落地页");
+  await userEvent.click(screen.getByTestId("ai-multi-candidate"));
+  await userEvent.click(screen.getByRole("button", { name: "生成" }));
+  await waitFor(() => expect(screen.getByTestId("ai-apply-0")).toBeTruthy());
+
+  await userEvent.click(screen.getByTestId("ai-apply-0"));
+  await waitFor(() => expect(screen.getByTestId("ai-layout-report")).toBeTruthy());
+  const card = screen.getByTestId("ai-layout-report");
+  expect(card.textContent).toContain("布局体检");
+  expect(card.textContent).toContain("2 处重叠");
+  expect(card.textContent).toContain("0 处越界");
+});
+
 test("R5 undo renders bare diff entry without target row", async () => {
   useDesignStore.setState({ selection: ["comp_hero"] });
   const fetchMock = vi.fn(async (url: string) => {

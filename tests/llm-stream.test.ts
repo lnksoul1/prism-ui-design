@@ -119,6 +119,10 @@ describe("streamPageGeneration", () => {
     assert.equal(result.ok, true);
     assert.equal(result.component_count, 1);
     assert.ok(deltas.length >= 1);
+    // R9: done 事件携带扁平体检字段（客户端体检卡直接消费）
+    assert.equal(result.layout_issues, 0);
+    assert.equal(result.layout_overlaps, 0);
+    assert.equal(result.layout_out_of_bounds, 0);
     const applied = JSON.stringify(stateStore.getState().components);
     assert.ok(applied.includes("流式标题"));
   });

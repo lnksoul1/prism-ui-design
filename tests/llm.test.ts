@@ -352,6 +352,10 @@ test("generated components are placed by the server (tidy pipeline), summary rep
     assert.equal(result.ok, true);
     // 体检: navbar 顶部通栏 + hero 全宽 + 三卡网格 + footer 贴底 → 无重叠无越界
     assert.deepEqual(result.layout_report, { overlaps: 0, out_of_bounds: 0 });
+    // R9: 扁平体检字段与编辑管线同款
+    assert.equal(result.layout_issues, 0);
+    assert.equal(result.layout_overlaps, 0);
+    assert.equal(result.layout_out_of_bounds, 0);
     assert.match(result.summary, /AI 已生成/);
     assert.match(result.summary, /布局已自动对齐/);
     const page = stateStore.getState().pages.find((p) => p.id === result.page_id);

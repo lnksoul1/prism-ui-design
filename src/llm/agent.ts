@@ -52,6 +52,10 @@ export interface LlmGenerateResult {
   summary: string;
   /** R1 M1: 生成后布局体检（重叠对数/超界数）。 */
   layout_report?: LayoutReport;
+  /** R9: 扁平体检字段（与编辑管线同款，客户端体检卡直接消费）。 */
+  layout_issues?: number;
+  layout_overlaps?: number;
+  layout_out_of_bounds?: number;
   error?: string;
 }
 
@@ -301,6 +305,21 @@ function layoutSummaryPart(report: LayoutReport | null): string {
   return issues > 0 ? `，${issues} 处布局重叠/越界待处理` : "，布局已自动对齐";
 }
 
+/** R9: 体检报告 → 扁平字段（与编辑管线同款；无报告则全 0）。 */
+export function layoutFlatFields(report: LayoutReport | null): {
+  layout_issues: number;
+  layout_overlaps: number;
+  layout_out_of_bounds: number;
+} {
+  const overlaps = report?.overlaps ?? 0;
+  const outOfBounds = report?.out_of_bounds ?? 0;
+  return {
+    layout_issues: overlaps + outOfBounds,
+    layout_overlaps: overlaps,
+    layout_out_of_bounds: outOfBounds,
+  };
+}
+
 /**
  * R1 M2 修正记忆: 页面约束 → 系统提示词附加段。让 AI 知道当前页哪些区块
  * 位置已被人工锁定（落位时系统会按 component_type 强制对齐）。
@@ -367,6 +386,7 @@ export async function streamPageGeneration(
       page_count: stateStore.getState().pages.length,
       page_id: targetPageId,
       layout_report: report ?? undefined,
+      ...layoutFlatFields(report),
       summary: `AI 已流式生成${spec.page === "new" ? "新页面" : "页面"}（${count} 个组件${layoutSummaryPart(report)}）`,
     };
   } catch (err) {
@@ -409,6 +429,7 @@ export async function generatePageFromPrompt(
       page_count: stateStore.getState().pages.length,
       page_id: targetPageId,
       layout_report: report ?? undefined,
+      ...layoutFlatFields(report),
       summary: `AI 已生成${spec.page === "new" ? "新页面" : "页面"}（${count} 个组件${spec.style ? "，风格 " + spec.style : ""}${layoutSummaryPart(report)}）`,
     };
   } catch (err) {

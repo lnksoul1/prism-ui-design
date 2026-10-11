@@ -58,6 +58,7 @@ export function AiPanel() {
     setStatus(null);
     setCandidates([]);
     setBatchId(null);
+    setLayoutReport(null); // R9: 重新生成前清掉上一轮体检卡
     try {
       const done = (await streamGenerate(
         prompt,
@@ -69,7 +70,14 @@ export function AiPanel() {
               onCandidateDone: (c) => setCandidates((prev) => [...prev, c]),
             }
           : undefined
-      )) as { summary?: string; error?: string; batch_id?: string } | null;
+      )) as {
+        summary?: string;
+        error?: string;
+        batch_id?: string;
+        layout_issues?: number;
+        layout_overlaps?: number;
+        layout_out_of_bounds?: number;
+      } | null;
       if (done && typeof done.batch_id === "string") {
         setBatchId(done.batch_id);
       }
@@ -77,6 +85,13 @@ export function AiPanel() {
         setStatus(done.summary);
       } else if (done && typeof done.error === "string") {
         setStatus(done.error);
+      }
+      // R9: 生成落位后体检异常 → 挂结构化体检卡（一键整理入口）
+      if (done && typeof done.layout_issues === "number" && done.layout_issues > 0) {
+        setLayoutReport({
+          overlaps: typeof done.layout_overlaps === "number" ? done.layout_overlaps : 0,
+          outOfBounds: typeof done.layout_out_of_bounds === "number" ? done.layout_out_of_bounds : 0,
+        });
       }
     } catch (err) {
       setStatus(err instanceof Error ? err.message : "生成失败");
@@ -89,7 +104,7 @@ export function AiPanel() {
     if (!batchId || applying !== null) return;
     setApplying(index);
     try {
-      const result = (await applyCandidate(batchId, index)) as { summary?: string; error?: string };
+      const result = await applyCandidate(batchId, index);
       setCandidates([]);
       setBatchId(null);
       setStreamed("");
@@ -97,6 +112,15 @@ export function AiPanel() {
         setStatus(result.summary);
       } else if (result && typeof result.error === "string") {
         setStatus(result.error);
+      }
+      // R9: 候选应用走 applySpec 同款落位管线 → 体检异常同样挂卡
+      if (result && typeof result.layout_issues === "number" && result.layout_issues > 0) {
+        setLayoutReport({
+          overlaps: typeof result.layout_overlaps === "number" ? result.layout_overlaps : 0,
+          outOfBounds: typeof result.layout_out_of_bounds === "number" ? result.layout_out_of_bounds : 0,
+        });
+      } else {
+        setLayoutReport(null);
       }
     } catch (err) {
       setStatus(err instanceof Error ? err.message : "应用候选失败");

@@ -108,8 +108,18 @@ export interface CandidateView {
   error?: string;
 }
 
-/** R1 多候选：应用候选批次中的一个（其余丢弃）。 */
-export function applyCandidate(batchId: string, index: number): Promise<unknown> {
+/** R1 多候选：应用候选批次中的一个（其余丢弃）。
+ * R9: 响应带生成落位后的布局体检扁平字段（与编辑管线同款）。 */
+export function applyCandidate(
+  batchId: string,
+  index: number
+): Promise<{
+  summary?: string;
+  error?: string;
+  layout_issues?: number;
+  layout_overlaps?: number;
+  layout_out_of_bounds?: number;
+}> {
   return post("/api/llm/apply", { batch_id: batchId, index });
 }
 

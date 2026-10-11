@@ -2,7 +2,14 @@ import { useEffect, useState } from "react";
 import { applyCandidate, requestEdit, streamGenerate, applyEdit, type CandidateView, type EditPreviewView } from "../api";
 import { useDesignStore } from "../stores/design";
 
-const OP_LABEL: Record<string, string> = { update: "修改", delete: "删除", add: "新增" };
+const OP_LABEL: Record<string, string> = {
+  update: "修改",
+  delete: "删除",
+  add: "新增",
+  arrange: "重排",
+  align: "对齐",
+  gap: "间距",
+};
 
 export function AiPanel() {
   const [prompt, setPrompt] = useState("");

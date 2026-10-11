@@ -309,3 +309,104 @@ test("R3 会话: unknown session id is ignored (fresh session)", async () => {
   const created = createEditSession("page_y");
   assert.ok(getEditSession(created.id));
 });
+
+// ===== R4 语义布局操作 =====
+
+test("parseEditOperations validates arrange/align/gap and clamps delta", () => {
+  const raw = JSON.stringify({
+    operations: [
+      { op: "arrange", component_id: heroId, layout_intent: "row", reason: "并排" },
+      { op: "arrange", component_id: heroId, layout_intent: "diagonal" },
+      { op: "arrange", component_id: "comp_alien", layout_intent: "row" },
+      { op: "align", component_id: buttonId, align: "center" },
+      { op: "align", component_id: buttonId, align: "middle" },
+      { op: "gap", delta: 9999 },
+      { op: "gap", delta: -9999 },
+      { op: "gap" },
+    ],
+  });
+  const { operations, dropped } = parseEditOperations(raw, new Set([heroId, buttonId]));
+  assert.equal(dropped, 4);
+  assert.equal(operations.length, 4);
+  assert.equal(operations.find((o) => o.op === "arrange")!.layout_intent, "row");
+  assert.equal(operations.find((o) => o.op === "align")!.align, "center");
+  const deltas = operations.filter((o) => o.op === "gap").map((o) => o.delta).sort((a, b) => a! - b!);
+  assert.deepEqual(deltas, [-120, 120], "delta 钳制到 ±120");
+});
+
+function pageOfNow(): PageDef {
+  return stateStore.getState().pages.find((p) => p.id === pageIdOf())!;
+}
+
+test("R4 gap: diff and apply shift selected stack by delta per index", () => {
+  const ops: PendingEdit["operations"] = [{ op: "gap", delta: -16, reason: "间距小一点" }];
+  const page = pageOfNow();
+  const byId = new Map(page.components.map((n) => [n.id, n]));
+  const diffs = computeEditDiffs(ops, byId, page, 1200, new Set([heroId, buttonId]));
+  assert.equal(diffs.length, 1, "只有 y 序第二的组件移动");
+  assert.deepEqual(diffs[0]!.changes, [{ field: "位置", before: "(0, 136)", after: "(0, 120)" }]);
+
+  const result = applyEditOperations(buildPending(ops));
+  assert.deepEqual(result, { applied: 1, skipped: 0, added: 0 });
+  assert.equal(pageOfNow().components.find((c) => c.id === buttonId)!.layout!.y, 120);
+  assert.equal(pageOfNow().components.find((c) => c.id === heroId)!.layout!.y, 0, "y 序第一不动");
+});
+
+test("R4 align: centers on page width; flow component is skipped", () => {
+  const flowId = stateStore.addComponent("banner", undefined, { text: "流式" }, null, "user").id;
+  const ops: PendingEdit["operations"] = [
+    { op: "align", component_id: buttonId, align: "center", reason: "居中" },
+    { op: "align", component_id: flowId, align: "center" },
+  ];
+  // diff 预览必须先于应用计算（应用后状态已变）
+  const page = pageOfNow();
+  const byId = new Map(page.components.map((n) => [n.id, n]));
+  const diffs = computeEditDiffs([ops[0]!], byId, page, 1200, new Set([heroId, buttonId]));
+  assert.deepEqual(diffs[0]!.changes[0], { field: "位置", before: "(0, 136)", after: "(500, 136)" });
+
+  const result = applyEditOperations(buildPending(ops));
+  assert.deepEqual(result, { applied: 1, skipped: 1, added: 0 });
+  assert.equal(pageOfNow().components.find((c) => c.id === buttonId)!.layout!.x, 500);
+});
+
+test("R4 arrange: row intent bands selected components; bystander previewed; undo restores", () => {
+  const cardId = stateStore.addComponent("card", undefined, { title: "卡片" }, null, "user").id;
+  stateStore.updateComponent(cardId, {}, "user", { x: 0, y: 196, w: 1200, h: 300 });
+  // hero 左缘挪离边距 → 重排时被宽单元吸附联动，用于验证旁邻预览
+  stateStore.updateComponent(heroId, {}, "user", { x: 40, y: 0, w: 1200, h: 120 });
+  const ops: PendingEdit["operations"] = [
+    { op: "arrange", component_id: buttonId, layout_intent: "row", reason: "并排" },
+    { op: "arrange", component_id: cardId, layout_intent: "row", reason: "并排" },
+  ];
+  const page = pageOfNow();
+  const byId = new Map(page.components.map((n) => [n.id, n]));
+  const diffs = computeEditDiffs(ops, byId, page, 1200, new Set([buttonId, cardId]));
+  const targetDiffs = diffs.filter((d) => d.component_id === buttonId || d.component_id === cardId);
+  assert.ok(targetDiffs.length >= 2, "两个目标组件都有布局 diff");
+  assert.ok(diffs.some((d) => d.component_id === heroId), "旁邻组件联动移动被如实预览");
+
+  const result = applyEditOperations(buildPending(ops));
+  assert.ok(result.applied >= 2);
+  const b = pageOfNow().components.find((c) => c.id === buttonId)!.layout!;
+  const c = pageOfNow().components.find((cc) => cc.id === cardId)!.layout!;
+  assert.equal(b.y, c.y, "band 内同一行");
+  assert.ok(c.x > b.x, "横向并排");
+  assert.equal(b.w, c.w, "等宽");
+  assert.ok(b.x >= 16, "吸左边距");
+
+  assert.equal(stateStore.undo(), true, "整页重排是单 undo 步");
+  assert.equal(pageOfNow().components.find((cc) => cc.id === cardId)!.layout!.y, 196);
+});
+
+test("R4 arrange respects locked constraints", () => {
+  stateStore.addPageConstraint(heroId, "user");
+  const cardId = stateStore.addComponent("card", undefined, { title: "卡片" }, null, "user").id;
+  stateStore.updateComponent(cardId, {}, "user", { x: 0, y: 196, w: 1200, h: 300 });
+  const ops: PendingEdit["operations"] = [
+    { op: "arrange", component_id: buttonId, layout_intent: "row" },
+    { op: "arrange", component_id: cardId, layout_intent: "row" },
+  ];
+  applyEditOperations(buildPending(ops));
+  const hero = pageOfNow().components.find((c) => c.id === heroId)!.layout!;
+  assert.deepEqual(hero, { x: 0, y: 0, w: 1200, h: 120 }, "约束锁定的组件不参与重排");
+});

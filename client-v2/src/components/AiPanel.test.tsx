@@ -286,3 +286,46 @@ test("edit session: consecutive turns carry the same session_id", async () => {
   await waitFor(() => expect(screen.getByTestId("ai-edit-diff")).toBeTruthy());
   expect(JSON.parse(String((fetchMock.mock.calls[2] as [string, RequestInit])[1].body)).session_id).toBe("sess_ctx");
 });
+
+test("layout ops render with semantic labels (重排/间距)", async () => {
+  useDesignStore.setState({ selection: ["comp_hero"] });
+  const fetchMock = vi.fn(async (url: string) => {
+    if (url === "/api/llm/edit") {
+      return jsonResponse({
+        success: true,
+        edit_id: "edit_l1",
+        session_id: "sess_l",
+        requested: 2,
+        dropped: 0,
+        summary: "已生成 2 处修改建议，请预览后应用",
+        diffs: [
+          {
+            op: "arrange",
+            component_id: "comp_hero",
+            component_type: "card",
+            title: "卡片一",
+            reason: "并排",
+            changes: [{ field: "位置", before: "(0, 0)", after: "(16, 0)" }],
+          },
+          {
+            op: "gap",
+            component_type: "button",
+            title: "点我",
+            changes: [{ field: "位置", before: "(0, 136)", after: "(0, 120)" }],
+          },
+        ],
+      });
+    }
+    return jsonResponse({ success: true, applied: 2, skipped: 0, summary: "已应用 2 处修改" });
+  }) as unknown as typeof fetch;
+  vi.stubGlobal("fetch", fetchMock);
+
+  render(<AiPanel />);
+  await userEvent.type(screen.getByPlaceholderText(/对选中的 1 个组件描述修改/), "把这两个卡片并排，间距小一点");
+  await userEvent.click(screen.getByTestId("ai-edit-go"));
+  await waitFor(() => expect(screen.getByTestId("ai-edit-diff")).toBeTruthy());
+  expect(screen.getByText("重排")).toBeTruthy();
+  expect(screen.getByText("间距")).toBeTruthy();
+  expect(screen.getByText("并排")).toBeTruthy();
+  expect(screen.getByText("(0, 136)")).toBeTruthy();
+});

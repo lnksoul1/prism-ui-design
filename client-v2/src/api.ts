@@ -60,6 +60,35 @@ export const api = {
   removePageConstraint: (id: string) => del(`/api/page-constraints/${id}`),
 };
 
+/** R2 精准修改: 生成局部修改建议（diff 预览，不落地）。 */
+export function requestEdit(body: { prompt: string; component_ids: string[] }): Promise<EditPreviewView & { error?: string }> {
+  return post("/api/llm/edit", body);
+}
+
+/** R2 精准修改: 应用一处已确认的修改建议（服务端一次性消费，单 undo 步）。 */
+export function applyEdit(editId: string): Promise<{ success?: boolean; applied?: number; skipped?: number; summary?: string; error?: string }> {
+  return post("/api/llm/edit/apply", { edit_id: editId });
+}
+
+/** R2 精准修改: diff 视图（服务端 EditOpDiff 的子集）。 */
+export interface EditDiffView {
+  op: "update" | "delete" | "add";
+  component_id?: string;
+  component_type: string;
+  title?: string;
+  reason?: string;
+  changes: Array<{ field: string; before: string; after: string }>;
+}
+
+/** R2 精准修改: /api/llm/edit 的响应视图。 */
+export interface EditPreviewView {
+  edit_id: string;
+  diffs: EditDiffView[];
+  requested: number;
+  dropped: number;
+  summary: string;
+}
+
 /** R1 多候选：done 事件携带的候选视图（服务端 CandidateResult 的子集）。 */
 export interface CandidateView {
   index: number;

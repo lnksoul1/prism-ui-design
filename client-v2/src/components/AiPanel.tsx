@@ -1,5 +1,8 @@
-import { useState } from "react";
-import { applyCandidate, streamGenerate, type CandidateView } from "../api";
+import { useEffect, useState } from "react";
+import { applyCandidate, requestEdit, streamGenerate, applyEdit, type CandidateView, type EditPreviewView } from "../api";
+import { useDesignStore } from "../stores/design";
+
+const OP_LABEL: Record<string, string> = { update: "修改", delete: "删除", add: "新增" };
 
 export function AiPanel() {
   const [prompt, setPrompt] = useState("");
@@ -11,6 +14,21 @@ export function AiPanel() {
   const [candidates, setCandidates] = useState<CandidateView[]>([]);
   const [batchId, setBatchId] = useState<string | null>(null);
   const [applying, setApplying] = useState<number | null>(null);
+  // R2 精准修改：画布有选中组件时，对话改为局部修改（diff 预览 → 确认应用）
+  const selection = useDesignStore((s) => s.selection);
+  const editMode = selection.length > 0;
+  const [editPreview, setEditPreview] = useState<EditPreviewView | null>(null);
+  const [editApplying, setEditApplying] = useState(false);
+
+  // 选中集变化后，旧 diff 可能已失效 → 丢弃预览
+  useEffect(() => {
+    setEditPreview(null);
+  }, [selection]);
+
+  const submit = async (): Promise<void> => {
+    if (editMode) await doEdit();
+    else await generate();
+  };
 
   const generate = async (): Promise<void> => {
     if (!prompt.trim() || busy) return;
@@ -66,33 +84,122 @@ export function AiPanel() {
     }
   };
 
+  const doEdit = async (): Promise<void> => {
+    if (!prompt.trim() || busy) return;
+    setBusy(true);
+    setStatus(null);
+    setEditPreview(null);
+    try {
+      const preview = await requestEdit({ prompt, component_ids: selection });
+      if (preview && Array.isArray(preview.diffs) && preview.diffs.length > 0) {
+        setEditPreview(preview);
+      } else if (preview && typeof preview.summary === "string") {
+        setStatus(preview.summary);
+      } else if (preview && typeof preview.error === "string") {
+        setStatus(preview.error);
+      }
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : "修改建议生成失败");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirmEdit = async (): Promise<void> => {
+    if (!editPreview || editApplying) return;
+    setEditApplying(true);
+    try {
+      const result = await applyEdit(editPreview.edit_id);
+      setEditPreview(null);
+      setPrompt("");
+      if (result && typeof result.summary === "string") setStatus(result.summary);
+      else if (result && typeof result.error === "string") setStatus(result.error);
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : "应用修改失败");
+    } finally {
+      setEditApplying(false);
+    }
+  };
+
   return (
     <div className="ai-panel">
       <div className="ai-input-row">
         <input
           className="ai-input"
-          placeholder="描述你想要的页面，例如：做一个 SaaS 落地页"
+          placeholder={
+            editMode
+              ? `对选中的 ${selection.length} 个组件描述修改，例如：把标题换成「限时优惠」`
+              : "描述你想要的页面，例如：做一个 SaaS 落地页"
+          }
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") void generate(); }}
+          onKeyDown={(e) => { if (e.key === "Enter") void submit(); }}
         />
-        <button className="ai-go" disabled={busy || !prompt.trim()} onClick={() => void generate()}>
-          {busy ? "生成中…" : "生成"}
+        <button
+          className="ai-go"
+          data-testid={editMode ? "ai-edit-go" : "ai-go"}
+          disabled={busy || !prompt.trim()}
+          onClick={() => void submit()}
+        >
+          {busy ? (editMode ? "分析中…" : "生成中…") : editMode ? "修改" : "生成"}
         </button>
       </div>
-      <label className="ai-multi-toggle">
-        <input
-          type="checkbox"
-          data-testid="ai-multi-candidate"
-          checked={multiCandidate}
-          onChange={(e) => setMultiCandidate(e.target.checked)}
-        />
-        多候选（生成 3 版供挑选）
-      </label>
-      {(streamed || status || candidates.length > 0) && (
+      {!editMode && (
+        <label className="ai-multi-toggle">
+          <input
+            type="checkbox"
+            data-testid="ai-multi-candidate"
+            checked={multiCandidate}
+            onChange={(e) => setMultiCandidate(e.target.checked)}
+          />
+          多候选（生成 3 版供挑选）
+        </label>
+      )}
+      {(streamed || status || candidates.length > 0 || editPreview) && (
         <div className="ai-output">
           {streamed && (
             <pre data-testid="ai-stream-preview" className="ai-stream">{streamed.slice(-400)}</pre>
+          )}
+          {editPreview && (
+            <div className="ai-edit" data-testid="ai-edit-diff">
+              <div className="ai-edit-head">
+                <span className="ai-edit-title">AI 修改建议（{editPreview.diffs.length} 处）</span>
+                <div className="ai-edit-actions">
+                  <button
+                    className="ai-edit-apply"
+                    data-testid="ai-edit-apply"
+                    disabled={editApplying}
+                    onClick={() => void confirmEdit()}
+                  >
+                    {editApplying ? "应用中…" : "应用"}
+                  </button>
+                  <button
+                    className="ai-edit-discard"
+                    data-testid="ai-edit-discard"
+                    onClick={() => setEditPreview(null)}
+                  >
+                    放弃
+                  </button>
+                </div>
+              </div>
+              {editPreview.diffs.map((d, i) => (
+                <div key={i} className={`ai-edit-op ai-edit-op-${d.op}`} data-testid={`ai-edit-op-${i}`}>
+                  <div className="ai-edit-op-head">
+                    <span className={`ai-edit-kind ai-edit-kind-${d.op}`}>{OP_LABEL[d.op] || d.op}</span>
+                    <span className="ai-edit-target">{d.component_type}{d.title ? ` · ${d.title}` : ""}</span>
+                    {d.reason && <span className="ai-edit-reason">{d.reason}</span>}
+                  </div>
+                  {d.changes.map((c) => (
+                    <div key={c.field} className="ai-edit-change">
+                      <span className="ai-edit-field">{c.field}</span>
+                      <span className="ai-edit-before">{c.before}</span>
+                      <span className="ai-edit-arrow">→</span>
+                      <span className="ai-edit-after">{c.after}</span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
           )}
           {candidates.length > 0 && (
             <div className="ai-candidates" data-testid="ai-candidates">

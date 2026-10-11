@@ -2,9 +2,11 @@ import { test, expect, vi, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AiPanel } from "./AiPanel";
+import { useDesignStore } from "../stores/design";
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  useDesignStore.setState({ selection: [] });
 });
 
 function sseResponse(events: Array<[string, unknown]>): Response {
@@ -127,4 +129,113 @@ test("multi-candidate: requests 3 candidates, applies one, drops the rest", asyn
   expect(JSON.parse(String(applyInit.body))).toEqual({ batch_id: "batch_test_1", index: 0 });
   expect(screen.queryByTestId("ai-candidates")).toBeNull();
   vi.unstubAllGlobals();
+});
+
+// ===== R2 对话式精准修改 =====
+
+function jsonResponse(body: unknown): Response {
+  return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+}
+
+test("edit mode: requests targeted edit, renders diff card, applies via edit_id", async () => {
+  useDesignStore.setState({ selection: ["comp_hero", "comp_btn"] });
+  const fetchMock = vi.fn(async (url: string) => {
+    if (url === "/api/llm/edit") {
+      return jsonResponse({
+        success: true,
+        edit_id: "edit_t1",
+        requested: 2,
+        dropped: 0,
+        summary: "已生成 2 处修改建议，请预览后应用",
+        diffs: [
+          {
+            op: "update",
+            component_id: "comp_hero",
+            component_type: "hero",
+            title: "旧标题",
+            reason: "换标题",
+            changes: [{ field: "title", before: "旧标题", after: "限时优惠" }],
+          },
+          { op: "add", component_type: "banner", title: "公告", changes: [{ field: "text", before: "（无）", after: "公告" }] },
+        ],
+      });
+    }
+    // POST /api/llm/edit/apply
+    return jsonResponse({ success: true, applied: 2, skipped: 0, summary: "已应用 2 处修改" });
+  }) as unknown as typeof fetch;
+  vi.stubGlobal("fetch", fetchMock);
+
+  render(<AiPanel />);
+  // 编辑模式: placeholder 变化、多候选开关隐藏、按钮文案为「修改」
+  const input = screen.getByPlaceholderText(/对选中的 2 个组件描述修改/) as HTMLInputElement;
+  expect(screen.queryByTestId("ai-multi-candidate")).toBeNull();
+
+  await userEvent.type(input, "把标题换成限时优惠");
+  await userEvent.click(screen.getByTestId("ai-edit-go"));
+
+  // 请求体携带选中组件 ids
+  await waitFor(() => expect(screen.getByTestId("ai-edit-diff")).toBeTruthy());
+  const [editUrl, editInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+  expect(editUrl).toBe("/api/llm/edit");
+  expect(JSON.parse(String(editInit.body))).toEqual({
+    prompt: "把标题换成限时优惠",
+    component_ids: ["comp_hero", "comp_btn"],
+  });
+  expect(screen.getByTestId("ai-edit-op-0")).toBeTruthy();
+  expect(screen.getByTestId("ai-edit-op-1")).toBeTruthy();
+  expect(screen.getByText("旧标题")).toBeTruthy();
+  expect(screen.getByText("限时优惠")).toBeTruthy();
+
+  // 应用 → /api/llm/edit/apply {edit_id} → 卡片清空 + summary
+  await userEvent.click(screen.getByTestId("ai-edit-apply"));
+  await waitFor(() => expect(screen.getByText(/已应用 2 处修改/)).toBeTruthy());
+  const [applyUrl, applyInit] = fetchMock.mock.calls[1] as [string, RequestInit];
+  expect(applyUrl).toBe("/api/llm/edit/apply");
+  expect(JSON.parse(String(applyInit.body))).toEqual({ edit_id: "edit_t1" });
+  expect(screen.queryByTestId("ai-edit-diff")).toBeNull();
+});
+
+test("edit mode: discard clears the diff card; empty suggestion shows status only", async () => {
+  useDesignStore.setState({ selection: ["comp_hero"] });
+  const fetchMock = vi.fn(async (url: string) => {
+    if (url === "/api/llm/edit") {
+      return jsonResponse({
+        success: true,
+        edit_id: "edit_t2",
+        requested: 1,
+        dropped: 0,
+        summary: "已生成 1 处修改建议，请预览后应用",
+        diffs: [
+          { op: "delete", component_id: "comp_hero", component_type: "button", title: "点我", changes: [] },
+        ],
+      });
+    }
+    return jsonResponse({ success: true, applied: 1, skipped: 0, summary: "已应用 1 处修改" });
+  }) as unknown as typeof fetch;
+  vi.stubGlobal("fetch", fetchMock);
+
+  render(<AiPanel />);
+  await userEvent.type(screen.getByPlaceholderText(/对选中的 1 个组件描述修改/), "删掉这个按钮");
+  await userEvent.click(screen.getByTestId("ai-edit-go"));
+  await waitFor(() => expect(screen.getByTestId("ai-edit-diff")).toBeTruthy());
+  expect(screen.getByText("删除")).toBeTruthy();
+
+  await userEvent.click(screen.getByTestId("ai-edit-discard"));
+  expect(screen.queryByTestId("ai-edit-diff")).toBeNull();
+
+  // 无建议: 只显示 status
+  (fetchMock as unknown as ReturnType<typeof vi.fn>).mockImplementationOnce(async () =>
+    jsonResponse({
+      success: true,
+      edit_id: "edit_t3",
+      requested: 0,
+      dropped: 0,
+      summary: "AI 未提出修改建议（可换一种描述再试）",
+      diffs: [],
+    })
+  );
+  await userEvent.type(screen.getByPlaceholderText(/对选中的 1 个组件描述修改/), "随便看看");
+  await userEvent.click(screen.getByTestId("ai-edit-go"));
+  await waitFor(() => expect(screen.getByText(/AI 未提出修改建议/)).toBeTruthy());
+  expect(screen.queryByTestId("ai-edit-diff")).toBeNull();
 });

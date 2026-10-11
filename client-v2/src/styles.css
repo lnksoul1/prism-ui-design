@@ -81,6 +81,28 @@ body {
 .ai-candidate-chip { font-size: 10px; color: #666; background: rgba(35,131,226,0.08); border-radius: 4px; padding: 2px 6px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ai-candidate-apply { border: 1px solid #2383e2; background: #fff; color: #2383e2; border-radius: 6px; padding: 5px 10px; cursor: pointer; font-size: 12px; }
 .ai-candidate-apply:disabled { opacity: 0.5; cursor: default; }
+/* R2 对话式精准修改: diff 预览卡 */
+.ai-edit { display: flex; flex-direction: column; gap: 6px; border: 1px solid rgba(35,131,226,0.35); border-radius: 8px; padding: 8px 10px; background: #f7fbff; }
+.ai-edit-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ai-edit-title { font-size: 12px; font-weight: 600; color: #2383e2; }
+.ai-edit-actions { display: flex; gap: 6px; }
+.ai-edit-apply { border: none; background: #2383e2; color: #fff; border-radius: 6px; padding: 4px 12px; cursor: pointer; font-size: 12px; }
+.ai-edit-apply:disabled { opacity: 0.5; cursor: default; }
+.ai-edit-discard { border: 1px solid rgba(0,0,0,0.12); background: #fff; color: #666; border-radius: 6px; padding: 4px 12px; cursor: pointer; font-size: 12px; }
+.ai-edit-op { display: flex; flex-direction: column; gap: 3px; border: 1px solid rgba(0,0,0,0.08); border-radius: 6px; padding: 6px 8px; background: #fff; }
+.ai-edit-op-delete { border-color: rgba(220,38,38,0.35); }
+.ai-edit-op-add { border-color: rgba(22,163,74,0.35); }
+.ai-edit-op-head { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.ai-edit-kind { font-size: 10px; font-weight: 600; border-radius: 4px; padding: 1px 6px; color: #fff; background: #2383e2; }
+.ai-edit-kind-delete { background: #dc2626; }
+.ai-edit-kind-add { background: #16a34a; }
+.ai-edit-target { font-size: 12px; font-weight: 600; color: #333; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ai-edit-reason { font-size: 11px; color: #999; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.ai-edit-change { display: flex; align-items: baseline; gap: 6px; font-size: 11px; min-width: 0; }
+.ai-edit-field { color: #888; font-family: Consolas, "PingFang SC", "Microsoft YaHei", monospace; flex: 0 0 auto; }
+.ai-edit-before { color: #b91c1c; text-decoration: line-through; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 38%; }
+.ai-edit-arrow { color: #999; flex: 0 0 auto; }
+.ai-edit-after { color: #15803d; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
 .cq-toolbar { position: absolute; top: 8px; right: 16px; z-index: 10; display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; padding: 6px 10px; font-size: 12px; }
 .cq-label { display: flex; align-items: center; gap: 6px; color: #666; }
 .cq-value { min-width: 48px; text-align: right; color: #2383e2; font-weight: 600; }

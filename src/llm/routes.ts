@@ -280,14 +280,18 @@ export function registerLlmRoutes(app: express.Express): void {
       return;
     }
     const result = applyEditOperations(pending);
+    // R7: 与整页生成同款的布局体检尾巴（0 问题不带尾巴）
+    const layoutTail =
+      result.layoutIssues > 0 ? `，${result.layoutIssues} 处布局重叠/越界待处理` : "";
     res.json({
       success: true,
       applied: result.applied,
       skipped: result.skipped,
       added: result.added,
+      layout_issues: result.layoutIssues,
       summary: `已应用 ${result.applied} 处修改${
         result.skipped > 0 ? `（${result.skipped} 处因组件已不存在跳过）` : ""
-      }`,
+      }${layoutTail}`,
     });
   });
 }

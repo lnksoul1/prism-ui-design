@@ -18,6 +18,7 @@ import { COMPONENT_TYPES } from "../service/design-service.js";
 import { containerWidthForPlatform } from "../layout-engine.js";
 import {
   tidyPageLayout,
+  verifyLayout,
   isLayoutIntent,
   TIDY_MARGIN,
   TIDY_PAGE_WIDTH,
@@ -87,6 +88,8 @@ export interface EditApplyResult {
   applied: number;
   skipped: number;
   added: number;
+  /** R7: 应用后当前页布局体检（重叠对数 + 越界数之和）。仅布局类操作后报告。 */
+  layoutIssues: number;
 }
 
 // ===== prompts =====
@@ -564,7 +567,7 @@ export function applyEditOperations(pending: PendingEdit): EditApplyResult {
   if (pending.operations.some((o) => o.op === "undo" || o.op === "redo")) {
     throw new Error("撤销/恢复必须单独执行，不能与其他修改混合");
   }
-  const result: EditApplyResult = { applied: 0, skipped: 0, added: 0 };
+  const result: EditApplyResult = { applied: 0, skipped: 0, added: 0, layoutIssues: 0 };
   runBatch("ai-edit", () => {
     const st = stateStore.getState();
     const page = st.pages.find((p) => p.id === st.currentPageId);
@@ -654,6 +657,31 @@ export function applyEditOperations(pending: PendingEdit): EditApplyResult {
       }
     }
   });
+  // R7: 布局体检尾巴——add/arrange/align/gap 落地后与整页生成（applySpec）
+  // 同源汇报重叠/越界。纯 update/delete 不产布局声明：生成期 overlay 浮层的
+  // 意图不持久化，全量体检会把刻意浮层误计为重叠。
+  if (
+    pending.operations.some(
+      (o) => o.op === "add" || o.op === "arrange" || o.op === "align" || o.op === "gap"
+    )
+  ) {
+    const stAfter = stateStore.getState();
+    const pageAfter = stAfter.pages.find((p) => p.id === stAfter.currentPageId);
+    if (pageAfter) {
+      const intents = new Map<string, LayoutIntentKind>();
+      for (const op of pending.operations) {
+        if (op.op === "arrange" && op.component_id && op.layout_intent) {
+          intents.set(op.component_id, op.layout_intent);
+        }
+      }
+      const report = verifyLayout(
+        pageAfter,
+        containerWidthForPlatform(stAfter.activePlatform),
+        { intents, locked: lockedFromConstraints(pageAfter, pageAfter.components) }
+      );
+      result.layoutIssues = report.overlaps + report.out_of_bounds;
+    }
+  }
   // R5: 记录 AI 落地后的内容指纹——对话撤销以此为护栏
   recordAiApplyForUndo();
   return result;

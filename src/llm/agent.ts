@@ -62,6 +62,11 @@ const COMPONENT_HINTS: Record<string, string> = {
   faq: "{title, items: [{question, answer}]}",
   image: "{src, alt}",
   text_section: "{title, body}",
+  // 盒子模式富类型：创建后画布渲染占位盒，内部配置（ECharts option 等）经 box-mode 端点注入
+  chart: "{title, chart_type: bar|line|pie}",
+  echarts: "{title, option}",
+  rich_text: "{html: 富文本 HTML 字符串}",
+  editor: "{content: 初始文档文本}",
 };
 
 export function buildSystemPrompt(): string {

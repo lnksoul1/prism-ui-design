@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Shared design-mutation service.
  *
  * Both the REST endpoints and the WebSocket message handler in `index.ts`
@@ -17,6 +17,7 @@ import { executeUserPrompt, type PromptExecutionResult } from "../prompt-executo
 
 import { applyDesignLibraryComponent, applyDesignStyle } from "../design-library.js";
 import { validateComponentProps, describeComponentProps } from "../component-schemas.js";
+import { BOX_MODE_TYPES } from "../box-mode.js";
 
 export type MutationSource = "ai" | "user";
 
@@ -73,6 +74,9 @@ export const COMPONENT_TYPES = new Set([
   "note",
   "connector",
   "html_fragment",
+  // 盒子模式富类型（M2 缺口补齐）：可直接经 POST /api/component 创建，
+  // 客户端 isBoxModeComponent 按 type 自动识别并渲染盒子占位，内部配置经 box-mode 端点注入。
+  ...BOX_MODE_TYPES,
 ]);
 
 export function isKnownComponentType(type: string): boolean {

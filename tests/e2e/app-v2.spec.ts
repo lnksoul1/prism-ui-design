@@ -116,13 +116,13 @@ test.describe("Prism V2 M2 features", () => {
     await page.goto(`http://127.0.0.1:${port}/v2/`, { waitUntil: "domcontentloaded", timeout: 60000 });
     // 等设计库/画布就绪后再发 POST，确保 WS 已连接以接收 change 广播
     await expect(page.locator(".canvas-host")).toBeVisible();
-    // chart 等 BOX_MODE_TYPES 不在服务端 COMPONENT_TYPES 清单内（POST 会 400），
-    // 因此走真实 M2 链路：先加一个 text 组件，再通过 box-mode 端点启用盒子模式。
+    // chart 已补入服务端 COMPONENT_TYPES（M2 缺口修复），可直接 POST 创建；
+    // 再经 box-mode 端点启用，保证 M2 链路（REST + WS 广播）仍被覆盖。
     await page.evaluate(async () => {
       const res = await fetch("/api/component", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "text", props: { text: "盒子模式" }, parent_id: null }),
+        body: JSON.stringify({ type: "chart", props: { title: "盒子模式" }, parent_id: null }),
       });
       const data = (await res.json()) as { id: string };
       await fetch(`/api/component/${data.id}/box-mode`, {

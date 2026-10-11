@@ -16,8 +16,10 @@ beforeEach(() => {
 });
 
 test("component type allowlist matches the dashboard catalog", () => {
-  assert.equal(COMPONENT_TYPES.size, 51);
-  for (const type of ["hero", "navbar", "card_grid", "card", "cta", "footer", "text_section", "feature_list", "button", "stats", "pricing", "testimonial", "banner", "timeline", "faq", "form", "image", "tabs", "accordion", "carousel", "modal", "sidebar", "breadcrumb", "pagination", "progress", "badge", "avatar", "input", "grid", "table", "alert", "tooltip", "bento_grid", "skeleton", "command_palette", "glass_card", "fab", "marquee", "feature_grid", "cookie_banner", "toggle", "text", "section", "container", "rect", "ellipse", "arrow", "line", "note", "connector", "html_fragment"]) {
+  assert.equal(COMPONENT_TYPES.size, 55);
+  for (const type of ["hero", "navbar", "card_grid", "card", "cta", "footer", "text_section", "feature_list", "button", "stats", "pricing", "testimonial", "banner", "timeline", "faq", "form", "image", "tabs", "accordion", "carousel", "modal", "sidebar", "breadcrumb", "pagination", "progress", "badge", "avatar", "input", "grid", "table", "alert", "tooltip", "bento_grid", "skeleton", "command_palette", "glass_card", "fab", "marquee", "feature_grid", "cookie_banner", "toggle", "text", "section", "container", "rect", "ellipse", "arrow", "line", "note", "connector", "html_fragment",
+    // 盒子模式富类型（M2 缺口补齐，可经 POST /api/component 直接创建）
+    "chart", "echarts", "rich_text", "editor"]) {
     assert.ok(isKnownComponentType(type), `expected ${type} to be known`);
   }
   assert.equal(isKnownComponentType("mystery"), false);

@@ -29,6 +29,8 @@ import { takeCandidateSpec } from "./candidates.js";
 import {
   applyEditOperations,
   collectPageComponents,
+  requestAiRedo,
+  requestAiUndo,
   requestPageEdit,
   takePendingEdit,
 } from "./edit.js";
@@ -229,13 +231,10 @@ export function registerLlmRoutes(app: express.Express): void {
     const ids = Array.isArray(component_ids)
       ? component_ids.filter((x): x is string => typeof x === "string" && !!x)
       : [];
-    if (ids.length === 0) {
-      res.status(400).json({ error: "Missing component_ids" });
-      return;
-    }
     const st = stateStore.getState();
     const page = st.pages.find((p) => p.id === st.currentPageId);
-    if (collectPageComponents(page?.components || [], ids).length === 0) {
+    // R5: 允许空选区（对话化撤销不需要选中组件）；给了 id 却全不存在才拒绝
+    if (ids.length > 0 && collectPageComponents(page?.components || [], ids).length === 0) {
       res.status(400).json({ error: "选中的组件不存在或已被删除" });
       return;
     }
@@ -253,6 +252,8 @@ export function registerLlmRoutes(app: express.Express): void {
   });
 
   // R2: 应用一处已确认的修改建议（一次性消费，单 undo 步）。
+  // R5: undo/redo 必须单独一条且不经 runBatch——直调 stateStore.undo/redo
+  // （历史移动），护栏（AI 落地指纹）不满足时返回 409 与原因。
   app.post("/api/llm/edit/apply", (req, res) => {
     const { edit_id } = (req.body || {}) as { edit_id?: unknown };
     if (typeof edit_id !== "string" || !edit_id) {
@@ -262,6 +263,20 @@ export function registerLlmRoutes(app: express.Express): void {
     const pending = takePendingEdit(edit_id);
     if (!pending) {
       res.status(404).json({ error: "修改建议不存在或已过期" });
+      return;
+    }
+    const historyOp = pending.operations.find((o) => o.op === "undo" || o.op === "redo");
+    if (historyOp) {
+      if (pending.operations.length !== 1) {
+        res.status(400).json({ success: false, error: "撤销/恢复必须单独执行，不能与其他修改混合" });
+        return;
+      }
+      try {
+        const summary = historyOp.op === "undo" ? requestAiUndo() : requestAiRedo();
+        res.json({ success: true, applied: 1, skipped: 0, added: 0, summary });
+      } catch (err) {
+        res.status(409).json({ success: false, error: err instanceof Error ? err.message : String(err) });
+      }
       return;
     }
     const result = applyEditOperations(pending);

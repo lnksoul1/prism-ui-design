@@ -9,6 +9,8 @@ const OP_LABEL: Record<string, string> = {
   arrange: "重排",
   align: "对齐",
   gap: "间距",
+  undo: "撤销",
+  redo: "恢复",
 };
 
 export function AiPanel() {
@@ -23,11 +25,12 @@ export function AiPanel() {
   const [applying, setApplying] = useState<number | null>(null);
   // R2 精准修改：画布有选中组件时，对话改为局部修改（diff 预览 → 确认应用）
   const selection = useDesignStore((s) => s.selection);
-  const editMode = selection.length > 0;
-  const [editPreview, setEditPreview] = useState<EditPreviewView | null>(null);
-  const [editApplying, setEditApplying] = useState(false);
   // R3 会话式编辑: 连续追问共享上下文；页面切换后服务端按 page_id 自动开新会话
   const [editSessionId, setEditSessionId] = useState<string | null>(null);
+  // R5 会话化撤销：本轮会话存在时即使取消选中仍走编辑通道（可输入「撤销刚才那步」）
+  const editMode = selection.length > 0 || editSessionId !== null;
+  const [editPreview, setEditPreview] = useState<EditPreviewView | null>(null);
+  const [editApplying, setEditApplying] = useState(false);
   const currentPageId = useDesignStore((s) => s.state?.currentPageId ?? null);
 
   // 选中集变化后，旧 diff 可能已失效 → 丢弃预览
@@ -145,7 +148,9 @@ export function AiPanel() {
           className="ai-input"
           placeholder={
             editMode
-              ? `对选中的 ${selection.length} 个组件描述修改，例如：把标题换成「限时优惠」`
+              ? selection.length > 0
+                ? `对选中的 ${selection.length} 个组件描述修改，例如：把标题换成「限时优惠」`
+                : "描述修改，或输入「撤销刚才那步」"
               : "描述你想要的页面，例如：做一个 SaaS 落地页"
           }
           value={prompt}
@@ -203,7 +208,9 @@ export function AiPanel() {
                 <div key={i} className={`ai-edit-op ai-edit-op-${d.op}`} data-testid={`ai-edit-op-${i}`}>
                   <div className="ai-edit-op-head">
                     <span className={`ai-edit-kind ai-edit-kind-${d.op}`}>{OP_LABEL[d.op] || d.op}</span>
-                    <span className="ai-edit-target">{d.component_type}{d.title ? ` · ${d.title}` : ""}</span>
+                    {(d.component_type || d.title) && (
+                      <span className="ai-edit-target">{d.component_type}{d.title ? ` · ${d.title}` : ""}</span>
+                    )}
                     {d.reason && <span className="ai-edit-reason">{d.reason}</span>}
                   </div>
                   {d.changes.map((c) => (

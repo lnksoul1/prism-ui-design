@@ -329,3 +329,67 @@ test("layout ops render with semantic labels (重排/间距)", async () => {
   expect(screen.getByText("并排")).toBeTruthy();
   expect(screen.getByText("(0, 136)")).toBeTruthy();
 });
+
+test("R5 undo renders bare diff entry without target row", async () => {
+  useDesignStore.setState({ selection: ["comp_hero"] });
+  const fetchMock = vi.fn(async (url: string) => {
+    if (url === "/api/llm/edit") {
+      return jsonResponse({
+        success: true,
+        edit_id: "edit_u1",
+        session_id: "sess_u",
+        requested: 1,
+        dropped: 0,
+        summary: "已生成 1 处修改建议，请预览后应用",
+        diffs: [{ op: "undo", component_type: "", reason: "撤销上一步 AI 修改", changes: [] }],
+      });
+    }
+    return jsonResponse({ success: true, applied: 1, skipped: 0, added: 0, summary: "已撤销上一步 AI 修改" });
+  }) as unknown as typeof fetch;
+  vi.stubGlobal("fetch", fetchMock);
+
+  render(<AiPanel />);
+  await userEvent.type(screen.getByPlaceholderText(/对选中的 1 个组件描述修改/), "撤销刚才那步");
+  await userEvent.click(screen.getByTestId("ai-edit-go"));
+  await waitFor(() => expect(screen.getByTestId("ai-edit-diff")).toBeTruthy());
+  expect(screen.getByText("撤销")).toBeTruthy();
+  expect(screen.getByText("撤销上一步 AI 修改")).toBeTruthy();
+  expect(document.querySelector(".ai-edit-target")).toBeNull();
+  expect(screen.queryByText(/hero/)).toBeFalsy();
+});
+
+test("R5 session keeps edit mode without selection; sends empty component_ids", async () => {
+  useDesignStore.setState({ selection: ["comp_hero"] });
+  const bodies: Array<{ component_ids?: string[]; session_id?: string | null }> = [];
+  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === "/api/llm/edit") {
+      bodies.push(JSON.parse(String(init?.body || "{}")));
+      return jsonResponse({
+        success: true,
+        edit_id: "edit_e1",
+        session_id: "sess_keep",
+        requested: 0,
+        dropped: 0,
+        summary: "AI 未提出修改建议（可换一种描述再试）",
+        diffs: [],
+      });
+    }
+    return jsonResponse({ success: true, applied: 0, skipped: 0, added: 0, summary: "ok" });
+  }) as unknown as typeof fetch;
+  vi.stubGlobal("fetch", fetchMock);
+
+  render(<AiPanel />);
+  const go = () => screen.getByTestId("ai-edit-go");
+  await userEvent.type(screen.getByPlaceholderText(/对选中的 1 个组件描述修改/), "改标题");
+  await userEvent.click(go());
+  await waitFor(() => expect(screen.getByText(/未提出修改建议/)).toBeTruthy());
+  expect(bodies[0]).toMatchObject({ component_ids: ["comp_hero"], session_id: null });
+
+  // 取消选中 → 会话仍在，面板保持编辑模式（可输入「撤销刚才那步」）
+  useDesignStore.setState({ selection: [] });
+  const input = await screen.findByPlaceholderText(/描述修改，或输入「撤销刚才那步」/);
+  await userEvent.type(input, "撤销刚才那步");
+  await userEvent.click(go());
+  await waitFor(() => expect(bodies.length).toBe(2));
+  expect(bodies[1]).toMatchObject({ component_ids: [], session_id: "sess_keep" });
+});

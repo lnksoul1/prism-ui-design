@@ -8,6 +8,9 @@
  * 布局不由 LLM 输出：新增组件放在锚点组件（首个仍存在的选中项）下方；
  * R4 语义布局操作（arrange/align/gap）同样只接收语义参数，坐标由 tidy
  * 管线计算——既有页面约束（locked）在重排时继续生效。
+ * R5 对话化撤销/恢复：undo/redo 操作在应用时**单独执行**（不经 runBatch，
+ * 直调 stateStore.undo/redo），并以「AI 落地后内容指纹」为护栏——只有当
+ * 应用之后画布未被任何其他写路径改动时才允许对话撤销，防止误撤手动操作。
  */
 import { stateStore, type ComponentLayout, type ComponentNode, type PageDef } from "../state.js";
 import { runBatch } from "../commands/batch.js";
@@ -25,7 +28,7 @@ import { chatCompletion, type ChatMessage } from "./providers.js";
 import { appendTurn, createEditSession, getEditSession } from "./session.js";
 import type { LlmConfig } from "./config.js";
 
-export type EditOpKind = "update" | "delete" | "add" | "arrange" | "align" | "gap";
+export type EditOpKind = "update" | "delete" | "add" | "arrange" | "align" | "gap" | "undo" | "redo";
 
 export interface EditOperation {
   op: EditOpKind;
@@ -100,7 +103,9 @@ export function buildEditSystemPrompt(): string {
     { "op": "add", "component_type": "button", "props": { 全量字段 }, "reason": "一句话理由" },
     { "op": "arrange", "component_id": "comp_xxx", "layout_intent": "row|stack|grid|sidebar|overlay", "reason": "一句话理由" },
     { "op": "align", "component_id": "comp_xxx", "align": "left|center|right", "reason": "一句话理由" },
-    { "op": "gap", "delta": 16, "reason": "一句话理由" }
+    { "op": "gap", "delta": 16, "reason": "一句话理由" },
+    { "op": "undo", "reason": "一句话理由" },
+    { "op": "redo", "reason": "一句话理由" }
   ]
 }
 
@@ -118,6 +123,8 @@ ${types}
   - align：组件相对页面的水平对齐（left 靠左边距 / center 水平居中 / right 靠右边距）。
   - gap：调整选中组件之间的纵向间距，delta 为像素数（正=变大，负=变小）。
 - 被用户锁定为约束的组件不会参与重排；除此之外 arrange 可能联动移动页面上的相邻组件（预览会如实列出）。
+- 撤销/恢复：用户要求「撤销刚才那步 / 撤销刚才的修改」时输出 { "op": "undo" }；要求「恢复 / 重做刚才的修改」时输出 { "op": "redo" }。二者必须单独输出一条，绝不能与其他操作混合。撤销只针对最近一次 AI 修改；若用户想撤销的是自己的手动操作，输出 { "operations": [] } 并在 reason 之外不做任何事（用户应使用 Ctrl+Z）。
+- 未提供选中组件时只能输出 undo 或 redo。
 - 文案用中文，内容要具体真实，不要占位符。`;
 }
 
@@ -134,9 +141,9 @@ function propsSummary(props: Record<string, unknown>): string {
 }
 
 export function buildEditUserPrompt(prompt: string, targets: EditTargetView[]): string {
-  const lines = targets
-    .map((t) => `- ${t.id} (${t.type}): ${propsSummary(t.props)}`)
-    .join("\n");
+  const lines = targets.length
+    ? targets.map((t) => `- ${t.id} (${t.type}): ${propsSummary(t.props)}`).join("\n")
+    : "（未选中组件——此时只能输出 undo 或 redo 操作）";
   return `选中组件（id / 类型 / 当前 props）：\n${lines}\n\n修改指令：${prompt}`;
 }
 
@@ -172,6 +179,15 @@ export function parseEditOperations(raw: string, targetIds: ReadonlySet<string>)
     const r = rawOp as Record<string, unknown>;
     const op = r.op;
     const reason = typeof r.reason === "string" && r.reason.trim() ? r.reason.trim() : undefined;
+    // R5: undo/redo 无参数；空选区时只放行这两种（未选中无法定位任何组件）
+    if (op === "undo" || op === "redo") {
+      operations.push({ op, reason });
+      continue;
+    }
+    if (targetIds.size === 0) {
+      dropped += 1;
+      continue;
+    }
     const props =
       r.props && typeof r.props === "object" && !Array.isArray(r.props)
         ? (r.props as Record<string, unknown>)
@@ -316,6 +332,11 @@ export function computeEditDiffs(
   });
 
   for (const op of operations) {
+    // R5: 撤销/恢复无字段变化，diff 只展示操作本身
+    if (op.op === "undo" || op.op === "redo") {
+      out.push({ op: op.op, component_type: "", reason: op.reason, changes: [] });
+      continue;
+    }
     if (op.op === "add") {
       const props = op.props || {};
       out.push({
@@ -483,7 +504,10 @@ export async function requestPageEdit(
   const state = stateStore.getState();
   const page = state.pages.find((p) => p.id === state.currentPageId);
   const targets = collectPageComponents(page?.components || [], componentIds);
-  if (targets.length === 0) throw new Error("选中的组件不存在或已被删除");
+  // R5: 允许空选区（对话化撤销不需要选中组件）；给了 id 却全不存在才拒绝
+  if (componentIds.length > 0 && targets.length === 0) {
+    throw new Error("选中的组件不存在或已被删除");
+  }
 
   const existing = getEditSession(sessionId);
   const active = existing && existing.page_id === page!.id ? existing : null;
@@ -533,8 +557,13 @@ export async function requestPageEdit(
  * WS 广播）。应用时逐条重新校验：组件已不存在的 update/delete 记为 skipped，
  * arrange/align/gap 基于应用时的最新状态重新计算布局（约束锁定生效）。
  * add 追加到页面根部，若锚点（首个仍存在的选中项）有布局则放在其下方。
+ * R5: undo/redo 不能走这里（runBatch 内嵌套历史移动会破坏快照栈）——由
+ * /api/llm/edit/apply 单独分支直调 requestAiUndo/requestAiRedo。
  */
 export function applyEditOperations(pending: PendingEdit): EditApplyResult {
+  if (pending.operations.some((o) => o.op === "undo" || o.op === "redo")) {
+    throw new Error("撤销/恢复必须单独执行，不能与其他修改混合");
+  }
   const result: EditApplyResult = { applied: 0, skipped: 0, added: 0 };
   runBatch("ai-edit", () => {
     const st = stateStore.getState();
@@ -625,5 +654,71 @@ export function applyEditOperations(pending: PendingEdit): EditApplyResult {
       }
     }
   });
+  // R5: 记录 AI 落地后的内容指纹——对话撤销以此为护栏
+  aiGuard = { applied: aiFingerprint(), undone: null };
   return result;
+}
+
+// ===== R5 对话化撤销/恢复: AI 落地指纹护栏 =====
+
+/**
+ * 内容指纹: 全量状态快照去掉 activityLog（undo/redo 本身会写活动日志）与
+ * canUndo/canRedo（派生自历史位置，撤销后必然变化）后的 JSON。任何真实写
+ * 路径（手动/AI/协同 commitCollab）都会 bump revision 使指纹变化；而「手动
+ * 改了又手动撤销回去」会复原指纹——语义正确，因为最后存活的一步又变回了
+ * AI 修改。
+ */
+function aiFingerprint(): string {
+  const s = { ...stateStore.getState() } as Record<string, unknown>;
+  delete s.activityLog;
+  delete s.canUndo;
+  delete s.canRedo;
+  return JSON.stringify(s);
+}
+
+interface AiHistoryGuard {
+  /** 最近一次 AI 应用后的内容指纹；null = 当前没有可对话撤销的 AI 修改。 */
+  applied: string | null;
+  /** 最近一次 AI 撤销后的内容指纹；null = 当前没有可对话恢复的 AI 撤销。 */
+  undone: string | null;
+}
+
+let aiGuard: AiHistoryGuard = { applied: null, undone: null };
+
+/** 测试支持: 清空护栏（stateStore.resetForTests 不会动到本模块状态）。 */
+export function resetAiHistoryForTests(): void {
+  aiGuard = { applied: null, undone: null };
+}
+
+/**
+ * R5: 撤销最近一次 AI 修改。在 runBatch 外直调 stateStore.undo()（撤销本身
+ * 是一次历史移动，嵌入批量提交会污染快照栈）。护栏三连：存在 AI 落地记录、
+ * 当前指纹与落地时一致（之后画布无任何其他改动）、历史栈确实可退。
+ * @throws Error 当没有可撤销的 AI 修改或画布已被其他写路径改动
+ */
+export function requestAiUndo(): string {
+  if (!aiGuard.applied) throw new Error("没有可撤销的 AI 修改（对话撤销只针对最近一次 AI 修改）");
+  if (aiFingerprint() !== aiGuard.applied) {
+    throw new Error("AI 修改之后画布已有其他改动，为避免误撤请用 Ctrl+Z 手动撤销");
+  }
+  if (!stateStore.canUndo()) throw new Error("没有可撤销的历史");
+  if (!stateStore.undo()) throw new Error("撤销失败");
+  aiGuard = { applied: null, undone: aiFingerprint() };
+  return "已撤销上一步 AI 修改";
+}
+
+/**
+ * R5: 恢复被对话撤销的 AI 修改（仅当撤销之后画布未被改动）。恢复后护栏
+ * 回到「已落地」状态，可再次对话撤销。
+ * @throws Error 当没有可恢复的 AI 撤销或画布已被其他写路径改动
+ */
+export function requestAiRedo(): string {
+  if (!aiGuard.undone) throw new Error("没有可恢复的 AI 修改（先撤销一次 AI 修改后才能恢复）");
+  if (aiFingerprint() !== aiGuard.undone) {
+    throw new Error("AI 撤销之后画布已有其他改动，无法恢复");
+  }
+  if (!stateStore.canRedo()) throw new Error("没有可恢复的历史");
+  if (!stateStore.redo()) throw new Error("恢复失败");
+  aiGuard = { applied: aiFingerprint(), undone: null };
+  return "已恢复上一步 AI 修改";
 }

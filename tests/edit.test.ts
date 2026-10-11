@@ -14,7 +14,10 @@ import {
   collectPageComponents,
   computeEditDiffs,
   parseEditOperations,
+  requestAiRedo,
+  requestAiUndo,
   requestPageEdit,
+  resetAiHistoryForTests,
   takePendingEdit,
   type PendingEdit,
 } from "../src/llm/edit.js";
@@ -39,6 +42,7 @@ beforeEach(() => {
   stateStore.resetForTests();
   clearPendingEditsForTests();
   clearEditSessionsForTests();
+  resetAiHistoryForTests();
   page = stateStore.addPage("测试页");
   heroId = stateStore.addComponent("hero", undefined, { title: "旧标题", subtitle: "副标题" }, null, "user").id;
   buttonId = stateStore.addComponent("button", undefined, { text: "点我" }, null, "user").id;
@@ -409,4 +413,106 @@ test("R4 arrange respects locked constraints", () => {
   applyEditOperations(buildPending(ops));
   const hero = pageOfNow().components.find((c) => c.id === heroId)!.layout!;
   assert.deepEqual(hero, { x: 0, y: 0, w: 1200, h: 120 }, "约束锁定的组件不参与重排");
+});
+
+// ===== R5 对话化撤销/恢复 =====
+
+test("R5 parse: undo/redo 无参数放行；空选区只允许 undo/redo", () => {
+  const raw = JSON.stringify({
+    operations: [
+      { op: "undo", reason: "撤销上一步" },
+      { op: "redo" },
+      { op: "update", component_id: heroId, props: { title: "x" } },
+      { op: "add", component_type: "button", props: { text: "y" } },
+    ],
+  });
+  const withSel = parseEditOperations(raw, new Set([heroId]));
+  assert.equal(withSel.dropped, 0);
+  assert.equal(withSel.operations.length, 4);
+
+  const noSel = parseEditOperations(raw, new Set());
+  assert.equal(noSel.dropped, 2, "空选区丢弃 update/add");
+  assert.deepEqual(noSel.operations.map((o) => o.op), ["undo", "redo"]);
+});
+
+test("R5 diff: undo/redo 渲染为无变更条目", () => {
+  const diffs = computeEditDiffs([{ op: "undo", reason: "撤销" }], new Map());
+  assert.equal(diffs.length, 1);
+  assert.equal(diffs[0]!.op, "undo");
+  assert.equal(diffs[0]!.component_type, "");
+  assert.equal(diffs[0]!.changes.length, 0);
+});
+
+test("R5 applyEditOperations 拒绝混入 undo/redo", () => {
+  assert.throws(
+    () => applyEditOperations(buildPending([{ op: "undo", reason: "x" }])),
+    /单独/
+  );
+});
+
+test("R5 undo/redo: 对话撤销回滚最近一次 AI 应用，对话恢复还原", async () => {
+  stubContent(
+    JSON.stringify({
+      operations: [{ op: "update", component_id: heroId, props: { title: "AI 标题" }, reason: "改标题" }],
+    })
+  );
+  try {
+    const preview = await requestPageEdit("把标题换成 AI 标题", [heroId], CFG);
+    applyEditOperations(takePendingEdit(preview.edit_id)!);
+    assert.equal(pageOfNow().components.find((c) => c.id === heroId)!.props.title, "AI 标题");
+
+    assert.equal(requestAiUndo(), "已撤销上一步 AI 修改");
+    assert.equal(pageOfNow().components.find((c) => c.id === heroId)!.props.title, "旧标题");
+
+    assert.equal(requestAiRedo(), "已恢复上一步 AI 修改");
+    assert.equal(pageOfNow().components.find((c) => c.id === heroId)!.props.title, "AI 标题");
+  } finally {
+    restoreFetch();
+  }
+});
+
+test("R5 护栏: 无 AI 落地 / 手动改动后 / 连续撤销 均被拒", async () => {
+  assert.throws(() => requestAiUndo(), /没有可撤销的 AI 修改/);
+  assert.throws(() => requestAiRedo(), /没有可恢复的 AI 修改/);
+
+  stubContent(
+    JSON.stringify({
+      operations: [{ op: "update", component_id: heroId, props: { title: "AI 标题" } }],
+    })
+  );
+  try {
+    const preview = await requestPageEdit("改标题", [heroId], CFG);
+    applyEditOperations(takePendingEdit(preview.edit_id)!);
+  } finally {
+    restoreFetch();
+  }
+
+  // 用户手动改了一笔 → 指纹失配 → 拒绝对话撤销
+  stateStore.updateComponent(buttonId, { text: "手改" }, "user");
+  assert.throws(() => requestAiUndo(), /已有其他改动/);
+
+  // 手动改了又手动撤回 → 指纹复原（最后存活的一步又是 AI 修改）→ 允许
+  assert.equal(stateStore.undo(), true);
+  assert.equal(requestAiUndo(), "已撤销上一步 AI 修改");
+
+  // 连续第二次对话撤销被拒（只针对最近一次 AI 修改）
+  assert.throws(() => requestAiUndo(), /没有可撤销的 AI 修改/);
+});
+
+test("R5 护栏: AI 撤销后画布被改动则无法对话恢复", async () => {
+  stubContent(
+    JSON.stringify({
+      operations: [{ op: "update", component_id: heroId, props: { title: "AI 标题" } }],
+    })
+  );
+  try {
+    const preview = await requestPageEdit("改标题", [heroId], CFG);
+    applyEditOperations(takePendingEdit(preview.edit_id)!);
+  } finally {
+    restoreFetch();
+  }
+  assert.equal(requestAiUndo(), "已撤销上一步 AI 修改");
+
+  stateStore.addComponent("banner", undefined, { text: "新组件" }, null, "user");
+  assert.throws(() => requestAiRedo(), /无法恢复/);
 });

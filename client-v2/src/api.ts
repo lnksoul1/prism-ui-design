@@ -74,9 +74,9 @@ export function applyEdit(editId: string): Promise<{ success?: boolean; applied?
   return post("/api/llm/edit/apply", { edit_id: editId });
 }
 
-/** R2 精准修改: diff 视图（服务端 EditOpDiff 的子集）。R4: 含语义布局操作。 */
+/** R2 精准修改: diff 视图（服务端 EditOpDiff 的子集）。R4: 含语义布局操作。R5: undo/redo 无变更条目。 */
 export interface EditDiffView {
-  op: "update" | "delete" | "add" | "arrange" | "align" | "gap";
+  op: "update" | "delete" | "add" | "arrange" | "align" | "gap" | "undo" | "redo";
   component_id?: string;
   component_type: string;
   title?: string;

@@ -18,6 +18,13 @@ import {
   takePendingEdit,
   type PendingEdit,
 } from "../src/llm/edit.js";
+import {
+  appendTurn,
+  clearEditSessionsForTests,
+  createEditSession,
+  getEditSession,
+  MAX_SESSION_MESSAGES,
+} from "../src/llm/session.js";
 
 let tmp: string;
 let originalDir: string | undefined;
@@ -31,6 +38,7 @@ beforeEach(() => {
   process.env.PRISM_PROJECT_DIR = tmp;
   stateStore.resetForTests();
   clearPendingEditsForTests();
+  clearEditSessionsForTests();
   page = stateStore.addPage("测试页");
   heroId = stateStore.addComponent("hero", undefined, { title: "旧标题", subtitle: "副标题" }, null, "user").id;
   buttonId = stateStore.addComponent("button", undefined, { text: "点我" }, null, "user").id;
@@ -240,4 +248,64 @@ test("applyEditOperations skips update of already-deleted anchor target", () => 
     buildPending([{ op: "delete", component_id: buttonId }, { op: "update", component_id: buttonId, props: { text: "x" } }])
   );
   assert.deepEqual(result, { applied: 1, skipped: 1, added: 0 });
+});
+
+// ===== R3 会话式编辑 =====
+
+test("appendTurn trims history to MAX_SESSION_MESSAGES", () => {
+  const s = createEditSession("page_x");
+  for (let i = 0; i < 6; i++) appendTurn(s, `u${i}`, `a${i}`);
+  assert.equal(s.messages.length, MAX_SESSION_MESSAGES);
+  assert.equal(s.messages[0].content, "u0", "恰好 12 条不裁剪");
+  appendTurn(s, "u6", "a6");
+  assert.equal(s.messages.length, MAX_SESSION_MESSAGES);
+  assert.equal(s.messages[0].content, "u1", "最旧的被裁掉");
+  assert.equal(s.messages[MAX_SESSION_MESSAGES - 1].content, "a6");
+});
+
+test("R3 会话: consecutive turns reuse session and inject history; page switch starts fresh", async () => {
+  const bodies: string[] = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (_url: string | URL, init?: RequestInit) => {
+    bodies.push(String((init as RequestInit)?.body || ""));
+    return new Response(
+      JSON.stringify({ choices: [{ message: { content: '{"operations":[]}' } }] }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+  }) as typeof fetch;
+  try {
+    const first = await requestPageEdit("把标题改短", [heroId], CFG);
+    const second = await requestPageEdit("再大一点", [heroId], CFG, first.session_id);
+    assert.equal(second.session_id, first.session_id, "同页复用会话");
+
+    const secondPayload = JSON.parse(bodies[1]) as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    assert.equal(secondPayload.messages.length, 4, "system + user1 + assistant1 + user2");
+    assert.equal(secondPayload.messages[0]!.role, "system");
+    assert.match(secondPayload.messages[1]!.content, /把标题改短/);
+    assert.equal(secondPayload.messages[2]!.role, "assistant");
+    assert.match(secondPayload.messages[3]!.content, /再大一点/);
+
+    // 页面切换: 旧 session_id 指向别的页面 → 开新会话
+    stateStore.addPage("第二页");
+    const bannerId = stateStore.addComponent("banner", undefined, { text: "B" }, null, "user").id;
+    const third = await requestPageEdit("改公告", [bannerId], CFG, first.session_id);
+    assert.notEqual(third.session_id, first.session_id, "跨页自动开新会话");
+    const thirdPayload = JSON.parse(bodies[2]) as { messages: Array<{ role: string }> };
+    assert.equal(thirdPayload.messages.length, 2, "新会话无历史");
+
+    // 未知 session_id → 视为无历史的新会话
+    const fourth = await requestPageEdit("改公告", [bannerId], CFG, "sess_ghost");
+    assert.notEqual(fourth.session_id, "sess_ghost");
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("R3 会话: unknown session id is ignored (fresh session)", async () => {
+  const s = getEditSession("sess_ghost");
+  assert.equal(s, null);
+  const created = createEditSession("page_y");
+  assert.ok(getEditSession(created.id));
 });

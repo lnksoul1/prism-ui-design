@@ -12,6 +12,7 @@ import { stateStore, type ComponentNode } from "../state.js";
 import { runBatch } from "../commands/batch.js";
 import { COMPONENT_TYPES } from "../service/design-service.js";
 import { chatCompletion, type ChatMessage } from "./providers.js";
+import { appendTurn, createEditSession, getEditSession } from "./session.js";
 import type { LlmConfig } from "./config.js";
 
 export type EditOpKind = "update" | "delete" | "add";
@@ -59,6 +60,8 @@ export interface EditPreview {
   /** 被过滤的非法操作数（未知 id / 未知类型）。 */
   dropped: number;
   summary: string;
+  /** R3 会话式编辑: 本轮所属会话（复用传入的或新建）。 */
+  session_id: string;
 }
 
 export interface EditApplyResult {
@@ -90,6 +93,7 @@ ${types}
 - add 的新组件会放在选中组件下方；props 字段名必须与组件定义一致（hero: {title, subtitle, cta_text}，button: {text} 等按名示意）。
 - 不要输出坐标/尺寸/样式字段——布局与样式由系统管理。
 - 指令未涉及任何修改时输出 { "operations": [] }。
+- 可能提供历史对话：结合上文理解指代（如「再大一点」「换回刚才的文案」指向上一轮的字段/组件）；但每轮给出的选中组件 props 才是当前真实值。
 - 文案用中文，内容要具体真实，不要占位符。`;
 }
 
@@ -300,29 +304,37 @@ export function collectPageComponents(
 
 /**
  * 选中组件 → LLM 局部修改建议 → diff 预览（不落地，暂存 PendingEdit）。
+ * R3 会话式编辑: 传 sessionId 时复用同页会话的历史轮次（跨页自动开新会话），
+ * 本轮 user/assistant 追加回会话。
  * @throws Error 当选中组件不存在或 LLM/解析失败
  */
 export async function requestPageEdit(
   prompt: string,
   componentIds: string[],
-  cfg: LlmConfig
+  cfg: LlmConfig,
+  sessionId?: string | null
 ): Promise<EditPreview> {
   const state = stateStore.getState();
   const page = state.pages.find((p) => p.id === state.currentPageId);
   const targets = collectPageComponents(page?.components || [], componentIds);
   if (targets.length === 0) throw new Error("选中的组件不存在或已被删除");
 
+  const existing = getEditSession(sessionId);
+  const active = existing && existing.page_id === page!.id ? existing : null;
+  const userContent = buildEditUserPrompt(
+    prompt,
+    targets.map((t) => ({ id: t.id, type: t.type, props: t.props || {} }))
+  );
   const messages: ChatMessage[] = [
     { role: "system", content: buildEditSystemPrompt() },
-    {
-      role: "user",
-      content: buildEditUserPrompt(
-        prompt,
-        targets.map((t) => ({ id: t.id, type: t.type, props: t.props || {} }))
-      ),
-    },
+    ...(active ? active.messages : []),
+    { role: "user", content: userContent },
   ];
   const reply = await chatCompletion(messages, cfg);
+  const session = active ?? createEditSession(page!.id);
+  // 回复可能是大段 JSON——历史里截断存储，保持后续轮次 prompt 精简
+  appendTurn(session, userContent, reply.slice(0, 2000));
+
   const targetIds = new Set(targets.map((t) => t.id));
   const { operations, dropped } = parseEditOperations(reply, targetIds);
   const byId = new Map(targets.map((t) => [t.id, t]));
@@ -337,6 +349,7 @@ export async function requestPageEdit(
       operations.length === 0
         ? "AI 未提出修改建议（可换一种描述再试）"
         : `已生成 ${operations.length} 处修改建议，请预览后应用`,
+    session_id: session.id,
   };
 }
 

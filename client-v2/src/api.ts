@@ -60,8 +60,12 @@ export const api = {
   removePageConstraint: (id: string) => del(`/api/page-constraints/${id}`),
 };
 
-/** R2 精准修改: 生成局部修改建议（diff 预览，不落地）。 */
-export function requestEdit(body: { prompt: string; component_ids: string[] }): Promise<EditPreviewView & { error?: string }> {
+/** R2 精准修改: 生成局部修改建议（diff 预览，不落地）。R3: session_id 维持多轮上下文。 */
+export function requestEdit(body: {
+  prompt: string;
+  component_ids: string[];
+  session_id?: string | null;
+}): Promise<EditPreviewView & { error?: string }> {
   return post("/api/llm/edit", body);
 }
 
@@ -87,6 +91,8 @@ export interface EditPreviewView {
   requested: number;
   dropped: number;
   summary: string;
+  /** R3 会话式编辑: 本轮所属会话，后续轮次回传以结合上文。 */
+  session_id: string;
 }
 
 /** R1 多候选：done 事件携带的候选视图（服务端 CandidateResult 的子集）。 */

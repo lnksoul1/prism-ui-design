@@ -19,11 +19,18 @@ export function AiPanel() {
   const editMode = selection.length > 0;
   const [editPreview, setEditPreview] = useState<EditPreviewView | null>(null);
   const [editApplying, setEditApplying] = useState(false);
+  // R3 会话式编辑: 连续追问共享上下文；页面切换后服务端按 page_id 自动开新会话
+  const [editSessionId, setEditSessionId] = useState<string | null>(null);
+  const currentPageId = useDesignStore((s) => s.state?.currentPageId ?? null);
 
   // 选中集变化后，旧 diff 可能已失效 → 丢弃预览
   useEffect(() => {
     setEditPreview(null);
   }, [selection]);
+  // 页面切换 → 丢弃会话（服务端亦有 page_id 兜底）
+  useEffect(() => {
+    setEditSessionId(null);
+  }, [currentPageId]);
 
   const submit = async (): Promise<void> => {
     if (editMode) await doEdit();
@@ -90,7 +97,10 @@ export function AiPanel() {
     setStatus(null);
     setEditPreview(null);
     try {
-      const preview = await requestEdit({ prompt, component_ids: selection });
+      const preview = await requestEdit({ prompt, component_ids: selection, session_id: editSessionId });
+      if (preview && typeof preview.session_id === "string") {
+        setEditSessionId(preview.session_id);
+      }
       if (preview && Array.isArray(preview.diffs) && preview.diffs.length > 0) {
         setEditPreview(preview);
       } else if (preview && typeof preview.summary === "string") {

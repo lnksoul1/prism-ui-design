@@ -212,9 +212,10 @@ export function registerLlmRoutes(app: express.Express): void {
   // 预览 + edit_id）。客户端确认后 POST /api/llm/edit/apply 经 runBatch 单
   // undo 步应用。
   app.post("/api/llm/edit", async (req, res) => {
-    const { prompt, component_ids } = (req.body || {}) as {
+    const { prompt, component_ids, session_id } = (req.body || {}) as {
       prompt?: unknown;
       component_ids?: unknown;
+      session_id?: unknown;
     };
     const cfg = loadLlmConfig();
     if (!cfg) {
@@ -239,7 +240,12 @@ export function registerLlmRoutes(app: express.Express): void {
       return;
     }
     try {
-      const preview = await requestPageEdit(prompt, ids, cfg);
+      const preview = await requestPageEdit(
+        prompt,
+        ids,
+        cfg,
+        typeof session_id === "string" ? session_id : null
+      );
       res.json({ success: true, ...preview });
     } catch (err) {
       res.status(502).json({ success: false, error: err instanceof Error ? err.message : String(err) });

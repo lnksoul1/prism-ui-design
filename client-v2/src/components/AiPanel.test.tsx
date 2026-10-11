@@ -180,6 +180,7 @@ test("edit mode: requests targeted edit, renders diff card, applies via edit_id"
   expect(JSON.parse(String(editInit.body))).toEqual({
     prompt: "把标题换成限时优惠",
     component_ids: ["comp_hero", "comp_btn"],
+    session_id: null,
   });
   expect(screen.getByTestId("ai-edit-op-0")).toBeTruthy();
   expect(screen.getByTestId("ai-edit-op-1")).toBeTruthy();
@@ -238,4 +239,50 @@ test("edit mode: discard clears the diff card; empty suggestion shows status onl
   await userEvent.click(screen.getByTestId("ai-edit-go"));
   await waitFor(() => expect(screen.getByText(/AI 未提出修改建议/)).toBeTruthy());
   expect(screen.queryByTestId("ai-edit-diff")).toBeNull();
+});
+
+test("edit session: consecutive turns carry the same session_id", async () => {
+  useDesignStore.setState({ selection: ["comp_hero"] });
+  let turn = 0;
+  const fetchMock = vi.fn(async (url: string) => {
+    if (url === "/api/llm/edit") {
+      turn += 1;
+      return jsonResponse({
+        success: true,
+        edit_id: `edit_s${turn}`,
+        session_id: "sess_ctx",
+        requested: 1,
+        dropped: 0,
+        summary: "已生成 1 处修改建议，请预览后应用",
+        diffs: [
+          {
+            op: "update",
+            component_id: "comp_hero",
+            component_type: "hero",
+            title: "A",
+            changes: [{ field: "title", before: "A", after: "B" }],
+          },
+        ],
+      });
+    }
+    return jsonResponse({ success: true, applied: 1, skipped: 0, summary: "已应用 1 处修改" });
+  }) as unknown as typeof fetch;
+  vi.stubGlobal("fetch", fetchMock);
+
+  render(<AiPanel />);
+  const go = () => screen.getByTestId("ai-edit-go");
+
+  // 第一轮: 无 session_id
+  await userEvent.type(screen.getByPlaceholderText(/对选中的 1 个组件描述修改/), "把标题换成 B");
+  await userEvent.click(go());
+  await waitFor(() => expect(screen.getByTestId("ai-edit-diff")).toBeTruthy());
+  expect(JSON.parse(String((fetchMock.mock.calls[0] as [string, RequestInit])[1].body)).session_id).toBeNull();
+
+  // 应用后追问第二轮: 复用服务端返回的 session_id
+  await userEvent.click(screen.getByTestId("ai-edit-apply"));
+  await waitFor(() => expect(screen.getByText(/已应用 1 处修改/)).toBeTruthy());
+  await userEvent.type(screen.getByPlaceholderText(/对选中的 1 个组件描述修改/), "再大一点");
+  await userEvent.click(go());
+  await waitFor(() => expect(screen.getByTestId("ai-edit-diff")).toBeTruthy());
+  expect(JSON.parse(String((fetchMock.mock.calls[2] as [string, RequestInit])[1].body)).session_id).toBe("sess_ctx");
 });

@@ -70,6 +70,17 @@ body {
 .ai-output { display: flex; flex-direction: column; gap: 4px; }
 .ai-stream { max-height: 120px; overflow: auto; background: #fafaf8; border-radius: 6px; padding: 8px; font-size: 11px; font-family: Consolas, monospace; color: #666; white-space: pre-wrap; }
 .ai-status { font-size: 12px; color: #2383e2; }
+.ai-multi-toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #666; cursor: pointer; }
+.ai-candidates { display: flex; gap: 8px; flex-wrap: wrap; }
+.ai-candidate { flex: 1 1 180px; min-width: 180px; max-width: 260px; border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; background: #fafaf8; }
+.ai-candidate-failed { opacity: 0.55; }
+.ai-candidate-head { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
+.ai-candidate-label { font-size: 12px; font-weight: 600; color: #333; }
+.ai-candidate-meta { font-size: 11px; color: #999; }
+.ai-candidate-preview { display: flex; flex-wrap: wrap; gap: 4px; }
+.ai-candidate-chip { font-size: 10px; color: #666; background: rgba(35,131,226,0.08); border-radius: 4px; padding: 2px 6px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ai-candidate-apply { border: 1px solid #2383e2; background: #fff; color: #2383e2; border-radius: 6px; padding: 5px 10px; cursor: pointer; font-size: 12px; }
+.ai-candidate-apply:disabled { opacity: 0.5; cursor: default; }
 .cq-toolbar { position: absolute; top: 8px; right: 16px; z-index: 10; display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; padding: 6px 10px; font-size: 12px; }
 .cq-label { display: flex; align-items: center; gap: 6px; color: #666; }
 .cq-value { min-width: 48px; text-align: right; color: #2383e2; font-weight: 600; }

@@ -54,15 +54,39 @@ export const api = {
   tidyLayout: () => post<{ success: boolean; applied: number }>("/api/layout/tidy", {}),
 };
 
-/** M2 NL2UI 流式: 消费 /api/llm/stream 的 SSE，返回 done 事件的结果。 */
+/** R1 多候选：done 事件携带的候选视图（服务端 CandidateResult 的子集）。 */
+export interface CandidateView {
+  index: number;
+  label: string;
+  angle: string;
+  ok: boolean;
+  component_count: number;
+  summary: string;
+  preview?: Array<{ type: string; title?: string }>;
+  error?: string;
+}
+
+/** R1 多候选：应用候选批次中的一个（其余丢弃）。 */
+export function applyCandidate(batchId: string, index: number): Promise<unknown> {
+  return post("/api/llm/apply", { batch_id: batchId, index });
+}
+
+/** M2 NL2UI 流式: 消费 /api/llm/stream 的 SSE，返回 done 事件的结果。
+ * R1 多候选：传 opts.candidates > 1 时服务端生成多个候选（不落地），
+ * 通过 onCandidateStart/onCandidateDone 收候选；应用走 applyCandidate。 */
 export async function streamGenerate(
   prompt: string,
-  onDelta: (text: string) => void
+  onDelta: (text: string) => void,
+  opts?: {
+    candidates?: number;
+    onCandidateStart?: (index: number, total: number, label: string, angle: string) => void;
+    onCandidateDone?: (c: CandidateView) => void;
+  }
 ): Promise<unknown> {
   const res = await fetch("/api/llm/stream", {
     method: "POST",
     headers: { "Content-Type": "application/json; charset=utf-8" },
-    body: JSON.stringify({ prompt }),
+    body: JSON.stringify({ prompt, candidates: opts?.candidates }),
   });
   if (!res.ok || !res.body) {
     throw new Error(`生成请求失败（${res.status}）`);
@@ -89,6 +113,15 @@ export async function streamGenerate(
     }
     if (event === "delta" && typeof parsed.text === "string") {
       onDelta(parsed.text);
+    } else if (event === "candidate_start" && typeof parsed.index === "number") {
+      opts?.onCandidateStart?.(
+        parsed.index,
+        typeof parsed.total === "number" ? parsed.total : 0,
+        typeof parsed.label === "string" ? parsed.label : "",
+        typeof parsed.angle === "string" ? parsed.angle : ""
+      );
+    } else if (event === "candidate_done" && typeof parsed.index === "number") {
+      opts?.onCandidateDone?.(parsed as unknown as CandidateView);
     } else if (event === "done") {
       doneResult = parsed;
     } else if (event === "error") {

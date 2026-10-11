@@ -18,7 +18,15 @@ import {
   type LlmConfig,
 } from "./config.js";
 import { chatCompletion } from "./providers.js";
-import { generatePageFromPrompt, streamPageGeneration } from "./agent.js";
+import {
+  applySpec,
+  countNodes,
+  generatePageFromPrompt,
+  streamCandidateBatch,
+  streamPageGeneration,
+} from "./agent.js";
+import { takeCandidateSpec } from "./candidates.js";
+import { stateStore } from "../state.js";
 
 export function registerLlmRoutes(app: express.Express): void {
   // Current LLM config (masked key only)
@@ -107,9 +115,11 @@ export function registerLlmRoutes(app: express.Express): void {
     res.json({ success: true, ...result });
   });
 
-  // M2 NL2UI 流式: SSE 逐 token 推送，完成后应用页面
+  // M2 NL2UI 流式: SSE 逐 token 推送。candidates > 1 时进入多候选模式
+  // （candidate_start/delta{index}/candidate_done/done{batch_id,candidates}），
+  // 候选不落地；客户端选中后 POST /api/llm/apply 消费。
   app.post("/api/llm/stream", async (req, res) => {
-    const { prompt } = (req.body || {}) as { prompt?: unknown };
+    const { prompt, candidates } = (req.body || {}) as { prompt?: unknown; candidates?: unknown };
     const cfg = loadLlmConfig();
     if (!cfg) {
       res.status(400).json({ error: "未配置 LLM（请先在 AI 设置中填写 API Key）" });
@@ -119,6 +129,10 @@ export function registerLlmRoutes(app: express.Express): void {
       res.status(400).json({ error: "Missing prompt" });
       return;
     }
+    const wantCandidates =
+      typeof candidates === "number" && Number.isFinite(candidates) && candidates > 1
+        ? Math.min(Math.floor(candidates), 3)
+        : 1;
     res.writeHead(200, {
       "Content-Type": "text/event-stream; charset=utf-8",
       "Cache-Control": "no-cache",
@@ -128,12 +142,63 @@ export function registerLlmRoutes(app: express.Express): void {
       res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     };
     try {
-      const result = await streamPageGeneration(prompt, cfg, (text) => send("delta", { text }));
-      send("done", result);
+      if (wantCandidates > 1) {
+        const batch = await streamCandidateBatch(prompt, cfg, wantCandidates, {
+          onStart: (index, total, label, angle) => send("candidate_start", { index, total, label, angle }),
+          onDelta: (index, text) => send("delta", { index, text }),
+          onCandidateDone: (r) => send("candidate_done", r),
+        });
+        const okCount = batch.candidates.filter((c) => c.ok).length;
+        send("done", {
+          ok: okCount > 0,
+          batch_id: batch.batch_id,
+          candidates: batch.candidates,
+          component_count: 0,
+          page_count: 0,
+          page_id: null,
+          summary:
+            okCount > 0
+              ? `已生成 ${okCount} 个候选，请选择一个应用（其余丢弃）`
+              : "候选全部生成失败",
+        });
+      } else {
+        const result = await streamPageGeneration(prompt, cfg, (text) => send("delta", { text }));
+        send("done", result);
+      }
     } catch (err) {
       send("error", { message: err instanceof Error ? err.message : String(err) });
     } finally {
       res.end();
     }
+  });
+
+  // R1 多候选: 应用批次中的一个候选（走与直接生成完全相同的 applySpec 落位
+  // 管线），成功后整批消费；其余候选随之丢弃。
+  app.post("/api/llm/apply", async (req, res) => {
+    const { batch_id, index } = (req.body || {}) as { batch_id?: unknown; index?: unknown };
+    if (typeof batch_id !== "string" || !batch_id || typeof index !== "number") {
+      res.status(400).json({ error: "Missing batch_id or index" });
+      return;
+    }
+    const spec = takeCandidateSpec(batch_id, index);
+    if (spec === "missing") {
+      res.status(404).json({ error: "候选批次不存在或已过期" });
+      return;
+    }
+    if (spec === "invalid") {
+      res.status(400).json({ error: "该候选不存在或生成失败" });
+      return;
+    }
+    const { nodes, targetPageId, report } = applySpec(spec);
+    const count = countNodes(nodes);
+    res.json({
+      success: true,
+      ok: true,
+      component_count: count,
+      page_count: stateStore.getState().pages.length,
+      page_id: targetPageId,
+      layout_report: report ?? undefined,
+      summary: `已应用候选 ${index + 1}：AI 已生成页面（${count} 个组件，布局已自动对齐）`,
+    });
   });
 }

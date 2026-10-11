@@ -1,7 +1,8 @@
-import { test, describe, afterEach } from "node:test";
+import { test, describe, afterEach, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { streamChatCompletion } from "../src/llm/providers.js";
-import { streamPageGeneration } from "../src/llm/agent.js";
+import { streamPageGeneration, streamCandidateBatch } from "../src/llm/agent.js";
+import { takeCandidateSpec, clearCandidateBatchesForTests } from "../src/llm/candidates.js";
 import { stateStore } from "../src/state.js";
 import type { LlmConfig } from "../src/llm/config.js";
 
@@ -133,5 +134,87 @@ describe("streamPageGeneration", () => {
     assert.equal(result.ok, false);
     assert.match(result.error || "", /解析/);
     assert.equal(stateStore.getState().components.length, 0);
+  });
+});
+
+describe("streamCandidateBatch (R1 多候选)", () => {
+  beforeEach(() => {
+    clearCandidateBatchesForTests();
+  });
+
+  test("generates 3 candidates in order with start/done events and stores specs", async () => {
+    const specA = {
+      page: "current",
+      style: null,
+      base_color: null,
+      components: [{ type: "hero", props: { title: "候选A" } }],
+    };
+    const specC = {
+      page: "current",
+      style: null,
+      base_color: null,
+      components: [
+        { type: "navbar", props: { brand: "候选C" } },
+        { type: "footer", props: { copyright: "© 2026" } },
+      ],
+    };
+    let call = 0;
+    const bodies = [
+      sseBody([JSON.stringify(specA)]),
+      sseBody(["不是JSON"]), // 中间候选失败，不中断整批
+      sseBody([JSON.stringify(specC)]),
+    ];
+    globalThis.fetch = (async () => new Response(bodies[call++] ?? sseBody([]), { status: 200 })) as typeof fetch;
+
+    const starts: Array<[number, number, string]> = [];
+    const deltas: Array<[number, string]> = [];
+    const dones: Array<[number, boolean]> = [];
+    const { batch_id, candidates } = await streamCandidateBatch("做一个落地页", openaiCfg, 3, {
+      onStart: (index, total, label) => starts.push([index, total, label]),
+      onDelta: (index, text) => deltas.push([index, text]),
+      onCandidateDone: (r) => dones.push([r.index, r.ok]),
+    });
+
+    // 事件序列: start 3 次（索引/总数/标签），delta 与 done 按 index 对应
+    assert.deepEqual(starts, [[0, 3, "均衡版"], [1, 3, "大胆版"], [2, 3, "紧凑版"]]);
+    assert.deepEqual(dones, [[0, true], [1, false], [2, true]]);
+    assert.ok(deltas.every(([i]) => i >= 0 && i <= 2));
+    assert.ok(deltas.some(([i, t]) => i === 0 && t.includes("候选A")));
+
+    // 候选结果
+    assert.equal(candidates.length, 3);
+    assert.equal(candidates[0].ok, true);
+    assert.equal(candidates[0].component_count, 1);
+    assert.equal(candidates[0].preview[0]?.type, "hero");
+    assert.equal(candidates[1].ok, false);
+    assert.match(candidates[1].error || "", /解析/);
+    assert.equal(candidates[2].ok, true);
+    assert.equal(candidates[2].component_count, 2);
+    assert.equal(candidates[2].preview.length, 2);
+    assert.match(batch_id, /^batch_/);
+
+    // takeCandidateSpec: 成功候选可取出；应用成功即整批消费
+    const spec = takeCandidateSpec(batch_id, 0);
+    assert.ok(
+      typeof spec === "object" && spec.components[0]?.type === "hero",
+      "候选 0 应可取出且为 hero spec"
+    );
+    assert.equal(takeCandidateSpec(batch_id, 2), "missing");
+  });
+
+  test("count is clamped and unknown batch ids report missing", async () => {
+    clearCandidateBatchesForTests();
+    const spec = {
+      page: "current",
+      style: null,
+      base_color: null,
+      components: [{ type: "text_section", props: { title: "唯一" } }],
+    };
+    globalThis.fetch = (async () =>
+      new Response(sseBody([JSON.stringify(spec)]), { status: 200 })) as typeof fetch;
+    const { batch_id, candidates } = await streamCandidateBatch("x", openaiCfg, 99, {});
+    assert.equal(candidates.length, 3); // clamp 到角度总数 3（每轮 fetch 返回同一 spec）
+    assert.equal(takeCandidateSpec("batch_none", 0), "missing");
+    assert.equal(takeCandidateSpec(batch_id, 5), "invalid");
   });
 });

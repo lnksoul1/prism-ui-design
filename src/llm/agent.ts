@@ -22,6 +22,7 @@ import {
   type LayoutReport,
 } from "../layout/tidy.js";
 import { chatCompletion, streamChatCompletion, LlmError, type ChatMessage } from "./providers.js";
+import { createCandidateBatch } from "./candidates.js";
 import type { LlmConfig } from "./config.js";
 
 export interface SpecComponent {
@@ -186,7 +187,8 @@ function makeNodeEntry(spec: SpecComponent): NodeEntry | null {
   };
 }
 
-function countNodes(nodes: ComponentNode[]): number {
+/** 统计组件树节点总数（生成结果 component_count / /api/llm/apply 复用）。 */
+export function countNodes(nodes: ComponentNode[]): number {
   let n = 0;
   const walk = (list: ComponentNode[]): void => {
     for (const c of list) {
@@ -263,6 +265,27 @@ function layoutSummaryPart(report: LayoutReport | null): string {
 }
 
 /**
+ * 流式生成 + 解析 spec（不落地 stateStore）。streamPageGeneration 与
+ * 多候选 batch 共用：systemExtra 追加到系统提示词尾部（候选风格倾向 /
+ * M2 页面约束都从这里注入）。
+ */
+async function streamSpecOnly(
+  prompt: string,
+  cfg: LlmConfig,
+  systemExtra: string,
+  onDelta: (text: string) => void
+): Promise<PageSpec> {
+  const messages: ChatMessage[] = [
+    { role: "system", content: buildSystemPrompt() + (systemExtra ? `\n\n${systemExtra}` : "") },
+    { role: "user", content: buildUserPrompt(prompt) },
+  ];
+  const raw = await streamChatCompletion(messages, cfg, onDelta);
+  const spec = parseSpec(raw);
+  if (!spec) throw new LlmError("AI 输出无法解析为页面 JSON");
+  return spec;
+}
+
+/**
  * M2 NL2UI 流式: 流式生成页面。onDelta 收到原始 token 流（前端实时展示），
  * 完成后解析并应用（复用 parseSpec/applySpec，与同步路径完全同一语义）。
  */
@@ -272,15 +295,7 @@ export async function streamPageGeneration(
   onDelta: (text: string) => void
 ): Promise<LlmGenerateResult> {
   try {
-    const messages: ChatMessage[] = [
-      { role: "system", content: buildSystemPrompt() },
-      { role: "user", content: buildUserPrompt(prompt) },
-    ];
-    const raw = await streamChatCompletion(messages, cfg, onDelta);
-    const spec = parseSpec(raw);
-    if (!spec) {
-      throw new LlmError("AI 输出无法解析为页面 JSON");
-    }
+    const spec = await streamSpecOnly(prompt, cfg, "", onDelta);
     const { nodes, targetPageId, report } = applySpec(spec);
     const count = countNodes(nodes);
     return {
@@ -342,4 +357,100 @@ export async function generatePageFromPrompt(
       error: err instanceof Error ? err.message : String(err),
     };
   }
+}
+
+// ===== R1 多候选 =====
+
+/** 候选卡片预览项: 组件类型 + 首个文本 prop（截断）。 */
+export interface SpecPreviewItem {
+  type: string;
+  title: string;
+}
+
+/** 单个候选的结果（candidate_done / done.candidates 事件体）。 */
+export interface CandidateResult {
+  index: number;
+  /** 短标签: 均衡版 / 大胆版 / 紧凑版。 */
+  label: string;
+  /** 完整风格倾向描述（注入 systemExtra 的原文）。 */
+  angle: string;
+  ok: boolean;
+  component_count: number;
+  summary: string;
+  preview: SpecPreviewItem[];
+  error?: string;
+}
+
+export interface CandidateBatchHandlers {
+  onStart?: (index: number, total: number, label: string, angle: string) => void;
+  onDelta?: (index: number, text: string) => void;
+  onCandidateDone?: (result: CandidateResult) => void;
+}
+
+/** 候选风格倾向: 同一需求用三种结构/视觉策略各生成一版。 */
+const CANDIDATE_ANGLES: Array<{ label: string; hint: string }> = [
+  { label: "均衡版", hint: "本轮生成倾向：结构稳妥常规，信息密度均衡，配色中性。" },
+  { label: "大胆版", hint: "本轮生成倾向：视觉更大胆——对比更强、配色更鲜明、留白更慷慨、标题更有张力。" },
+  { label: "紧凑版", hint: "本轮生成倾向：信息密度更高——内容区块更多、结构更紧凑、细节更丰富。" },
+];
+
+/** 从 spec 提取候选卡片预览（最多 8 项）。 */
+export function specPreview(spec: PageSpec): SpecPreviewItem[] {
+  return spec.components.slice(0, 8).map((c) => {
+    const first = Object.values(c.props || {}).find(
+      (v) => typeof v === "string" && v.trim()
+    );
+    return { type: c.type, title: first ? String(first).slice(0, 30) : "" };
+  });
+}
+
+/**
+ * R1 多候选: 顺序生成 count（1-3）个候选 spec（不同风格倾向，不落地
+ * stateStore），暂存为候选批次；返回 batch_id + 候选结果列表。
+ * 单个候选失败不中断整批（ok:false 标记，客户端不可应用该候选）。
+ */
+export async function streamCandidateBatch(
+  prompt: string,
+  cfg: LlmConfig,
+  count: number,
+  handlers: CandidateBatchHandlers
+): Promise<{ batch_id: string; candidates: CandidateResult[] }> {
+  const total = Math.min(Math.max(Math.floor(count) || 1, 1), CANDIDATE_ANGLES.length);
+  const candidates: CandidateResult[] = [];
+  const specs: Array<PageSpec | null> = [];
+  for (let i = 0; i < total; i++) {
+    const { label, hint } = CANDIDATE_ANGLES[i];
+    handlers.onStart?.(i, total, label, hint);
+    try {
+      const spec = await streamSpecOnly(prompt, cfg, hint, (t) => handlers.onDelta?.(i, t));
+      specs.push(spec);
+      const result: CandidateResult = {
+        index: i,
+        label,
+        angle: hint,
+        ok: true,
+        component_count: spec.components.length,
+        summary: `${label}：${spec.components.length} 个组件`,
+        preview: specPreview(spec),
+      };
+      candidates.push(result);
+      handlers.onCandidateDone?.(result);
+    } catch (err) {
+      specs.push(null);
+      const result: CandidateResult = {
+        index: i,
+        label,
+        angle: hint,
+        ok: false,
+        component_count: 0,
+        summary: "",
+        preview: [],
+        error: err instanceof Error ? err.message : String(err),
+      };
+      candidates.push(result);
+      handlers.onCandidateDone?.(result);
+    }
+  }
+  const batch = createCandidateBatch(prompt, specs);
+  return { batch_id: batch.id, candidates };
 }

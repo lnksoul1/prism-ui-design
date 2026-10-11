@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import express, { type Express } from "express";
 import type { Server } from "node:http";
 import { stateStore, type ComponentNode, type PageDef } from "../src/state.js";
-import { tidyPageLayout } from "../src/layout/tidy.js";
+import { tidyPageLayout, verifyLayout, type LayoutIntentKind } from "../src/layout/tidy.js";
 import { registerLayoutRoutes } from "../src/routes/layout.js";
 import { errorHandler } from "../src/routes/shared.js";
 
@@ -145,6 +145,119 @@ describe("tidyPageLayout (pure)", () => {
     );
     // 相同输入两次调用结果一致
     assert.deepEqual(tidyPageLayout(pageOf(...components)), updates);
+  });
+});
+
+// ---------- R1 M1: intents / locked / verifyLayout ----------
+
+describe("tidyPageLayout intents (R1 M1)", () => {
+  const intentsOf = (entries: Array<[string, LayoutIntentKind]>) => new Map(entries);
+
+  test("row intent: consecutive units split into equal-width band", () => {
+    const updates = tidyPageLayout(
+      pageOf(
+        comp("a", "card", { x: 16, y: 0, w: 400, h: 100 }),
+        comp("b", "card", { x: 16, y: 200, w: 400, h: 120 }),
+        comp("c", "card", { x: 16, y: 400, w: 400, h: 80 })
+      ),
+      1200,
+      { intents: intentsOf([["a", "row"], ["b", "row"], ["c", "row"]]) }
+    );
+    // (1200 - 32 - 2*16) / 3 = 378.67 → floor 378
+    assert.deepEqual(layoutOf(updates, "a"), { x: 16, y: 0, w: 378, h: 100 });
+    assert.deepEqual(layoutOf(updates, "b"), { x: 16 + 378 + 16, y: 0, w: 378, h: 120 });
+    assert.deepEqual(layoutOf(updates, "c"), { x: 16 + (378 + 16) * 2, y: 0, w: 378, h: 80 });
+  });
+
+  test("grid intent: 5 units wrap into rows of 3", () => {
+    const comps = ["a", "b", "c", "d", "e"].map((id, i) =>
+      comp(id, "card", { x: 16, y: i * 150, w: 400, h: 100 })
+    );
+    const updates = tidyPageLayout(pageOf(...comps), 1200, {
+      intents: intentsOf([
+        ["a", "grid"], ["b", "grid"], ["c", "grid"], ["d", "grid"], ["e", "grid"],
+      ]),
+    });
+    // 每行按实际成员数均分（flex 行语义）: 3 列宽 378，末行 2 列宽 576
+    assert.deepEqual(layoutOf(updates, "a"), { x: 16, y: 0, w: 378, h: 100 });
+    assert.deepEqual(layoutOf(updates, "c"), { x: 16 + (378 + 16) * 2, y: 0, w: 378, h: 100 });
+    assert.deepEqual(layoutOf(updates, "d"), { x: 16, y: 116, w: 576, h: 100 }, "second row starts below (100 + 16 gap)");
+    assert.deepEqual(layoutOf(updates, "e"), { x: 16 + 576 + 16, y: 116, w: 576, h: 100 });
+  });
+
+  test("sidebar intent: pinned to margin, width capped at 30%", () => {
+    const updates = tidyPageLayout(
+      pageOf(comp("side", "text", { x: 200, y: 0, w: 900, h: 200 })),
+      1200,
+      { intents: intentsOf([["side", "sidebar"]]) }
+    );
+    assert.deepEqual(layoutOf(updates, "side"), { x: 16, y: 0, w: 360, h: 200 });
+  });
+
+  test("overlay intent: excluded from reflow (no update)", () => {
+    const updates = tidyPageLayout(
+      pageOf(
+        comp("fab", "fab", { x: 1100, y: 1000, w: 56, h: 56 }),
+        comp("card", "card", { x: 100, y: 300, w: 600, h: 100 })
+      ),
+      1200,
+      { intents: intentsOf([["fab", "overlay"]]) }
+    );
+    assert.deepEqual(
+      updates.map((u) => u.id),
+      ["card"]
+    );
+  });
+
+  test("locked components keep their rect and flow skips below them", () => {
+    const updates = tidyPageLayout(
+      pageOf(
+        comp("card", "card", { x: 16, y: 0, w: 400, h: 100 }),
+        comp("locked", "text", { x: 500, y: 900, w: 300, h: 40 })
+      ),
+      1200,
+      { locked: new Map([["locked", { x: 0, y: 0, w: 1200, h: 64 }]]) }
+    );
+    assert.equal(updates.find((u) => u.id === "locked"), undefined, "locked component not moved");
+    // cursor 让位: card 从 locked 底 64 + 16 间距开始
+    assert.deepEqual(layoutOf(updates, "card"), { x: 16, y: 80, w: 400, h: 100 });
+  });
+});
+
+describe("verifyLayout (R1 M1)", () => {
+  test("counts overlapping pairs and out-of-bounds components", () => {
+    const page = pageOf(
+      comp("a", "card", { x: 0, y: 0, w: 400, h: 100 }),
+      comp("b", "card", { x: 200, y: 50, w: 400, h: 100 }), // 与 a 相交
+      comp("c", "card", { x: 1150, y: 0, w: 200, h: 100 }), // 右缘超出 1200
+      comp("d", "card", { x: -10, y: 500, w: 100, h: 50 })  // 负坐标
+    );
+    const report = verifyLayout(page, 1200);
+    assert.equal(report.overlaps, 1);
+    assert.equal(report.out_of_bounds, 2);
+  });
+
+  test("touching edges and contained-in-page rects report zero", () => {
+    const page = pageOf(
+      comp("a", "card", { x: 0, y: 0, w: 400, h: 100 }),
+      comp("b", "card", { x: 400, y: 100, w: 400, h: 100 }), // 仅边线相触
+      comp("c", "card", { x: 0, y: 200, w: 1200, h: 100 })
+    );
+    const report = verifyLayout(page, 1200);
+    assert.equal(report.overlaps, 0);
+    assert.equal(report.out_of_bounds, 0);
+  });
+
+  test("overlay-intent components do not count as overlaps", () => {
+    const page = pageOf(
+      comp("a", "card", { x: 0, y: 0, w: 400, h: 100 }),
+      comp("fab", "fab", { x: 100, y: 20, w: 56, h: 56 })
+    );
+    const withIntent = verifyLayout(page, 1200, {
+      intents: new Map([["fab", "overlay"]]),
+    });
+    assert.equal(withIntent.overlaps, 0, "overlay floating on card is intentional");
+    assert.equal(verifyLayout(page, 1200).overlaps, 1, "without intent it is an overlap");
   });
 });
 

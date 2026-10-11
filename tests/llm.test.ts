@@ -253,3 +253,68 @@ test("generatePageFromPrompt reports unparseable output as an error", async () =
     globalThis.fetch = original;
   }
 });
+
+// ===== R1 M1 落位管线 =====
+
+test("generated components are placed by the server (tidy pipeline), summary reports layout", async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = (async () =>
+    new Response(
+      JSON.stringify({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                page: "new",
+                style: null,
+                components: [
+                  { type: "navbar", props: { brand: "N" } },
+                  { type: "hero", props: { title: "H" } },
+                  { type: "card", props: { title: "C1" }, layout_intent: "grid" },
+                  { type: "card", props: { title: "C2" }, layout_intent: "grid" },
+                  { type: "card", props: { title: "C3" }, layout_intent: "grid" },
+                  { type: "footer", props: { copyright: "©" } },
+                ],
+              }),
+            },
+          },
+        ],
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    )) as typeof fetch;
+  try {
+    const result = await generatePageFromPrompt("做一个带三卡片的落地页", {
+      provider: "openai",
+      apiKey: "sk-stub",
+      model: "gpt-4o-mini",
+    });
+    assert.equal(result.ok, true);
+    // 体检: navbar 顶部通栏 + hero 全宽 + 三卡网格 + footer 贴底 → 无重叠无越界
+    assert.deepEqual(result.layout_report, { overlaps: 0, out_of_bounds: 0 });
+    assert.match(result.summary, /AI 已生成/);
+    assert.match(result.summary, /布局已自动对齐/);
+    const page = stateStore.getState().pages.find((p) => p.id === result.page_id);
+    assert.ok(page);
+    const byType = new Map(page!.components.map((c) => [c.type, c.layout!]));
+    assert.deepEqual(byType.get("navbar"), { x: 0, y: 0, w: 1200, h: 64 });
+    // 三张 grid 卡片横向等宽并排
+    const cards = page!.components.filter((c) => c.type === "card");
+    assert.equal(cards.length, 3);
+    assert.equal(cards[0].layout!.y, cards[1].layout!.y);
+    assert.ok(cards[1].layout!.x > cards[0].layout!.x);
+    assert.ok(cards[2].layout!.x > cards[1].layout!.x);
+    // footer 贴在内容栈底: 64(navbar)+360(hero)+16+160(cards)=600，footer 前 +16
+    assert.deepEqual(byType.get("footer"), { x: 0, y: 616, w: 1200, h: 160 });
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("invalid layout_intent values are dropped during parse", () => {
+  const spec = parseSpec(
+    '{"page":"current","components":[{"type":"hero","layout_intent":"diagonal","props":{}},{"type":"card","layout_intent":"row","props":{}}]}'
+  );
+  assert.ok(spec);
+  assert.equal(spec!.components[0].layout_intent, undefined);
+  assert.equal(spec!.components[1].layout_intent, "row");
+});

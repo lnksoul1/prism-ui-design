@@ -13,6 +13,14 @@
  *
  * 没有 layout 的根组件保持流式（不重排、不输出）；children 不受影响。
  * 只输出 layout 实际发生变化的组件。
+ *
+ * R1 M1 生成落位扩展:
+ *   - opts.intents: 组件 id → 布局意图。row/grid 意图的连续单元合并为横向
+ *     band（每行最多 3 个等宽）；sidebar 意图收窄为 30% 宽并靠左边距；
+ *     overlay 意图不参与重排（浮层语义，保持原位）。
+ *   - opts.locked: 组件 id → 固定矩形（页面布局约束）。锁定组件不移动，
+ *     流式 cursor 纵向让位跳过锁定区间。
+ *   - verifyLayout: 纯函数体检（重叠对数 / 超界数），供生成 summary 如实报告。
  */
 import type { ComponentLayout, ComponentNode, PageDef } from "../state.js";
 
@@ -28,6 +36,12 @@ const GAP_TIGHT = 8;
 const GAP_NORMAL = 16;
 /** 单元宽度超过页面宽度的该比例时吸附到边距。 */
 const WIDE_RATIO = 0.7;
+/** band（row/grid 意图）每行最多的成员数。 */
+const BAND_COLUMNS = 3;
+/** sidebar 意图单元的宽度上限（页面宽度的比例）。 */
+const SIDEBAR_RATIO = 0.3;
+/** 重叠/超界判定的像素容差。 */
+const BOUNDS_TOLERANCE = 0.5;
 
 const TOP_BAR_TYPES = new Set(["navbar", "breadcrumb", "tabs"]);
 const HERO_TYPES = new Set(["hero", "cta", "banner"]);
@@ -65,6 +79,31 @@ interface Unit {
 export interface TidyUpdate {
   id: string;
   layout: ComponentLayout;
+}
+
+/** R1 M1: 组件级布局意图（生成 spec 的 layout_intent 字段）。 */
+export type LayoutIntentKind = "row" | "stack" | "grid" | "sidebar" | "overlay";
+
+const BAND_INTENTS = new Set<LayoutIntentKind>(["row", "grid"]);
+
+export function isLayoutIntent(v: unknown): v is LayoutIntentKind {
+  return v === "row" || v === "stack" || v === "grid" || v === "sidebar" || v === "overlay";
+}
+
+/** R1 M1: tidy 的可选参数（生成落位管线传入；无参数时行为与 v1 完全一致）。 */
+export interface TidyOptions {
+  /** 组件 id → 布局意图（缺省按 stack 处理）。 */
+  intents?: Map<string, LayoutIntentKind>;
+  /** 组件 id → 固定矩形（页面布局约束锁定；这些组件不移动）。 */
+  locked?: Map<string, ComponentLayout>;
+}
+
+/** R1 M1: 布局体检报告（纯统计，不做任何修改）。 */
+export interface LayoutReport {
+  /** 根组件中两两矩形相交（交集面积 > 容差）的对数；overlay 意图组件不计入。 */
+  overlaps: number;
+  /** 越出页面左右边界或负坐标的组件数（纵向页高不设限）。 */
+  out_of_bounds: number;
 }
 
 const rectOf = (layout: ComponentLayout): Rect => ({
@@ -129,17 +168,68 @@ function buildClusters(
   }
 }
 
+/** 一个流式放置项: 普通聚簇单元，或一个 row/grid 意图 band（成员单组件）。 */
+type FlowItem =
+  | { kind: "unit"; unit: Unit }
+  | { kind: "band"; members: Unit[] };
+
+/** 连续的 row/grid 意图单元合并为 band；多成员聚簇不参与 band（保持整体平移语义）。 */
+function buildFlowItems(units: Unit[], intents: Map<string, LayoutIntentKind> | undefined): FlowItem[] {
+  if (!intents || intents.size === 0) return units.map((unit) => ({ kind: "unit", unit }) as FlowItem);
+  const items: FlowItem[] = [];
+  let band: Unit[] = [];
+  const flush = (): void => {
+    if (band.length > 1) items.push({ kind: "band", members: band });
+    else if (band.length === 1) items.push({ kind: "unit", unit: band[0] });
+    band = [];
+  };
+  for (const u of units) {
+    const m = u.members.length === 1 ? u.members[0] : null;
+    const intent = m ? intents.get(m.id) : undefined;
+    if (m && intent !== undefined && BAND_INTENTS.has(intent)) {
+      band.push(u);
+      continue;
+    }
+    flush();
+    items.push({ kind: "unit", unit: u });
+  }
+  flush();
+  return items;
+}
+
+/** 流式 cursor 纵向让位: 落点落在某个锁定矩形的 (t-gap, b) 区间内则跳到其下方。 */
+function skipLocked(cursor: number, rects: Rect[]): number {
+  let y = cursor;
+  for (;;) {
+    const hit = rects.find((r) => y >= r.t - GAP_NORMAL && y < r.b);
+    if (!hit) return y;
+    y = hit.b + GAP_NORMAL;
+  }
+}
+
 /**
  * 计算页面根组件的整理后布局。
  *
  * @param page      目标页（只读取，不修改）
  * @param pageWidth 舞台宽度（默认 1200 桌面）
+ * @param opts      意图/锁定（R1 M1；缺省时行为与 v1 一致）
  * @returns layout 实际变化的组件列表（顺序: 顶栏 → hero → 流式 → 页脚，成员按页序）
  */
-export function tidyPageLayout(page: PageDef, pageWidth = TIDY_PAGE_WIDTH): TidyUpdate[] {
+export function tidyPageLayout(
+  page: PageDef,
+  pageWidth = TIDY_PAGE_WIDTH,
+  opts?: TidyOptions
+): TidyUpdate[] {
+  const intents = opts?.intents;
+  const lockedRects: Rect[] = opts?.locked
+    ? Array.from(opts.locked.values()).map(rectOf)
+    : [];
+  const lockedIds = opts?.locked ? new Set(opts.locked.keys()) : new Set<string>();
+  const isOverlay = (id: string): boolean => intents?.get(id) === "overlay";
+
   const placed = page.components
     .map((c: ComponentNode, idx: number) => ({ c, idx }))
-    .filter(({ c }) => !!c.layout)
+    .filter(({ c }) => !!c.layout && !lockedIds.has(c.id) && !isOverlay(c.id))
     .map(({ c, idx }) => ({
       id: c.id,
       type: c.type,
@@ -173,23 +263,75 @@ export function tidyPageLayout(page: PageDef, pageWidth = TIDY_PAGE_WIDTH): Tidy
   }
 
   // 3. 流式: 原始 y 序 + 语义间距；保留原 x（宽单元吸附 16px 边距）
+  //    R1 M1: row/grid 意图 band 横向均分；sidebar 收窄靠左；locked 让位。
   const hasTop = topBars.length > 0 || heroes.length > 0;
+  const items = buildFlowItems(flow, intents);
   let prev: Unit | null = null;
-  for (const unit of flow) {
-    const gap = prev === null ? (hasTop ? GAP_NORMAL : 0) : gapBefore(prev, unit);
-    cursor += gap;
-    const w = unit.bb.r - unit.bb.l;
-    const x = w > pageWidth * WIDE_RATIO ? TIDY_MARGIN : unit.bb.l;
-    const dx = x - unit.bb.l;
-    const dy = cursor - unit.bb.t;
-    for (const m of unit.members) {
-      const next = {
-        x: Math.round(m.layout.x + dx),
-        y: Math.round(m.layout.y + dy),
-        w: m.layout.w,
-        h: m.layout.h,
+  for (const item of items) {
+    if (item.kind === "band") {
+      cursor = skipLocked(cursor, lockedRects);
+      cursor += prev === null ? (hasTop ? GAP_NORMAL : 0) : GAP_NORMAL;
+      const contentW = Math.max(pageWidth - TIDY_MARGIN * 2, 320);
+      let row: Unit[] = [];
+      let rowY = cursor;
+      let placedRows = 0;
+      const flushRow = (): void => {
+        if (row.length === 0) return;
+        const n = row.length;
+        const gap = n > 1 ? GAP_NORMAL : 0;
+        const w = Math.max(Math.floor((contentW - gap * (n - 1)) / n), 1);
+        let x = TIDY_MARGIN;
+        let rowH = 0;
+        for (const u of row) {
+          const m = u.members[0];
+          const next = { x, y: rowY, w, h: m.layout.h };
+          if (changed(m.layout, next)) updates.push({ id: m.id, layout: next });
+          x += w + gap;
+          rowH = Math.max(rowH, m.layout.h);
+        }
+        rowY += rowH + GAP_NORMAL;
+        placedRows += 1;
+        row = [];
       };
-      if (changed(m.layout, next)) updates.push({ id: m.id, layout: next });
+      for (const u of item.members) {
+        row.push(u);
+        if (row.length === BAND_COLUMNS) flushRow();
+      }
+      flushRow();
+      cursor = rowY - (placedRows > 0 ? GAP_NORMAL : 0);
+      placedAny = placedRows > 0 || placedAny;
+      // band 之后按常规间距续排
+      prev = { members: [], bb: { l: 0, t: cursor, r: pageWidth, b: cursor }, type: "", idx: 0 };
+      continue;
+    }
+    const unit = item.unit;
+    const m0 = unit.members.length === 1 ? unit.members[0] : null;
+    const intent = m0 && intents ? intents.get(m0.id) : undefined;
+    const gap = prev === null ? (hasTop ? GAP_NORMAL : 0) : gapBefore(prev, unit);
+    cursor = skipLocked(cursor + gap, lockedRects);
+    if (intent === "sidebar" && m0) {
+      // sidebar: 靠左边距、宽度封顶 30%，纵向照常占位
+      const next = {
+        x: TIDY_MARGIN,
+        y: cursor,
+        w: Math.min(m0.layout.w, Math.round(pageWidth * SIDEBAR_RATIO)),
+        h: m0.layout.h,
+      };
+      if (changed(m0.layout, next)) updates.push({ id: m0.id, layout: next });
+    } else {
+      const w = unit.bb.r - unit.bb.l;
+      const x = w > pageWidth * WIDE_RATIO ? TIDY_MARGIN : unit.bb.l;
+      const dx = x - unit.bb.l;
+      const dy = cursor - unit.bb.t;
+      for (const m of unit.members) {
+        const next = {
+          x: Math.round(m.layout.x + dx),
+          y: Math.round(m.layout.y + dy),
+          w: m.layout.w,
+          h: m.layout.h,
+        };
+        if (changed(m.layout, next)) updates.push({ id: m.id, layout: next });
+      }
     }
     cursor += unit.bb.b - unit.bb.t;
     placedAny = true;
@@ -204,6 +346,37 @@ export function tidyPageLayout(page: PageDef, pageWidth = TIDY_PAGE_WIDTH): Tidy
   }
 
   return updates;
+}
+
+/**
+ * R1 M1: 布局体检（纯函数）。
+ * 统计根组件中矩形相交对数与越界数；locked 矩形按约束位参与统计；
+ * overlay 意图组件是刻意的浮层，不计入重叠（仍计越界）。
+ */
+export function verifyLayout(page: PageDef, pageWidth = TIDY_PAGE_WIDTH, opts?: TidyOptions): LayoutReport {
+  const intents = opts?.intents;
+  const solid: Rect[] = []; // 参与重叠统计
+  const all: Rect[] = [];   // 参与越界统计（含 overlay 浮层）
+  for (const c of page.components) {
+    if (!c.layout) continue;
+    const l = opts?.locked?.get(c.id) ?? c.layout;
+    const r = rectOf(l);
+    all.push(r);
+    if (intents?.get(c.id) !== "overlay") solid.push(r);
+  }
+  let overlaps = 0;
+  for (let i = 0; i < solid.length; i++) {
+    for (let j = i + 1; j < solid.length; j++) {
+      const w = Math.min(solid[i].r, solid[j].r) - Math.max(solid[i].l, solid[j].l);
+      const h = Math.min(solid[i].b, solid[j].b) - Math.max(solid[i].t, solid[j].t);
+      if (w > BOUNDS_TOLERANCE && h > BOUNDS_TOLERANCE) overlaps += 1;
+    }
+  }
+  let out = 0;
+  for (const r of all) {
+    if (r.l < -BOUNDS_TOLERANCE || r.t < -BOUNDS_TOLERANCE || r.r > pageWidth + BOUNDS_TOLERANCE) out += 1;
+  }
+  return { overlaps, out_of_bounds: out };
 }
 
 function byOriginal(

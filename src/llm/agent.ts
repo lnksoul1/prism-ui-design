@@ -10,9 +10,17 @@
  * tree (undoable via the normal history).
  */
 
-import { stateStore, type ComponentNode } from "../state.js";
+import { stateStore, type ComponentNode, type PageDef } from "../state.js";
 import { applyStyleTokenSet } from "../tokens.js";
 import { COMPONENT_TYPES } from "../service/design-service.js";
+import { containerWidthForPlatform, ensureTopLevelLayouts } from "../layout-engine.js";
+import {
+  tidyPageLayout,
+  verifyLayout,
+  isLayoutIntent,
+  type LayoutIntentKind,
+  type LayoutReport,
+} from "../layout/tidy.js";
 import { chatCompletion, streamChatCompletion, LlmError, type ChatMessage } from "./providers.js";
 import type { LlmConfig } from "./config.js";
 
@@ -20,6 +28,8 @@ export interface SpecComponent {
   type: string;
   variant?: string;
   props?: Record<string, unknown>;
+  /** R1 M1: 可选布局意图（row/stack/grid/sidebar/overlay），服务端统一落位。 */
+  layout_intent?: LayoutIntentKind;
 }
 
 export interface PageSpec {
@@ -36,6 +46,8 @@ export interface LlmGenerateResult {
   page_count: number;
   page_id: string | null;
   summary: string;
+  /** R1 M1: 生成后布局体检（重叠对数/超界数）。 */
+  layout_report?: LayoutReport;
   error?: string;
 }
 
@@ -88,11 +100,15 @@ ${componentLines}
   "template": "模板名或 null",
   "style": "风格名或 null",
   "base_color": "#hex 或 null",
-  "components": [ { "type": "...", "variant": "可选", "props": { ... } } ]
+  "components": [ { "type": "...", "variant": "可选", "layout_intent": "可选", "props": { ... } } ]
 }
 
 规则：
 - 用户要求"做一个新的…/生成一个…"时 page 用 "new"，否则用 "current"（修改当前页）。
+- 不要输出任何坐标/尺寸——布局由系统按 layout_intent 统一落位。每个组件可选 layout_intent：
+  "stack" 纵向依次排列（默认）；"row" 与相邻同意图组件横向并排（如一组按钮/卡片）；
+  "grid" 与相邻同意图组件组成网格（每行最多 3 个）；"sidebar" 窄侧栏（约 30% 宽，靠左）；
+  "overlay" 浮层/悬浮元素（保持覆盖语义，不参与重排）。
 - 内容要完整、真实感（品牌名、价格、功能列表都写具体内容），不要占位符 lorem。
 - props 字段名必须与上面组件定义一致。`;
 }
@@ -121,12 +137,25 @@ export function parseSpec(raw: string): PageSpec | null {
     try {
       const obj = JSON.parse(s) as Partial<PageSpec>;
       if (!obj || typeof obj !== "object") return null;
+      const rawComponents: unknown[] = Array.isArray(obj.components) ? obj.components : [];
+      const components: SpecComponent[] = [];
+      for (const raw of rawComponents) {
+        if (!raw || typeof raw !== "object") continue;
+        const rc = raw as Record<string, unknown>;
+        const comp: SpecComponent = {
+          type: typeof rc.type === "string" ? rc.type : "",
+          variant: typeof rc.variant === "string" && rc.variant ? rc.variant : undefined,
+          props: rc.props && typeof rc.props === "object" ? (rc.props as Record<string, unknown>) : {},
+        };
+        comp.layout_intent = isLayoutIntent(rc.layout_intent) ? rc.layout_intent : undefined;
+        components.push(comp);
+      }
       return {
         page: obj.page === "new" ? "new" : "current",
         style: typeof obj.style === "string" ? obj.style : null,
         base_color: typeof obj.base_color === "string" ? obj.base_color : null,
         template: typeof obj.template === "string" ? obj.template : null,
-        components: Array.isArray(obj.components) ? obj.components : [],
+        components,
       };
     } catch {
       return null;
@@ -138,14 +167,22 @@ export function parseSpec(raw: string): PageSpec | null {
   return m ? tryParse(m[0]) : null;
 }
 
-function makeNode(spec: SpecComponent): ComponentNode | null {
+interface NodeEntry {
+  node: ComponentNode;
+  intent?: LayoutIntentKind;
+}
+
+function makeNodeEntry(spec: SpecComponent): NodeEntry | null {
   if (!COMPONENT_TYPES.has(spec.type)) return null;
   return {
-    id: `comp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-    type: spec.type,
-    variant: typeof spec.variant === "string" && spec.variant ? spec.variant : undefined,
-    props: spec.props && typeof spec.props === "object" ? spec.props : {},
-    children: [],
+    node: {
+      id: `comp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      type: spec.type,
+      variant: typeof spec.variant === "string" && spec.variant ? spec.variant : undefined,
+      props: spec.props && typeof spec.props === "object" ? spec.props : {},
+      children: [],
+    },
+    intent: spec.layout_intent,
   };
 }
 
@@ -161,9 +198,41 @@ function countNodes(nodes: ComponentNode[]): number {
   return n;
 }
 
+/**
+ * R1 M1 落位管线: 节点创建后由服务端统一布局——AI 不再输出坐标。
+ * 流式列初始 layout → tidy 同源规则（锚定/聚簇/语义间距 + 意图/约束）→ 体检。
+ * @returns 体检报告（重叠对数/越界数），进生成 summary
+ */
+function placeNodes(page: PageDef, entries: NodeEntry[]): LayoutReport {
+  const state = stateStore.getState();
+  const pageWidth = containerWidthForPlatform(state.activePlatform);
+  const nodes = entries.map((e) => e.node);
+  const intents = new Map<string, LayoutIntentKind>();
+  for (const e of entries) {
+    if (e.intent) intents.set(e.node.id, e.intent);
+  }
+  ensureTopLevelLayouts(nodes, pageWidth);
+  const probe: PageDef = { id: page.id, name: page.name, components: nodes };
+  const updates = tidyPageLayout(probe, pageWidth, { intents });
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  for (const u of updates) {
+    const n = byId.get(u.id);
+    if (n) n.layout = u.layout;
+  }
+  return verifyLayout(probe, pageWidth, { intents });
+}
+
 /** Apply a parsed spec through the shared state layer. Returns component count. */
-export function applySpec(spec: PageSpec): { nodes: ComponentNode[]; targetPageId: string | null } {
-  const nodes = (spec.components || []).map(makeNode).filter((n): n is ComponentNode => !!n);
+export function applySpec(spec: PageSpec): {
+  nodes: ComponentNode[];
+  targetPageId: string | null;
+  report: LayoutReport | null;
+} {
+  const entries = (spec.components || [])
+    .map(makeNodeEntry)
+    .filter((e): e is NodeEntry => !!e);
+  const nodes = entries.map((e) => e.node);
+  let report: LayoutReport | null = null;
 
   if (spec.style) {
     // 风格预设体系已移除：style 仅作记录（设计系统换肤走 design_apply_style_guide）。
@@ -179,9 +248,18 @@ export function applySpec(spec: PageSpec): { nodes: ComponentNode[]; targetPageI
   }
 
   if (nodes.length > 0 && targetPageId) {
+    const page = stateStore.getState().pages.find((p) => p.id === targetPageId);
+    if (page) report = placeNodes(page, entries);
     stateStore.replacePageComponents(targetPageId, nodes, "ai");
   }
-  return { nodes, targetPageId };
+  return { nodes, targetPageId, report };
+}
+
+/** R1 M1: summary 布局体检尾巴（0 问题 → 已自动对齐；有问题 → 如实报数）。 */
+function layoutSummaryPart(report: LayoutReport | null): string {
+  if (!report) return "";
+  const issues = report.overlaps + report.out_of_bounds;
+  return issues > 0 ? `，${issues} 处布局重叠/越界待处理` : "，布局已自动对齐";
 }
 
 /**
@@ -203,14 +281,15 @@ export async function streamPageGeneration(
     if (!spec) {
       throw new LlmError("AI 输出无法解析为页面 JSON");
     }
-    const { nodes, targetPageId } = applySpec(spec);
+    const { nodes, targetPageId, report } = applySpec(spec);
     const count = countNodes(nodes);
     return {
       ok: true,
       component_count: count,
       page_count: stateStore.getState().pages.length,
       page_id: targetPageId,
-      summary: `AI 已流式生成${spec.page === "new" ? "新页面" : "页面"}（${count} 个组件）`,
+      layout_report: report ?? undefined,
+      summary: `AI 已流式生成${spec.page === "new" ? "新页面" : "页面"}（${count} 个组件${layoutSummaryPart(report)}）`,
     };
   } catch (err) {
     return {
@@ -243,14 +322,15 @@ export async function generatePageFromPrompt(
     if (!spec) {
       throw new LlmError("AI 输出无法解析为页面 JSON");
     }
-    const { nodes, targetPageId } = applySpec(spec);
+    const { nodes, targetPageId, report } = applySpec(spec);
     const count = countNodes(nodes);
     return {
       ok: true,
       component_count: count,
       page_count: stateStore.getState().pages.length,
       page_id: targetPageId,
-      summary: `AI 已生成${spec.page === "new" ? "新页面" : "页面"}（${count} 个组件${spec.style ? "，风格 " + spec.style : ""}）`,
+      layout_report: report ?? undefined,
+      summary: `AI 已生成${spec.page === "new" ? "新页面" : "页面"}（${count} 个组件${spec.style ? "，风格 " + spec.style : ""}${layoutSummaryPart(report)}）`,
     };
   } catch (err) {
     return {

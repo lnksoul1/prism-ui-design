@@ -1822,6 +1822,21 @@ export class DesignStateStore extends EventEmitter {
   }
 
   /**
+   * P3c 协同: 把 Y.Doc 侧（远端客户端）的 ActionFlow 变更投影进状态（无历史）。
+   * 数组按 id 排序后重建 Record 全量比对。
+   */
+  applyCollabActionFlows(flows: ActionFlow[]): boolean {
+    const sorted = [...flows].sort((a, b) => a.id.localeCompare(b.id));
+    const next: Record<string, ActionFlow> = {};
+    for (const f of sorted) next[f.id] = { ...f };
+    if (JSON.stringify(this.state.actionFlows) === JSON.stringify(next)) return false;
+    this.state.actionFlows = next;
+    this.logActivity("collab_sync", "system", `Applied ${sorted.length} action flows from collab`, "user");
+    this.commitCollab({ type: "collabActionFlowsSync" });
+    return true;
+  }
+
+  /**
    * M2 智能布局: 对选中组件做确定性重排（等间距堆叠 + 左对齐 + 可选容器 clamp）。
    */
   applySmartLayout(

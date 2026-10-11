@@ -243,3 +243,84 @@ describe("collab bridge page links (P3b)", () => {
     assert.equal(serverOriginWrites, 0);
   });
 });
+
+describe("collab bridge action flows (P3c)", () => {
+  beforeEach(() => {
+    stateStore.resetForTests();
+  });
+
+  test("server flow writes reconcile into the ydoc actionFlows map", () => {
+    const node = stateStore.addComponent("button", undefined, {}, null, "user");
+    const doc = new Y.Doc();
+    attachCollabBridge(doc);
+    const created = stateStore.addActionFlow(
+      { id: "flow_s1", name: "服务端流程", trigger: "click", componentId: node.id, steps: [], enabled: true },
+      "user"
+    );
+    assert.ok(doc.getMap("actionFlows").get(created.id));
+  });
+
+  test("ydoc flow writes project into stateStore without undo history", () => {
+    const node = stateStore.addComponent("button", undefined, {}, null, "user");
+    const doc = new Y.Doc();
+    attachCollabBridge(doc);
+    const canUndoBefore = stateStore.canUndo();
+    const flow = {
+      id: "flow_c1",
+      name: "客户端流程",
+      trigger: "click",
+      componentId: node.id,
+      steps: [{ id: "s1", action: "toast", params: { message: "hi" } }],
+      enabled: true,
+    };
+    doc.transact(() => {
+      (doc.getMap("actionFlows") as Y.Map<unknown>).set(flow.id, flow);
+    }, "remote-client");
+    const stored = stateStore.getState().actionFlows[flow.id];
+    assert.equal(stored?.name, "客户端流程");
+    assert.equal(stored?.steps[0]?.params.message, "hi");
+    // 双轨: ActionFlow 协作变更不进服务端快照 undo 历史
+    assert.equal(stateStore.canUndo(), canUndoBefore);
+  });
+
+  test("ydoc flow update and delete project into stateStore", () => {
+    const node = stateStore.addComponent("button", undefined, {}, null, "user");
+    const created = stateStore.addActionFlow(
+      { id: "flow_s2", name: "待改", trigger: "click", componentId: node.id, steps: [], enabled: true },
+      "user"
+    );
+    const doc = new Y.Doc();
+    attachCollabBridge(doc);
+    const map = doc.getMap("actionFlows");
+    doc.transact(() => {
+      map.set(created.id, { ...(map.get(created.id) as object), name: "已改" });
+    }, "remote-client");
+    assert.equal(stateStore.getState().actionFlows[created.id]?.name, "已改");
+    doc.transact(() => {
+      map.delete(created.id);
+    }, "remote-client");
+    assert.equal(stateStore.getState().actionFlows[created.id], undefined);
+  });
+
+  test("flow projection never bounces back as a server-origin ydoc write", () => {
+    const node = stateStore.addComponent("button", undefined, {}, null, "user");
+    const doc = new Y.Doc();
+    attachCollabBridge(doc);
+    let serverOriginWrites = 0;
+    doc.on("afterTransaction", (tr) => {
+      if (tr.origin === SERVER_ORIGIN) serverOriginWrites++;
+    });
+    doc.transact(() => {
+      (doc.getMap("actionFlows") as Y.Map<unknown>).set("flow_c2", {
+        id: "flow_c2",
+        name: "t",
+        trigger: "click",
+        componentId: node.id,
+        steps: [],
+        enabled: true,
+      });
+    }, "remote-client");
+    assert.ok(stateStore.getState().actionFlows.flow_c2);
+    assert.equal(serverOriginWrites, 0);
+  });
+});

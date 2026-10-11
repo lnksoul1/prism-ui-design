@@ -2,15 +2,19 @@ import { useEffect, useState } from "react";
 import { useDesignStore } from "../../stores/design";
 import { editComponent } from "../../collab/edits";
 import {
+  observeCollabActionFlows,
   observeCollabPageLinks,
+  readCollabActionFlows,
   readCollabPageLinks,
+  removeCollabActionFlow,
   removeCollabPageLink,
   updateCollabPageLink,
+  upsertCollabActionFlow,
 } from "../../collab/collab";
 import { isBoxModeComponent } from "../../lib/boxMode";
 import { PAGE_LINK_TRANSITIONS, DEFAULT_LINK_TRANSITION } from "../../lib/transitions";
 import { api } from "../../api";
-import type { ComponentNode, DesignStateView, PageLinkView } from "../../types";
+import type { ActionFlowView, ComponentNode, DesignStateView, PageLinkView } from "../../types";
 
 const TEXT_PROP_KEYS = ["text", "title", "label", "button_text", "cta_text", "heading", "brand"];
 
@@ -337,12 +341,18 @@ function NewStyleKeyInput({ node, breakpoint, draft, onAdd }: {
   );
 }
 
-/** M3 ActionFlow: 选中组件的交互流程列表 + JSON 步骤编辑器。 */
+/** M3 ActionFlow: 选中组件的交互流程列表 + JSON 步骤编辑器。
+ * P3c: 数据源为协作 Y.Map，新建/更新/删除直写（近端即时生效，经 CRDT 广播同步）。 */
 function ActionFlowSection({ node }: { node: ComponentNode }) {
-  const state = useDesignStore((s) => s.state);
-  const flows = Object.values(state?.actionFlows ?? {}).filter(
-    (f) => f.componentId === node.id
-  );
+  const [flows, setFlows] = useState<ActionFlowView[]>([]);
+
+  useEffect(() => {
+    const refresh = (): void => setFlows(readCollabActionFlows());
+    refresh();
+    return observeCollabActionFlows(refresh);
+  }, []);
+
+  const mine = flows.filter((f) => f.componentId === node.id);
 
   return (
     <section className="insp-section">
@@ -350,24 +360,27 @@ function ActionFlowSection({ node }: { node: ComponentNode }) {
       <button
         className="insp-btn"
         onClick={() =>
-          void api.createActionFlow({
+          upsertCollabActionFlow({
+            id: `flow_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
             name: "新流程",
+            trigger: "click",
             componentId: node.id,
             steps: [{ id: `step_${Date.now()}`, action: "toast", params: { message: "Hello Prism" } }],
+            enabled: true,
           })
         }
       >
         新建流程
       </button>
-      {flows.map((f) => (
+      {mine.map((f) => (
         <FlowEditor key={f.id} flow={f} />
       ))}
-      {flows.length === 0 && <div className="insp-hint">暂无流程，点击「新建流程」创建</div>}
+      {mine.length === 0 && <div className="insp-hint">暂无流程，点击「新建流程」创建</div>}
     </section>
   );
 }
 
-function FlowEditor({ flow }: { flow: NonNullable<DesignStateView["actionFlows"]>[string] }) {
+function FlowEditor({ flow }: { flow: ActionFlowView }) {
   const [json, setJson] = useState(() => JSON.stringify({ name: flow.name, steps: flow.steps }, null, 2));
   const [error, setError] = useState<string | null>(null);
 
@@ -375,7 +388,21 @@ function FlowEditor({ flow }: { flow: NonNullable<DesignStateView["actionFlows"]
     try {
       const parsed = JSON.parse(json) as { name?: string; steps?: unknown[] };
       setError(null);
-      void api.updateActionFlow(flow.id, { name: parsed.name, steps: parsed.steps });
+      // P3c: 直写协作 Map。steps 字段规范化与服务端 REST 路由逻辑一致
+      upsertCollabActionFlow({
+        ...flow,
+        name: typeof parsed.name === "string" && parsed.name.trim() ? parsed.name : flow.name,
+        steps: Array.isArray(parsed.steps)
+          ? parsed.steps.map((s, i) => {
+              const step = (s ?? {}) as { id?: unknown; action?: unknown; params?: unknown };
+              return {
+                id: typeof step.id === "string" && step.id ? step.id : `step_${Date.now()}_${i}`,
+                action: String(step.action ?? ""),
+                params: (step.params && typeof step.params === "object" ? step.params : {}) as Record<string, unknown>,
+              };
+            })
+          : flow.steps,
+      });
     } catch {
       setError("JSON 格式错误，未提交");
     }
@@ -385,7 +412,7 @@ function FlowEditor({ flow }: { flow: NonNullable<DesignStateView["actionFlows"]
     <div className="flow-editor">
       <div className="flow-head">
         <b>{flow.name}</b>
-        <button className="insp-btn" onClick={() => void api.removeActionFlow(flow.id)}>删除</button>
+        <button className="insp-btn" onClick={() => removeCollabActionFlow(flow.id)}>删除</button>
       </div>
       <label className="insp-row insp-row-column">
         <span>{flow.id}</span>

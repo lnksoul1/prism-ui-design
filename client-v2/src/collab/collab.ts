@@ -1,6 +1,6 @@
 import * as Y from "yjs";
 import { WebsocketProvider } from "y-websocket";
-import type { CommentView, PageLinkView } from "../types";
+import type { ActionFlowView, CommentView, PageLinkView } from "../types";
 
 export const LOCAL_ORIGIN = "prism-local";
 export const ROOM_NAME = "prism-main";
@@ -27,6 +27,7 @@ function createInstance(withProvider: boolean): CollabInstance {
       ydoc.getMap("tokens"),
       ydoc.getMap("comments"),
       ydoc.getMap("pageLinks"),
+      ydoc.getMap("actionFlows"),
     ],
     { trackedOrigins: new Set([LOCAL_ORIGIN]) }
   );
@@ -151,6 +152,48 @@ export function removeCollabPageLink(id: string): void {
 /** 订阅连线变化（返回解绑函数；无协作实例时返回 noop）。 */
 export function observeCollabPageLinks(handler: () => void): () => void {
   const map = pageLinksMap();
+  if (!map) return () => {};
+  map.observe(handler);
+  return () => map.unobserve(handler);
+}
+
+// ===== P3c ActionFlow 协作区（id → ActionFlowView）=====
+
+function actionFlowsMap(): Y.Map<ActionFlowView> | null {
+  if (!instance) return null;
+  return instance.ydoc.getMap("actionFlows") as Y.Map<ActionFlowView>;
+}
+
+/** 读取 ActionFlow 快照（数组，id 稳定序；无协作实例时返回空列表）。 */
+export function readCollabActionFlows(): ActionFlowView[] {
+  const map = actionFlowsMap();
+  if (!map) return [];
+  return Array.from(map.values())
+    .map((f) => JSON.parse(JSON.stringify(f)) as ActionFlowView)
+    .sort((a, b) => a.id.localeCompare(b.id));
+}
+
+/** 新增/更新 ActionFlow（LOCAL_ORIGIN 事务，进客户端撤销栈）。 */
+export function upsertCollabActionFlow(flow: ActionFlowView): void {
+  const map = actionFlowsMap();
+  if (!map) return;
+  map.doc?.transact(() => {
+    map.set(flow.id, JSON.parse(JSON.stringify(flow)));
+  }, LOCAL_ORIGIN);
+}
+
+/** 删除 ActionFlow。 */
+export function removeCollabActionFlow(id: string): void {
+  const map = actionFlowsMap();
+  if (!map) return;
+  map.doc?.transact(() => {
+    map.delete(id);
+  }, LOCAL_ORIGIN);
+}
+
+/** 订阅 ActionFlow 变化（返回解绑函数；无协作实例时返回 noop）。 */
+export function observeCollabActionFlows(handler: () => void): () => void {
+  const map = actionFlowsMap();
   if (!map) return () => {};
   map.observe(handler);
   return () => map.unobserve(handler);

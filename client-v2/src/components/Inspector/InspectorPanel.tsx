@@ -1,10 +1,16 @@
 import { useEffect, useState } from "react";
 import { useDesignStore } from "../../stores/design";
 import { editComponent } from "../../collab/edits";
+import {
+  observeCollabPageLinks,
+  readCollabPageLinks,
+  removeCollabPageLink,
+  updateCollabPageLink,
+} from "../../collab/collab";
 import { isBoxModeComponent } from "../../lib/boxMode";
 import { PAGE_LINK_TRANSITIONS, DEFAULT_LINK_TRANSITION } from "../../lib/transitions";
 import { api } from "../../api";
-import type { ComponentNode, DesignStateView } from "../../types";
+import type { ComponentNode, DesignStateView, PageLinkView } from "../../types";
 
 const TEXT_PROP_KEYS = ["text", "title", "label", "button_text", "cta_text", "heading", "brand"];
 
@@ -397,16 +403,25 @@ function FlowEditor({ flow }: { flow: NonNullable<DesignStateView["actionFlows"]
   );
 }
 
-/** M4 链接区: 选中组件的出边连线列表——转场下拉（api.updatePageLink）+ 删除。 */
+/** M4 链接区: 选中组件的出边连线列表——转场下拉 + 删除。
+ * P3b: 数据源为协作 Y.Map，编辑直写（近端即时生效，经 CRDT 广播同步）。 */
 function LinksSection({ node }: { node: ComponentNode }) {
   const state = useDesignStore((s) => s.state);
-  const links = (state?.pageLinks ?? []).filter((l) => l.source_component_id === node.id);
-  if (links.length === 0) return null;
+  const [links, setLinks] = useState<PageLinkView[]>([]);
+
+  useEffect(() => {
+    const refresh = (): void => setLinks(readCollabPageLinks());
+    refresh();
+    return observeCollabPageLinks(refresh);
+  }, []);
+
+  const out = links.filter((l) => l.source_component_id === node.id);
+  if (out.length === 0) return null;
 
   return (
     <section className="insp-section">
       <div className="insp-title">链接</div>
-      {links.map((l) => {
+      {out.map((l) => {
         const target = state?.pages?.find((p) => p.id === l.to_page_id);
         return (
           <div key={l.id} className="insp-row link-row">
@@ -415,13 +430,13 @@ function LinksSection({ node }: { node: ComponentNode }) {
               data-testid="link-transition"
               aria-label={`转场 ${l.id}`}
               value={l.transition ?? DEFAULT_LINK_TRANSITION}
-              onChange={(e) => void api.updatePageLink(l.id, { transition: e.target.value })}
+              onChange={(e) => updateCollabPageLink(l.id, { transition: e.target.value })}
             >
               {PAGE_LINK_TRANSITIONS.map((t) => (
                 <option key={t.value} value={t.value}>{t.label}</option>
               ))}
             </select>
-            <button className="insp-btn" onClick={() => void api.removePageLink(l.id)}>删除</button>
+            <button className="insp-btn" onClick={() => removeCollabPageLink(l.id)}>删除</button>
           </div>
         );
       })}

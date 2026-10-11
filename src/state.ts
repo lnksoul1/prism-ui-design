@@ -1804,6 +1804,24 @@ export class DesignStateStore extends EventEmitter {
   }
 
   /**
+   * P3b 协同: 把 Y.Doc 侧（远端客户端）的连线变更投影进状态（无历史）。
+   * 按 id 稳定排序后全量比对，超过 500 条按 addPageLink 同款上限裁剪。
+   */
+  applyCollabPageLinks(links: PageLink[]): boolean {
+    const sorted = [...links].sort((a, b) => a.id.localeCompare(b.id));
+    const clipped = sorted.length > 500 ? sorted.slice(-500) : sorted;
+    const prev = this.state.pageLinks;
+    const same =
+      prev.length === clipped.length &&
+      prev.every((l, i) => JSON.stringify(l) === JSON.stringify(clipped[i]));
+    if (same) return false;
+    this.state.pageLinks = clipped.map((l) => ({ ...l }));
+    this.logActivity("collab_sync", "system", `Applied ${clipped.length} page links from collab`, "user");
+    this.commitCollab({ type: "collabPageLinksSync" });
+    return true;
+  }
+
+  /**
    * M2 智能布局: 对选中组件做确定性重排（等间距堆叠 + 左对齐 + 可选容器 clamp）。
    */
   applySmartLayout(

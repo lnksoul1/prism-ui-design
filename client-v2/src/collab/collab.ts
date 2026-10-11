@@ -1,6 +1,6 @@
 import * as Y from "yjs";
 import { WebsocketProvider } from "y-websocket";
-import type { CommentView } from "../types";
+import type { CommentView, PageLinkView } from "../types";
 
 export const LOCAL_ORIGIN = "prism-local";
 export const ROOM_NAME = "prism-main";
@@ -21,7 +21,13 @@ function createInstance(withProvider: boolean): CollabInstance {
     provider = new WebsocketProvider(`${scheme}://${location.host}/collab`, ROOM_NAME, ydoc);
   }
   const undoManager = new Y.UndoManager(
-    [ydoc.getMap("components"), ydoc.getMap("index"), ydoc.getMap("tokens"), ydoc.getMap("comments")],
+    [
+      ydoc.getMap("components"),
+      ydoc.getMap("index"),
+      ydoc.getMap("tokens"),
+      ydoc.getMap("comments"),
+      ydoc.getMap("pageLinks"),
+    ],
     { trackedOrigins: new Set([LOCAL_ORIGIN]) }
   );
   return { ydoc, provider, undoManager };
@@ -85,6 +91,66 @@ export function removeCollabComment(id: string): void {
 /** 订阅评论变化（返回解绑函数；无协作实例时返回 noop）。 */
 export function observeCollabComments(handler: () => void): () => void {
   const map = commentsMap();
+  if (!map) return () => {};
+  map.observe(handler);
+  return () => map.unobserve(handler);
+}
+
+// ===== P3b 连线协作区（id → PageLinkView）=====
+
+function pageLinksMap(): Y.Map<PageLinkView> | null {
+  if (!instance) return null;
+  return instance.ydoc.getMap("pageLinks") as Y.Map<PageLinkView>;
+}
+
+/** 读取连线快照（渲染用；无协作实例时返回空列表）。 */
+export function readCollabPageLinks(): PageLinkView[] {
+  const map = pageLinksMap();
+  if (!map) return [];
+  return Array.from(map.values())
+    .map((l) => ({ ...l }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+}
+
+/**
+ * 新增连线（LOCAL_ORIGIN 事务，进客户端撤销栈）。
+ * 复刻服务端 addPageLink 的「每源组件一条」约束: 同事务内先摘除旧出边。
+ */
+export function addCollabPageLink(link: PageLinkView): void {
+  const map = pageLinksMap();
+  if (!map) return;
+  map.doc?.transact(() => {
+    if (link.source_component_id) {
+      for (const [id, l] of map.entries()) {
+        if (l.source_component_id === link.source_component_id) map.delete(id);
+      }
+    }
+    map.set(link.id, { ...link });
+  }, LOCAL_ORIGIN);
+}
+
+/** 更新连线（partial patch，整体覆写）。 */
+export function updateCollabPageLink(id: string, patch: Partial<PageLinkView>): void {
+  const map = pageLinksMap();
+  const cur = map?.get(id);
+  if (!map || !cur) return;
+  map.doc?.transact(() => {
+    map.set(id, { ...cur, ...patch });
+  }, LOCAL_ORIGIN);
+}
+
+/** 删除连线。 */
+export function removeCollabPageLink(id: string): void {
+  const map = pageLinksMap();
+  if (!map) return;
+  map.doc?.transact(() => {
+    map.delete(id);
+  }, LOCAL_ORIGIN);
+}
+
+/** 订阅连线变化（返回解绑函数；无协作实例时返回 noop）。 */
+export function observeCollabPageLinks(handler: () => void): () => void {
+  const map = pageLinksMap();
   if (!map) return () => {};
   map.observe(handler);
   return () => map.unobserve(handler);

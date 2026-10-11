@@ -3,7 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { InspectorPanel } from "./InspectorPanel";
 import { useDesignStore } from "../../stores/design";
-import { initLocalCollabForTests, collabMaps } from "../../collab/collab";
+import { initLocalCollabForTests, collabMaps, getCollab } from "../../collab/collab";
 import type { DesignStateView } from "../../types";
 
 vi.mock("../../api", () => ({
@@ -39,6 +39,10 @@ beforeEach(() => {
     baseStyle: { background: "#1890ff", width: "120px" },
   });
   ydoc.getMap("index").set("comp-1", { parentId: null, pageId: "page-1", index: 0 });
+  // P3b: 连线数据源是协作 Y.Map
+  ydoc.getMap("pageLinks").set("link-1", {
+    id: "link-1", from_page_id: "page-1", to_page_id: "page-2", source_component_id: "comp-1", transition: "fade",
+  });
 });
 
 test("shows selected component props and base style fields", () => {
@@ -82,7 +86,6 @@ test("geometry section renders x/y/w/h from layout and commits edits on blur", a
 });
 
 test("link section lists outgoing links and commits transition changes", async () => {
-  const { api } = await import("../../api");
   useDesignStore.setState({ state, selection: ["comp-1"], breakpoint: "desktop" });
   render(<InspectorPanel />);
 
@@ -91,7 +94,9 @@ test("link section lists outgoing links and commits transition changes", async (
   expect(select.value).toBe("fade");
 
   await userEvent.selectOptions(select, "slide-left");
-  expect(api.updatePageLink).toHaveBeenCalledWith("link-1", { transition: "slide-left" });
+  // P3b: 转场变更直写协作 Y.Map（近端即时生效），不再走 REST
+  const stored = getCollab().ydoc.getMap("pageLinks").get("link-1") as { transition?: string };
+  expect(stored.transition).toBe("slide-left");
 });
 
 test("constraints section: lists existing, records via button, deletes", async () => {

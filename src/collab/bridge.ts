@@ -6,7 +6,7 @@
  */
 import type * as Y from "yjs";
 import { stateStore } from "../state.js";
-import type { DesignComment } from "../state.js";
+import type { DesignComment, PageLink } from "../state.js";
 import { flattenPages, type FlatEntry } from "./flatten.js";
 
 export const SERVER_ORIGIN = "prism-server";
@@ -14,12 +14,19 @@ const COMPONENTS_KEY = "components";
 const INDEX_KEY = "index";
 /** P3a: 评论协作区。id → DesignComment，服务端 reconcile 与远端客户端双写。 */
 const COMMENTS_KEY = "comments";
+/** P3b: 连线协作区。id → PageLink，同上双写。 */
+const PAGE_LINKS_KEY = "pageLinks";
 
 /** 评论稳定序: createdAt + id。投影与渲染共用，避免 CRDT 合并后的顺序抖动。 */
 export function sortComments(list: DesignComment[]): DesignComment[] {
   return [...list].sort(
     (a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)
   );
+}
+
+/** 连线稳定序: id（id 前缀含时间戳，单机下近似创建序）。 */
+export function sortPageLinks(list: PageLink[]): PageLink[] {
+  return [...list].sort((a, b) => a.id.localeCompare(b.id));
 }
 
 interface IndexValue {
@@ -36,8 +43,10 @@ export function reconcileStateIntoYDoc(doc: Y.Doc): void {
   const components = doc.getMap<Record<string, unknown>>(COMPONENTS_KEY);
   const index = doc.getMap<IndexValue>(INDEX_KEY);
   const comments = doc.getMap<DesignComment>(COMMENTS_KEY);
+  const pageLinks = doc.getMap<PageLink>(PAGE_LINKS_KEY);
   const entries = flattenPages(stateStore.getState().pages);
   const nextComments = sortComments(stateStore.getState().comments);
+  const nextLinks = sortPageLinks(stateStore.getState().pageLinks);
   doc.transact(() => {
     for (const [id, e] of entries) {
       const nextNode = JSON.stringify(e.node);
@@ -57,7 +66,7 @@ export function reconcileStateIntoYDoc(doc: Y.Doc): void {
         index.delete(id);
       }
     }
-    // P3a 评论全量对齐（幂等: 相同内容不重写，避免 SERVER_ORIGIN 回环）
+    // P3a/P3b 评论与连线全量对齐（幂等: 相同内容不重写，避免 SERVER_ORIGIN 回环）
     const seen = new Set<string>();
     for (const c of nextComments) {
       seen.add(c.id);
@@ -68,6 +77,17 @@ export function reconcileStateIntoYDoc(doc: Y.Doc): void {
     }
     for (const id of Array.from(comments.keys())) {
       if (!seen.has(id)) comments.delete(id);
+    }
+    const seenLinks = new Set<string>();
+    for (const l of nextLinks) {
+      seenLinks.add(l.id);
+      const prev = pageLinks.get(l.id);
+      if (prev === undefined || JSON.stringify(prev) !== JSON.stringify(l)) {
+        pageLinks.set(l.id, { ...l });
+      }
+    }
+    for (const id of Array.from(pageLinks.keys())) {
+      if (!seenLinks.has(id)) pageLinks.delete(id);
     }
   }, SERVER_ORIGIN);
 }
@@ -97,6 +117,7 @@ export function attachCollabBridge(doc: Y.Doc): void {
   const components = doc.getMap(COMPONENTS_KEY);
   const index = doc.getMap(INDEX_KEY);
   const comments = doc.getMap<DesignComment>(COMMENTS_KEY);
+  const pageLinks = doc.getMap<PageLink>(PAGE_LINKS_KEY);
 
   // 服务端状态 → Y.Doc
   stateChangeHandler = () => {
@@ -131,8 +152,9 @@ export function attachCollabBridge(doc: Y.Doc): void {
           new Map(index.entries() as Iterable<[string, IndexValue]>)
         );
       }
-      // P3a: 评论投影（无历史；applyCollabComments 内部幂等，无差异即跳过）
+      // P3a/P3b: 评论与连线投影（无历史；均幂等，无差异即跳过）
       stateStore.applyCollabComments(sortComments(Array.from(comments.values()).map((c) => ({ ...c }))));
+      stateStore.applyCollabPageLinks(sortPageLinks(Array.from(pageLinks.values()).map((l) => ({ ...l }))));
     } finally {
       applyingFromYDoc = false;
     }
@@ -144,6 +166,9 @@ export function attachCollabBridge(doc: Y.Doc): void {
     if (tr.origin !== SERVER_ORIGIN) onYDocChange();
   });
   comments.observe((_events, tr) => {
+    if (tr.origin !== SERVER_ORIGIN) onYDocChange();
+  });
+  pageLinks.observe((_events, tr) => {
     if (tr.origin !== SERVER_ORIGIN) onYDocChange();
   });
 

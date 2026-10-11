@@ -172,3 +172,74 @@ describe("collab bridge comments (P3a)", () => {
     assert.ok(doc.getMap("comments").get(c.id));
   });
 });
+
+describe("collab bridge page links (P3b)", () => {
+  beforeEach(() => {
+    stateStore.resetForTests();
+  });
+
+  test("server link writes reconcile into the ydoc pageLinks map", () => {
+    const doc = new Y.Doc();
+    attachCollabBridge(doc);
+    const pageId = stateStore.getState().currentPageId!;
+    const link = stateStore.addPageLink(pageId, pageId, undefined, undefined, "user");
+    assert.ok(doc.getMap("pageLinks").get(link.id));
+  });
+
+  test("ydoc link writes project into stateStore without undo history", () => {
+    const doc = new Y.Doc();
+    attachCollabBridge(doc);
+    const pageId = stateStore.getState().currentPageId!;
+    const canUndoBefore = stateStore.canUndo();
+    const link = {
+      id: "link_test_1",
+      from_page_id: pageId,
+      to_page_id: pageId,
+      source_component_id: "comp_x",
+      transition: "fade",
+    };
+    doc.transact(() => {
+      (doc.getMap("pageLinks") as Y.Map<unknown>).set(link.id, link);
+    }, "remote-client");
+    const stored = stateStore.getState().pageLinks.find((l) => l.id === link.id);
+    assert.equal(stored?.source_component_id, "comp_x");
+    // 双轨: 连线协作变更不进服务端快照 undo 历史
+    assert.equal(stateStore.canUndo(), canUndoBefore);
+  });
+
+  test("ydoc link update and delete project into stateStore", () => {
+    const doc = new Y.Doc();
+    attachCollabBridge(doc);
+    const pageId = stateStore.getState().currentPageId!;
+    const link = stateStore.addPageLink(pageId, pageId, undefined, undefined, "user", "fade");
+    const map = doc.getMap("pageLinks");
+    doc.transact(() => {
+      map.set(link.id, { ...(map.get(link.id) as object), transition: "slide-left" });
+    }, "remote-client");
+    assert.equal(stateStore.getState().pageLinks.find((l) => l.id === link.id)?.transition, "slide-left");
+    doc.transact(() => {
+      map.delete(link.id);
+    }, "remote-client");
+    assert.equal(stateStore.getState().pageLinks.length, 0);
+  });
+
+  test("link projection never bounces back as a server-origin ydoc write", () => {
+    const doc = new Y.Doc();
+    attachCollabBridge(doc);
+    const pageId = stateStore.getState().currentPageId!;
+    let serverOriginWrites = 0;
+    doc.on("afterTransaction", (tr) => {
+      if (tr.origin === SERVER_ORIGIN) serverOriginWrites++;
+    });
+    doc.transact(() => {
+      (doc.getMap("pageLinks") as Y.Map<unknown>).set("link_c1", {
+        id: "link_c1",
+        from_page_id: pageId,
+        to_page_id: pageId,
+        transition: "fade",
+      });
+    }, "remote-client");
+    assert.ok(stateStore.getState().pageLinks.find((l) => l.id === "link_c1"));
+    assert.equal(serverOriginWrites, 0);
+  });
+});

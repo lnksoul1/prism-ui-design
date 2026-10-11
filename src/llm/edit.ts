@@ -123,7 +123,7 @@ ${types}
   - align：组件相对页面的水平对齐（left 靠左边距 / center 水平居中 / right 靠右边距）。
   - gap：调整选中组件之间的纵向间距，delta 为像素数（正=变大，负=变小）。
 - 被用户锁定为约束的组件不会参与重排；除此之外 arrange 可能联动移动页面上的相邻组件（预览会如实列出）。
-- 撤销/恢复：用户要求「撤销刚才那步 / 撤销刚才的修改」时输出 { "op": "undo" }；要求「恢复 / 重做刚才的修改」时输出 { "op": "redo" }。二者必须单独输出一条，绝不能与其他操作混合。撤销只针对最近一次 AI 修改；若用户想撤销的是自己的手动操作，输出 { "operations": [] } 并在 reason 之外不做任何事（用户应使用 Ctrl+Z）。
+- 撤销/恢复：用户要求「撤销刚才那步 / 撤销刚才的修改」时输出 { "op": "undo" }；要求「恢复 / 重做刚才的修改」时输出 { "op": "redo" }。二者必须单独输出一条，绝不能与其他操作混合。撤销只针对最近一次 AI 落地（AI 的修改建议或 AI 生成的页面均可）；若用户想撤销的是自己的手动操作（如拖拽），输出 { "operations": [] }（空操作，用户应使用 Ctrl+Z）。
 - 未提供选中组件时只能输出 undo 或 redo。
 - 文案用中文，内容要具体真实，不要占位符。`;
 }
@@ -655,7 +655,7 @@ export function applyEditOperations(pending: PendingEdit): EditApplyResult {
     }
   });
   // R5: 记录 AI 落地后的内容指纹——对话撤销以此为护栏
-  aiGuard = { applied: aiFingerprint(), undone: null };
+  recordAiApplyForUndo();
   return result;
 }
 
@@ -688,6 +688,15 @@ let aiGuard: AiHistoryGuard = { applied: null, undone: null };
 /** 测试支持: 清空护栏（stateStore.resetForTests 不会动到本模块状态）。 */
 export function resetAiHistoryForTests(): void {
   aiGuard = { applied: null, undone: null };
+}
+
+/**
+ * R6: 在一次 AI 落地（编辑应用 / 整页生成 applySpec）完成后记录内容指纹。
+ * agent.ts 的 applySpec 包进 runBatch 后调用这里，使「撤销刚才那步」同样
+ * 覆盖整页生成。
+ */
+export function recordAiApplyForUndo(): void {
+  aiGuard = { applied: aiFingerprint(), undone: null };
 }
 
 /**

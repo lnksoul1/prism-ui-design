@@ -12,6 +12,11 @@ import {
   saveLlmConfig,
 } from "../src/llm/config.js";
 import { chatCompletion, LlmError } from "../src/llm/providers.js";
+import {
+  requestAiRedo,
+  requestAiUndo,
+  resetAiHistoryForTests,
+} from "../src/llm/edit.js";
 import { applySpec, generatePageFromPrompt, parseSpec } from "../src/llm/agent.js";
 
 let tmp: string;
@@ -22,6 +27,7 @@ beforeEach(() => {
   originalDir = process.env.PRISM_PROJECT_DIR;
   process.env.PRISM_PROJECT_DIR = tmp;
   stateStore.resetForTests();
+  resetAiHistoryForTests();
   applyStyleTokenSet(stateStore, "#7C3AED", "ai");
 });
 
@@ -252,6 +258,61 @@ test("generatePageFromPrompt reports unparseable output as an error", async () =
   } finally {
     globalThis.fetch = original;
   }
+});
+
+// ===== R6 整页生成的对话化撤销 =====
+
+test("R6 applySpec lands as a single undo step and is conversation-undoable", async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = (async () =>
+    new Response(
+      JSON.stringify({
+        choices: [
+          {
+            message: {
+              content: '{"page":"new","style":"playful","components":[{"type":"hero","props":{"title":"宠物店"}},{"type":"footer","props":{"copyright":"© 2026"}}]}',
+            },
+          },
+        ],
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    )) as typeof fetch;
+  try {
+    const result = await generatePageFromPrompt("帮我做一个宠物店的首页", {
+      provider: "openai",
+      apiKey: "sk-stub",
+      model: "gpt-4o-mini",
+    });
+    assert.equal(result.ok, true);
+    const state = stateStore.getState();
+    assert.equal(state.pages.length, 2);
+
+    // 一次对话撤销回滚整次生成（单 undo 步，含新页面）
+    assert.equal(requestAiUndo(), "已撤销上一步 AI 修改");
+    const undone = stateStore.getState();
+    assert.equal(undone.pages.length, 1, "新页面随撤销一并消失");
+    assert.equal(undone.currentPageId !== state.currentPageId, true, "回到原页面");
+
+    // 对话恢复 → 新页面回来
+    assert.equal(requestAiRedo(), "已恢复上一步 AI 修改");
+    assert.equal(stateStore.getState().pages.length, 2);
+    assert.equal(
+      stateStore.getState().components.some((c) => c.props.title === "宠物店"),
+      true
+    );
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("R6 guard: manual change after generation blocks conversational undo", async () => {
+  applySpec({
+    page: "current",
+    components: [{ type: "cta", props: { title: "AI 落地", button_text: "走" } }],
+  });
+  // 用户手动补一笔
+  stateStore.addComponent("banner", undefined, { text: "手动" }, null, "user");
+  assert.throws(() => requestAiUndo(), /已有其他改动/);
 });
 
 // ===== R1 M1 落位管线 =====

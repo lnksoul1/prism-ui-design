@@ -23,7 +23,9 @@ import {
 } from "../layout/tidy.js";
 import { chatCompletion, streamChatCompletion, LlmError, type ChatMessage } from "./providers.js";
 import { createCandidateBatch } from "./candidates.js";
+import { recordAiApplyForUndo } from "./edit.js";
 import { compilePageBrief } from "../prompt-brief.js";
+import { runBatch } from "../commands/batch.js";
 import type { LlmConfig } from "./config.js";
 
 export interface SpecComponent {
@@ -258,31 +260,38 @@ export function applySpec(spec: PageSpec): {
   targetPageId: string | null;
   report: LayoutReport | null;
 } {
-  const entries = (spec.components || [])
-    .map(makeNodeEntry)
-    .filter((e): e is NodeEntry => !!e);
-  const nodes = entries.map((e) => e.node);
-  let report: LayoutReport | null = null;
+  // R6: 整页生成折叠为单 undo 步（此前 setStyle/addPage/replace 各自成步，
+  // 「撤销刚才那步」会碎成多步）；落地后记录内容指纹供对话撤销护栏使用。
+  // 注意指纹必须在 runBatch 结束（endBatch commit bump revision）之后记录。
+  const result = runBatch("ai-generate", () => {
+    const entries = (spec.components || [])
+      .map(makeNodeEntry)
+      .filter((e): e is NodeEntry => !!e);
+    const nodes = entries.map((e) => e.node);
+    let report: LayoutReport | null = null;
 
-  if (spec.style) {
-    // 风格预设体系已移除：style 仅作记录（设计系统换肤走 design_apply_style_guide）。
-    stateStore.setStyle("minimal", "ai");
-    applyStyleTokenSet(stateStore, spec.base_color || undefined, "ai");
-  }
+    if (spec.style) {
+      // 风格预设体系已移除：style 仅作记录（设计系统换肤走 design_apply_style_guide）。
+      stateStore.setStyle("minimal", "ai");
+      applyStyleTokenSet(stateStore, spec.base_color || undefined, "ai");
+    }
 
-  let targetPageId: string | null = stateStore.getState().currentPageId;
-  if (spec.page === "new") {
-    const page = stateStore.addPage("AI 页面", "ai");
-    stateStore.switchPage(page.id, "ai");
-    targetPageId = page.id;
-  }
+    let targetPageId: string | null = stateStore.getState().currentPageId;
+    if (spec.page === "new") {
+      const page = stateStore.addPage("AI 页面", "ai");
+      stateStore.switchPage(page.id, "ai");
+      targetPageId = page.id;
+    }
 
-  if (nodes.length > 0 && targetPageId) {
-    const page = stateStore.getState().pages.find((p) => p.id === targetPageId);
-    if (page) report = placeNodes(page, entries);
-    stateStore.replacePageComponents(targetPageId, nodes, "ai");
-  }
-  return { nodes, targetPageId, report };
+    if (nodes.length > 0 && targetPageId) {
+      const page = stateStore.getState().pages.find((p) => p.id === targetPageId);
+      if (page) report = placeNodes(page, entries);
+      stateStore.replacePageComponents(targetPageId, nodes, "ai");
+    }
+    return { nodes, targetPageId, report };
+  });
+  recordAiApplyForUndo();
+  return result;
 }
 
 /** R1 M1: summary 布局体检尾巴（0 问题 → 已自动对齐；有问题 → 如实报数）。 */

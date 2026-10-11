@@ -475,13 +475,8 @@ test(
       const initialComponents = (initState.components as unknown[]).length;
 
       const ws2 = new WebSocket(`ws://127.0.0.1:${port}/ws`);
-      let cursorSeen: Record<string, unknown> = {};
-      let promptQueuedSeen: Record<string, unknown> = {};
-      ws2.on("message", (data) => {
-        const msg = JSON.parse(data.toString()) as Record<string, unknown>;
-        if (msg.type === "cursor") cursorSeen = msg;
-        if (msg.type === "prompt_queued") promptQueuedSeen = msg;
-      });
+      const ws2Messages: Array<Record<string, unknown>> = [];
+      ws2.on("message", (data) => ws2Messages.push(JSON.parse(data.toString())));
       await new Promise<void>((resolve, reject) => {
         ws2.once("open", resolve);
         ws2.once("error", reject);
@@ -491,7 +486,7 @@ test(
       ws1.send(JSON.stringify({ type: "cursor", x: 120, y: 240 }));
       await new Promise<void>((resolve) => {
         const timer = setInterval(() => {
-          if (cursorSeen) {
+          if (ws2Messages.some((m) => m.type === "cursor")) {
             clearInterval(timer);
             resolve();
           }
@@ -501,6 +496,7 @@ test(
           resolve();
         }, 5000);
       });
+      const cursorSeen = ws2Messages.find((m) => m.type === "cursor") as Record<string, unknown>;
       assert.equal(cursorSeen.type, "cursor");
       assert.equal(cursorSeen.x, 120);
       assert.equal(cursorSeen.y, 240);
@@ -550,7 +546,7 @@ test(
       ws1.send(JSON.stringify({ type: "prompt", prompt: "hello agent" }));
       await new Promise<void>((resolve) => {
         const timer = setInterval(() => {
-          if (promptQueuedSeen.type) {
+          if (ws2Messages.some((m) => m.type === "prompt_queued")) {
             clearInterval(timer);
             resolve();
           }
@@ -560,6 +556,7 @@ test(
           resolve();
         }, 5000);
       });
+      const promptQueuedSeen = ws2Messages.find((m) => m.type === "prompt_queued") as Record<string, unknown>;
       assert.equal(promptQueuedSeen.type, "prompt_queued");
       assert.equal(promptQueuedSeen.prompt, "hello agent");
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { applyCandidate, requestEdit, streamGenerate, applyEdit, type CandidateView, type EditPreviewView } from "../api";
+import { api, applyCandidate, requestEdit, streamGenerate, applyEdit, type CandidateView, type EditPreviewView } from "../api";
 import { useDesignStore } from "../stores/design";
 
 const OP_LABEL: Record<string, string> = {
@@ -31,15 +31,19 @@ export function AiPanel() {
   const editMode = selection.length > 0 || editSessionId !== null;
   const [editPreview, setEditPreview] = useState<EditPreviewView | null>(null);
   const [editApplying, setEditApplying] = useState(false);
+  // R8 布局体检卡: 应用修改后服务端体检出重叠/越界 → 结构化展示 + 一键整理
+  const [layoutReport, setLayoutReport] = useState<{ overlaps: number; outOfBounds: number } | null>(null);
+  const [tidying, setTidying] = useState(false);
   const currentPageId = useDesignStore((s) => s.state?.currentPageId ?? null);
 
   // 选中集变化后，旧 diff 可能已失效 → 丢弃预览
   useEffect(() => {
     setEditPreview(null);
   }, [selection]);
-  // 页面切换 → 丢弃会话（服务端亦有 page_id 兜底）
+  // 页面切换 → 丢弃会话与体检卡（服务端亦有 page_id 兜底）
   useEffect(() => {
     setEditSessionId(null);
+    setLayoutReport(null);
   }, [currentPageId]);
 
   const submit = async (): Promise<void> => {
@@ -134,10 +138,33 @@ export function AiPanel() {
       setPrompt("");
       if (result && typeof result.summary === "string") setStatus(result.summary);
       else if (result && typeof result.error === "string") setStatus(result.error);
+      // R8: 体检有问题时挂出结构化卡片（一键整理入口），干净则收起
+      if (result && typeof result.layout_issues === "number" && result.layout_issues > 0) {
+        setLayoutReport({
+          overlaps: typeof result.layout_overlaps === "number" ? result.layout_overlaps : 0,
+          outOfBounds: typeof result.layout_out_of_bounds === "number" ? result.layout_out_of_bounds : 0,
+        });
+      } else {
+        setLayoutReport(null);
+      }
     } catch (err) {
       setStatus(err instanceof Error ? err.message : "应用修改失败");
     } finally {
       setEditApplying(false);
+    }
+  };
+
+  const tidyNow = async (): Promise<void> => {
+    if (tidying) return;
+    setTidying(true);
+    try {
+      const res = await api.tidyLayout();
+      setLayoutReport(null);
+      setStatus(`已一键整理布局（${res.applied} 处调整）`);
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : "整理失败");
+    } finally {
+      setTidying(false);
     }
   };
 
@@ -177,7 +204,7 @@ export function AiPanel() {
           多候选（生成 3 版供挑选）
         </label>
       )}
-      {(streamed || status || candidates.length > 0 || editPreview) && (
+      {(streamed || status || candidates.length > 0 || editPreview || layoutReport) && (
         <div className="ai-output">
           {streamed && (
             <pre data-testid="ai-stream-preview" className="ai-stream">{streamed.slice(-400)}</pre>
@@ -256,6 +283,21 @@ export function AiPanel() {
                   </button>
                 </div>
               ))}
+            </div>
+          )}
+          {layoutReport && (
+            <div className="ai-layout-report" data-testid="ai-layout-report">
+              <span className="ai-layout-text">
+                布局体检：{layoutReport.overlaps} 处重叠 · {layoutReport.outOfBounds} 处越界
+              </span>
+              <button
+                className="ai-layout-tidy"
+                data-testid="ai-layout-tidy"
+                disabled={tidying}
+                onClick={() => void tidyNow()}
+              >
+                {tidying ? "整理中…" : "一键整理"}
+              </button>
             </div>
           )}
           {status && <div className="ai-status">{status}</div>}

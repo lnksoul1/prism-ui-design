@@ -330,6 +330,58 @@ test("layout ops render with semantic labels (重排/间距)", async () => {
   expect(screen.getByText("(0, 136)")).toBeTruthy();
 });
 
+test("R8 layout report card: split overlap/oob counts and tidy button", async () => {
+  useDesignStore.setState({ selection: ["comp_hero"] });
+  const fetchMock = vi.fn(async (url: string) => {
+    if (url === "/api/llm/edit") {
+      return jsonResponse({
+        success: true,
+        edit_id: "edit_lr1",
+        session_id: "sess_lr",
+        requested: 1,
+        dropped: 0,
+        summary: "已生成 1 处修改建议，请预览后应用",
+        diffs: [
+          { op: "add", component_type: "banner", title: "公告", changes: [{ field: "text", before: "（无）", after: "公告" }] },
+        ],
+      });
+    }
+    if (url === "/api/layout/tidy") {
+      return jsonResponse({ success: true, applied: 5 });
+    }
+    return jsonResponse({
+      success: true,
+      applied: 1,
+      skipped: 0,
+      layout_issues: 3,
+      layout_overlaps: 2,
+      layout_out_of_bounds: 1,
+      summary: "已应用 1 处修改，2 处布局重叠 · 1 处越界待处理",
+    });
+  }) as unknown as typeof fetch;
+  vi.stubGlobal("fetch", fetchMock);
+
+  render(<AiPanel />);
+  await userEvent.type(screen.getByPlaceholderText(/对选中的 1 个组件描述修改/), "加一条公告");
+  await userEvent.click(screen.getByTestId("ai-edit-go"));
+  await waitFor(() => expect(screen.getByTestId("ai-edit-diff")).toBeTruthy());
+  await userEvent.click(screen.getByTestId("ai-edit-apply"));
+
+  // 体检卡: 拆分展示重叠与越界（服务端 summary 尾巴与卡片文案并存）
+  await waitFor(() => expect(screen.getByTestId("ai-layout-report")).toBeTruthy());
+  const card = screen.getByTestId("ai-layout-report");
+  expect(card.textContent).toContain("布局体检");
+  expect(card.textContent).toContain("2 处重叠");
+  expect(card.textContent).toContain("1 处越界");
+
+  // 一键整理 → POST /api/layout/tidy → 卡片收起 + 状态栏提示
+  await userEvent.click(screen.getByTestId("ai-layout-tidy"));
+  await waitFor(() => expect(screen.queryByTestId("ai-layout-report")).toBeNull());
+  await waitFor(() => expect(screen.getByText(/已一键整理布局（5 处调整）/)).toBeTruthy());
+  const tidyCall = fetchMock.mock.calls.find(([u]) => u === "/api/layout/tidy");
+  expect(tidyCall).toBeTruthy();
+});
+
 test("R5 undo renders bare diff entry without target row", async () => {
   useDesignStore.setState({ selection: ["comp_hero"] });
   const fetchMock = vi.fn(async (url: string) => {

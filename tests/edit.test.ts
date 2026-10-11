@@ -210,7 +210,7 @@ test("applyEditOperations applies update/delete/add in one undo step", () => {
       { op: "add", component_type: "banner", props: { text: "公告" } },
     ])
   );
-  assert.deepEqual(result, { applied: 3, skipped: 0, added: 1, layoutIssues: 0 });
+  assert.deepEqual(result, { applied: 3, skipped: 0, added: 1, layoutIssues: 0, layoutOverlaps: 0, layoutOutOfBounds: 0 });
 
   const page = stateStore.getState().pages.find((p) => p.id === pageIdOf())!;
   const banner = page.components[page.components.length - 1];
@@ -240,7 +240,7 @@ test("applyEditOperations skips ops whose component vanished; add without anchor
   ]);
   pending.target_ids = ["comp_ghost", "comp_ghost2"]; // 全部不存在 → 无锚点
   const result = applyEditOperations(pending);
-  assert.deepEqual(result, { applied: 1, skipped: 1, added: 1, layoutIssues: 0 });
+  assert.deepEqual(result, { applied: 1, skipped: 1, added: 1, layoutIssues: 0, layoutOverlaps: 0, layoutOutOfBounds: 0 });
   const page = stateStore.getState().pages.find((p) => p.id === pageIdOf())!;
   const added = page.components[page.components.length - 1];
   assert.equal(added.type, "button");
@@ -251,7 +251,7 @@ test("applyEditOperations skips update of already-deleted anchor target", () => 
   const result = applyEditOperations(
     buildPending([{ op: "delete", component_id: buttonId }, { op: "update", component_id: buttonId, props: { text: "x" } }])
   );
-  assert.deepEqual(result, { applied: 1, skipped: 1, added: 0, layoutIssues: 0 });
+  assert.deepEqual(result, { applied: 1, skipped: 1, added: 0, layoutIssues: 0, layoutOverlaps: 0, layoutOutOfBounds: 0 });
 });
 
 test("R7 布局体检: add 落地后重叠计入 layoutIssues", () => {
@@ -261,6 +261,9 @@ test("R7 布局体检: add 落地后重叠计入 layoutIssues", () => {
     buildPending([{ op: "add", component_type: "banner", props: { text: "公告" } }])
   );
   assert.equal(result.layoutIssues, 1, "hero 与 button 相交计入重叠（banner 落锚点下方不相交）");
+  // R8: 体检拆分值——重叠与越界分开报告
+  assert.equal(result.layoutOverlaps, 1);
+  assert.equal(result.layoutOutOfBounds, 0);
 });
 
 test("R7 布局体检: 干净落地为 0；纯 update 不产布局声明", () => {
@@ -270,7 +273,7 @@ test("R7 布局体检: 干净落地为 0；纯 update 不产布局声明", () =>
       { op: "add", component_type: "banner", props: { text: "公告" } },
     ])
   );
-  assert.deepEqual(clean, { applied: 2, skipped: 0, added: 1, layoutIssues: 0 }, "锚点下方落位无重叠越界");
+  assert.deepEqual(clean, { applied: 2, skipped: 0, added: 1, layoutIssues: 0, layoutOverlaps: 0, layoutOutOfBounds: 0 }, "锚点下方落位无重叠越界");
 
   // 既有重叠 + 纯 update → 跳过体检（生成期 overlay 浮层意图不持久化，
   // 全量体检会把刻意浮层误计为重叠，故仅布局类操作后报告）
@@ -378,7 +381,7 @@ test("R4 gap: diff and apply shift selected stack by delta per index", () => {
   assert.deepEqual(diffs[0]!.changes, [{ field: "位置", before: "(0, 136)", after: "(0, 120)" }]);
 
   const result = applyEditOperations(buildPending(ops));
-  assert.deepEqual(result, { applied: 1, skipped: 0, added: 0, layoutIssues: 0 });
+  assert.deepEqual(result, { applied: 1, skipped: 0, added: 0, layoutIssues: 0, layoutOverlaps: 0, layoutOutOfBounds: 0 });
   assert.equal(pageOfNow().components.find((c) => c.id === buttonId)!.layout!.y, 120);
   assert.equal(pageOfNow().components.find((c) => c.id === heroId)!.layout!.y, 0, "y 序第一不动");
 });
@@ -396,7 +399,7 @@ test("R4 align: centers on page width; flow component is skipped", () => {
   assert.deepEqual(diffs[0]!.changes[0], { field: "位置", before: "(0, 136)", after: "(500, 136)" });
 
   const result = applyEditOperations(buildPending(ops));
-  assert.deepEqual(result, { applied: 1, skipped: 1, added: 0, layoutIssues: 0 });
+  assert.deepEqual(result, { applied: 1, skipped: 1, added: 0, layoutIssues: 0, layoutOverlaps: 0, layoutOutOfBounds: 0 });
   assert.equal(pageOfNow().components.find((c) => c.id === buttonId)!.layout!.x, 500);
 });
 

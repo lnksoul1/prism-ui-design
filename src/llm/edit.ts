@@ -90,6 +90,10 @@ export interface EditApplyResult {
   added: number;
   /** R7: 应用后当前页布局体检（重叠对数 + 越界数之和）。仅布局类操作后报告。 */
   layoutIssues: number;
+  /** R8: 体检拆分值——重叠对数（客户端体检卡分开展示）。 */
+  layoutOverlaps: number;
+  /** R8: 体检拆分值——越界组件数。 */
+  layoutOutOfBounds: number;
 }
 
 // ===== prompts =====
@@ -567,7 +571,7 @@ export function applyEditOperations(pending: PendingEdit): EditApplyResult {
   if (pending.operations.some((o) => o.op === "undo" || o.op === "redo")) {
     throw new Error("撤销/恢复必须单独执行，不能与其他修改混合");
   }
-  const result: EditApplyResult = { applied: 0, skipped: 0, added: 0, layoutIssues: 0 };
+  const result: EditApplyResult = { applied: 0, skipped: 0, added: 0, layoutIssues: 0, layoutOverlaps: 0, layoutOutOfBounds: 0 };
   runBatch("ai-edit", () => {
     const st = stateStore.getState();
     const page = st.pages.find((p) => p.id === st.currentPageId);
@@ -679,6 +683,8 @@ export function applyEditOperations(pending: PendingEdit): EditApplyResult {
         containerWidthForPlatform(stAfter.activePlatform),
         { intents, locked: lockedFromConstraints(pageAfter, pageAfter.components) }
       );
+      result.layoutOverlaps = report.overlaps;
+      result.layoutOutOfBounds = report.out_of_bounds;
       result.layoutIssues = report.overlaps + report.out_of_bounds;
     }
   }

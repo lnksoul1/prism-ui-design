@@ -69,8 +69,9 @@ export function requestEdit(body: {
   return post("/api/llm/edit", body);
 }
 
-/** R2 精准修改: 应用一处已确认的修改建议（服务端一次性消费，单 undo 步）。 */
-export function applyEdit(editId: string): Promise<{ success?: boolean; applied?: number; skipped?: number; summary?: string; error?: string }> {
+/** R2 精准修改: 应用一处已确认的修改建议（服务端一次性消费，单 undo 步）。
+ * R8: layout_issues 布局体检总和（拆分值 overlaps/out_of_bounds 供体检卡展示）。 */
+export function applyEdit(editId: string): Promise<{ success?: boolean; applied?: number; skipped?: number; summary?: string; error?: string; layout_issues?: number; layout_overlaps?: number; layout_out_of_bounds?: number }> {
   return post("/api/llm/edit/apply", { edit_id: editId });
 }
 

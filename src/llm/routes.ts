@@ -280,15 +280,21 @@ export function registerLlmRoutes(app: express.Express): void {
       return;
     }
     const result = applyEditOperations(pending);
-    // R7: 与整页生成同款的布局体检尾巴（0 问题不带尾巴）
-    const layoutTail =
-      result.layoutIssues > 0 ? `，${result.layoutIssues} 处布局重叠/越界待处理` : "";
+    // R7: 与整页生成同款的布局体检尾巴（0 问题不带尾巴）。
+    // R8: 响应带拆分值（layout_overlaps/layout_out_of_bounds），客户端体检卡
+    // 分开展示重叠与越界；layout_issues 保留总和（兼容）。
+    const tail: string[] = [];
+    if (result.layoutOverlaps > 0) tail.push(`${result.layoutOverlaps} 处布局重叠`);
+    if (result.layoutOutOfBounds > 0) tail.push(`${result.layoutOutOfBounds} 处越界`);
+    const layoutTail = tail.length > 0 ? `，${tail.join(" · ")}待处理` : "";
     res.json({
       success: true,
       applied: result.applied,
       skipped: result.skipped,
       added: result.added,
       layout_issues: result.layoutIssues,
+      layout_overlaps: result.layoutOverlaps,
+      layout_out_of_bounds: result.layoutOutOfBounds,
       summary: `已应用 ${result.applied} 处修改${
         result.skipped > 0 ? `（${result.skipped} 处因组件已不存在跳过）` : ""
       }${layoutTail}`,

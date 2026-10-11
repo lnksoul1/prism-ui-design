@@ -103,6 +103,11 @@ body {
 .ai-edit-before { color: #b91c1c; text-decoration: line-through; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 38%; }
 .ai-edit-arrow { color: #999; flex: 0 0 auto; }
 .ai-edit-after { color: #15803d; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+/* R8 布局体检卡: AI 修改应用后体检出重叠/越界 → 结构化展示 + 一键整理 */
+.ai-layout-report { display: flex; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid rgba(217,119,6,0.4); border-radius: 8px; padding: 6px 10px; background: #fffaf0; }
+.ai-layout-text { font-size: 12px; color: #b45309; font-weight: 500; }
+.ai-layout-tidy { border: 1px solid #d97706; background: #fff; color: #d97706; border-radius: 6px; padding: 3px 10px; cursor: pointer; font-size: 12px; flex-shrink: 0; }
+.ai-layout-tidy:disabled { opacity: 0.5; cursor: default; }
 .cq-toolbar { position: absolute; top: 8px; right: 16px; z-index: 10; display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; padding: 6px 10px; font-size: 12px; }
 .cq-label { display: flex; align-items: center; gap: 6px; color: #666; }
 .cq-value { min-width: 48px; text-align: right; color: #2383e2; font-weight: 600; }

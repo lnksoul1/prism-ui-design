@@ -250,6 +250,12 @@ npm run check    # lint + test
 `verify-dsh-bundle.mjs` 与 `npm run smoke` 在任何环境都能跑；CSS 与组件审计需要
 `playwright`（devDependency）与本机缓存的 Chromium。
 
+### 示例
+
+`examples/` 里是导出的页面与对应截图：`saas-landing`、`ecommerce-home`、
+`dark-dashboard`，以及 DSH 时期的 `apple-style`、`coffee-demo`。`node showcase.mjs`
+会通过真实的 MCP server（stdio）重新生成前三页并重新截图。
+
 ---
 
 ## 历史

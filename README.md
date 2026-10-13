@@ -260,6 +260,13 @@ it needs:
 `verify-dsh-bundle.mjs` and `npm run smoke` run anywhere; the CSS and component
 audits need `playwright` (a devDependency) and a cached Chromium.
 
+### Examples
+
+`examples/` holds exported pages next to their screenshots: `saas-landing`,
+`ecommerce-home` and `dark-dashboard`, plus the DSH-era `apple-style` and
+`coffee-demo`. `node showcase.mjs` builds the first three through the real MCP
+server over stdio and re-shoots them.
+
 ---
 
 ## History

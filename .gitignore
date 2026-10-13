@@ -27,10 +27,13 @@ npm-debug.log*
 .prism-projects/
 
 # Scratch output from the preview/audit scripts (showcase.mjs,
-# audit-rendered-css.mjs and survey-types.mjs regenerate these on demand)
-examples/type-probe.html
+# audit-rendered-css.mjs and verify-components.mjs regenerate these on demand)
 examples/variant-audit.html
+examples/component-verify.html
 .tmp-*/
+
+# Packed tarballs (npm pack / publish)
+*.tgz
 
 # DSH harness inspection scratch
 .dsh-plugin-inspect/

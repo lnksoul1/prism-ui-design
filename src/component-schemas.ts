@@ -123,11 +123,6 @@ const testimonial = z.object({
   avatar: z.string().optional(),
 }).passthrough().partial();
 
-const banner = z.object({
-  text: z.string().optional(),
-  button_text: z.string().optional(),
-}).passthrough().partial();
-
 const timeline = z.object({
   items: z.array(z.object({
     date: z.string().optional(),
@@ -308,7 +303,6 @@ export const COMPONENT_PROP_SCHEMAS: Record<string, z.ZodType> = {
   stats,
   pricing,
   testimonial,
-  banner,
   timeline,
   faq,
   form,
@@ -334,7 +328,6 @@ export const COMPONENT_PROP_SCHEMAS: Record<string, z.ZodType> = {
   feature_grid,
   // 忠实还原类型（html_fragment 导入 / 内部元素组件化产物）
   text: z.object({ text: z.string().optional(), fontSize: z.string().optional(), fontFamily: z.string().optional(), align: z.string().optional() }).passthrough().partial(),
-  section: z.object({ title: z.string().optional() }).passthrough().partial(),
   container: z.object({ text: z.string().optional() }).passthrough().partial(),
   // Imported HTML region: the css/html are injected verbatim, so only the
   // region label is constrained here.

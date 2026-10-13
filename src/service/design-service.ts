@@ -7,7 +7,7 @@
  * supported component types).
  */
 
-import { stateStore, type AlignMode, type AnimationDef, type ComponentBehavior, type ComponentLayout, type ElementMeta, type PageBackground, type ZOrderMode } from "../state.js";
+import { stateStore, type AlignMode, type AnimationDef, type ComponentBehavior, type ComponentLayout, type ElementMeta, type PageBackground, type ZOrderMode, type ImportRecord } from "../state.js";
 import { applyStyleTokenSet } from "../tokens.js";
 import { validateComponentProps } from "../component-schemas.js";
 
@@ -27,7 +27,6 @@ export const COMPONENT_TYPES = new Set([
   "stats",
   "pricing",
   "testimonial",
-  "banner",
   "timeline",
   "faq",
   "form",
@@ -52,7 +51,6 @@ export const COMPONENT_TYPES = new Set([
   "marquee",
   "feature_grid",
   "text",
-  "section",
   "container",
   "html_fragment",
 ]);
@@ -95,10 +93,30 @@ export function initProject(projectName: string, baseColor?: string): InitProjec
 }
 
 export function applyStyle(_style: string, source: MutationSource = "user"): boolean {
-  // 风格预设体系已移除：统一走设计系统（design_apply_style_guide）。
+  // Style presets were removed with the dashboard; "minimal" is the only base.
   stateStore.setStyle("minimal", source);
   applyStyleTokenSet(stateStore, undefined, source);
   return true;
+}
+
+export function setProjectName(projectName: string, source: MutationSource = "user"): boolean {
+  stateStore.setProjectName(projectName, source);
+  return true;
+}
+
+export function setStyle(_style: string, source: MutationSource = "user"): boolean {
+  stateStore.setStyle("minimal", source);
+  return true;
+}
+
+/** Discard all state and start over. Used by design_init. */
+export function clearAll(source: MutationSource = "user"): void {
+  stateStore.clearAll(source);
+}
+
+/** Record provenance for an imported page. */
+export function setImport(pageId: string, record: ImportRecord, source: MutationSource = "user"): void {
+  stateStore.setImport(pageId, record, source);
 }
 
 // ===== Tokens =====
@@ -299,6 +317,8 @@ export function redo() {
 }
 
 // NOTE: the HTTP/WebSocket transport was removed in the route-B refactor.
-// The former `wsMessageSchema` + `applyClientMessage` vocabulary lived here;
-// it had no callers left. Every mutation now arrives through a registered MCP
-// tool, which calls the functions above directly.
+// The former `wsMessageSchema` + `applyClientMessage` vocabulary lived here and
+// had no callers left. Every mutation arrives through a registered MCP tool,
+// which calls the functions above (never `stateStore` directly) so that input
+// validation — component type allowlist, prop schemas, token categories —
+// cannot be bypassed by any one tool.

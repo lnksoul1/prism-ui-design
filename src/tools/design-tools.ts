@@ -9,7 +9,22 @@ import {
 } from "../state.js";
 import { applyStyleTokenSet } from "../tokens.js";
 import { describePropWarning, LIST_PROPS } from "../component-schemas.js";
-import { COMPONENT_TYPES } from "../service/design-service.js";
+// All mutations go through the service so its validation (component allowlist,
+// prop schemas, token categories) cannot be bypassed. `stateStore` is still used
+// for reads, which are not mutations.
+import {
+  COMPONENT_TYPES,
+  clearAll as svcClearAll,
+  setProjectName as svcSetProjectName,
+  setStyle as svcSetStyle,
+  addComponent as svcAddComponent,
+  updateComponent as svcUpdateComponent,
+  renameComponent as svcRenameComponent,
+  removeComponent as svcRemoveComponent,
+  setToken as svcSetToken,
+  alignComponents as svcAlignComponents,
+  zOrderComponent as svcZOrderComponent,
+} from "../service/design-service.js";
 
 // All methods used below now live directly on DesignStateStore (state.ts),
 // so no type extension or cast is needed.
@@ -319,12 +334,6 @@ export function componentToHTML(node: ComponentNode): string {
       html = `<section class="timeline${v}">${items}</section>`;
       break;
     }
-    case "banner": {
-      const title = escapeHTML(String(p.title ?? ""));
-      const subtitle = escapeHTML(String(p.subtitle ?? ""));
-      html = `<section class="banner${v}"><h2>${title}</h2><p>${subtitle}</p></section>`;
-      break;
-    }
     case "tabs": {
       // Accepts `items` like every other list component; `tabs` is kept as an
       // alias so existing payloads keep working.
@@ -537,18 +546,6 @@ export function componentToHTML(node: ComponentNode): string {
       html = `<div class="text-block${v}"><${as}${cls}>${escapeHTML(String(content))}</${as}></div>`;
       break;
     }
-    case "section": {
-      const id = p.id ? ` id="${escapeHTML(String(p.id))}"` : "";
-      const heading = p.title
-        ? `<h2 class="section__title">${escapeHTML(String(p.title))}</h2>`
-        : "";
-      const body = p.body ?? p.text;
-      const para = body
-        ? `<p class="section__body">${escapeHTML(String(body))}</p>`
-        : "";
-      html = `<section class="section${v}"${id}>${heading}${para}</section>`;
-      break;
-    }
     case "container": {
       // Layout-only wrapper: content arrives through node.children.
       const gap = typeof p.gap === "number" ? ` style="gap:${p.gap}px"` : "";
@@ -737,9 +734,6 @@ ${pageBgKeyframes}
     .avatar img { width: 100%; height: 100%; object-fit: cover; }
     /* text / section / container had no renderer at all and used to fall through
        to a fallback that stringified their props straight into the page. */
-    .section { padding: 3rem 2rem; max-width: 1200px; margin: 0 auto; }
-    .section__title { font-family: var(--font-display, sans-serif); font-size: var(--text-2xl, 1.5rem); margin-bottom: 0.75rem; }
-    .section__body { color: var(--color-text-muted, #6B6B6B); line-height: var(--line-height-relaxed, 1.75); }
     .text-block { padding: 1rem 2rem; max-width: 72ch; margin: 0 auto; }
     .text-block p { line-height: var(--line-height-relaxed, 1.75); }
     .container { display: flex; flex-direction: column; gap: 1.5rem; max-width: 1200px; margin: 0 auto; padding: 0 2rem; }
@@ -812,8 +806,6 @@ ${pageBgKeyframes}
     .pagination--compact .pagination__page { padding: 0.25rem 0.625rem; }
     .breadcrumb--slash .breadcrumb__sep::before { content: "/"; }
     .breadcrumb--arrow .breadcrumb__sep::before { content: "›"; }
-    .banner--gradient { background-image: linear-gradient(135deg, var(--color-primary, #6366F1), var(--color-accent, #22D3EE)); color: #fff; }
-    .banner--image { background-size: cover; background-position: center; }
     /* Skeleton had no base rule at all, so it rendered as invisible boxes. */
     .skeleton { display: flex; flex-direction: column; gap: 0.5rem; padding: 1.5rem 2rem; max-width: 1200px; margin: 0 auto; }
     .skeleton__line { height: 1rem; border-radius: var(--radius-sm, 4px); background: var(--color-border, #e5e5e5); animation: prism-shimmer 1.4s ease-in-out infinite alternate; }
@@ -1388,9 +1380,9 @@ Examples:
     },
     async (params) => {
       try {
-        stateStore.clearAll("ai");
-        stateStore.setProjectName(params.project_name, "ai");
-        stateStore.setStyle("minimal", "ai");
+        svcClearAll("ai");
+        svcSetProjectName(params.project_name, "ai");
+        svcSetStyle("minimal", "ai");
 
         const tokens = applyStyleTokenSet(
           stateStore,
@@ -1500,7 +1492,7 @@ Examples:
       try {
         const props = params.props || {};
         const warning = describePropWarning(params.type, props);
-        const node = stateStore.addComponent(
+        const node = svcAddComponent(
           params.type,
           params.variant,
           props,
@@ -1571,7 +1563,7 @@ Example:
     },
     async (params) => {
       try {
-        const success = stateStore.updateComponent(params.id, params.props, "ai", params.layout, {
+        const success = svcUpdateComponent(params.id, params.props, "ai", params.layout, {
           visible: params.visible,
           locked: params.locked,
         });
@@ -1620,7 +1612,7 @@ Example:
     },
     async (params) => {
       try {
-        const success = stateStore.renameComponent(params.component_id, params.name, "ai");
+        const success = svcRenameComponent(params.component_id, params.name, "ai");
         if (!success) {
           return {
             content: [{ type: "text", text: `Error: Component "${params.component_id}" not found.` }],
@@ -1675,7 +1667,7 @@ Example:
     },
     async (params) => {
       try {
-        const success = stateStore.alignComponents(params.ids, params.mode, "ai");
+        const success = svcAlignComponents(params.ids, params.mode, "ai");
         if (!success) {
           return {
             content: [{ type: "text", text: "Error: need at least 2 valid components with layouts." }],
@@ -1721,7 +1713,7 @@ Example:
     },
     async (params) => {
       try {
-        const success = stateStore.zOrderComponent(params.component_id, params.mode, "ai");
+        const success = svcZOrderComponent(params.component_id, params.mode, "ai");
         if (!success) {
           return {
             content: [{ type: "text", text: `Error: Component "${params.component_id}" not found.` }],
@@ -1831,7 +1823,7 @@ Example:
     },
     async (params) => {
       try {
-        stateStore.setToken(params.category, params.key, params.value, "ai");
+        svcSetToken(params.category, params.key, params.value, "ai");
         return {
           content: [{ type: "text", text: `Token set: ${params.category}.${params.key} = ${params.value}` }],
           structuredContent: { success: true, category: params.category, key: params.key, value: params.value },
@@ -1871,7 +1863,7 @@ Example:
     },
     async (params) => {
       try {
-        const success = stateStore.removeComponent(params.id, "ai");
+        const success = svcRemoveComponent(params.id, "ai");
         if (!success) {
           return {
             content: [{ type: "text", text: `Error: Component "${params.id}" not found.` }],
@@ -2136,71 +2128,71 @@ export function applyPageTemplate(template: string): string[] {
 
   const templates: Record<string, () => void> = {
     ecommerce_home: () => {
-      addedIds.push(stateStore.addComponent("navbar", undefined, { brand: brandName(), links: ["首页", "商品", "优惠", "关于"] }, null, "ai").id);
-      addedIds.push(stateStore.addComponent("hero", "centered", { title: "夏季大促", subtitle: "精选商品5折起", button_text: "立即抢购" }, null, "ai").id);
-      addedIds.push(stateStore.addComponent("card_grid", "3col", { items: [
+      addedIds.push(svcAddComponent("navbar", undefined, { brand: brandName(), links: ["首页", "商品", "优惠", "关于"] }, null, "ai").id);
+      addedIds.push(svcAddComponent("hero", "centered", { title: "夏季大促", subtitle: "精选商品5折起", button_text: "立即抢购" }, null, "ai").id);
+      addedIds.push(svcAddComponent("card_grid", "3col", { items: [
         { title: "商品A", price: "¥99", description: "优质好物" },
         { title: "商品B", price: "¥199", description: "精挑细选" },
         { title: "商品C", price: "¥299", description: "品质之选" },
       ] }, null, "ai").id);
-      addedIds.push(stateStore.addComponent("cta", "centered", { title: "立即下单", subtitle: "限时优惠，不容错过", button_text: "去购物" }, null, "ai").id);
-      addedIds.push(stateStore.addComponent("footer", undefined, { copyright: copyright(), links: ["关于我们", "联系方式", "隐私政策"] }, null, "ai").id);
+      addedIds.push(svcAddComponent("cta", "centered", { title: "立即下单", subtitle: "限时优惠，不容错过", button_text: "去购物" }, null, "ai").id);
+      addedIds.push(svcAddComponent("footer", undefined, { copyright: copyright(), links: ["关于我们", "联系方式", "隐私政策"] }, null, "ai").id);
     },
     saas_landing: () => {
-      addedIds.push(stateStore.addComponent("navbar", "with_cta", { brand: brandName(), links: ["功能", "价格", "文档", "博客"], cta_text: "免费试用" }, null, "ai").id);
-      addedIds.push(stateStore.addComponent("hero", "split", { title: "提升团队效率十倍", subtitle: "一站式协作平台，让工作更高效", button_text: "开始使用" }, null, "ai").id);
-      addedIds.push(stateStore.addComponent("feature_list", undefined, { title: "核心功能", items: [
+      addedIds.push(svcAddComponent("navbar", "with_cta", { brand: brandName(), links: ["功能", "价格", "文档", "博客"], cta_text: "免费试用" }, null, "ai").id);
+      addedIds.push(svcAddComponent("hero", "split", { title: "提升团队效率十倍", subtitle: "一站式协作平台，让工作更高效", button_text: "开始使用" }, null, "ai").id);
+      addedIds.push(svcAddComponent("feature_list", undefined, { title: "核心功能", items: [
         { title: "任务管理", description: "可视化任务看板，高效追踪进度" },
         { title: "实时协作", description: "多人同时编辑，无缝协作" },
         { title: "数据报表", description: "智能数据分析，洞察业务趋势" },
       ] }, null, "ai").id);
-      addedIds.push(stateStore.addComponent("stats", undefined, { title: "数据见证", items: [
+      addedIds.push(svcAddComponent("stats", undefined, { title: "数据见证", items: [
         { label: "活跃用户", value: "50万+" },
         { label: "企业客户", value: "3000+" },
         { label: "好评率", value: "98%" },
         { label: "服务年限", value: "8年" },
       ] }, null, "ai").id);
-      addedIds.push(stateStore.addComponent("pricing", undefined, { title: "价格方案", plans: [
+      addedIds.push(svcAddComponent("pricing", undefined, { title: "价格方案", plans: [
         { name: "基础版", price: "¥99/月", features: ["10人团队", "5GB存储", "基础支持"] },
         { name: "专业版", price: "¥299/月", features: ["50人团队", "50GB存储", "优先支持", "高级报表"] },
         { name: "企业版", price: "定制", features: ["不限人数", "无限存储", "专属客服", "定制开发"] },
       ] }, null, "ai").id);
-      addedIds.push(stateStore.addComponent("cta", "banner", { title: "立即开启高效协作", subtitle: "14天免费试用，无需信用卡", button_text: "免费开始" }, null, "ai").id);
-      addedIds.push(stateStore.addComponent("footer", undefined, { copyright: copyright(), links: ["关于我们", "联系方式", "隐私政策", "服务条款"] }, null, "ai").id);
+      addedIds.push(svcAddComponent("cta", "banner", { title: "立即开启高效协作", subtitle: "14天免费试用，无需信用卡", button_text: "免费开始" }, null, "ai").id);
+      addedIds.push(svcAddComponent("footer", undefined, { copyright: copyright(), links: ["关于我们", "联系方式", "隐私政策", "服务条款"] }, null, "ai").id);
     },
     blog_post: () => {
-      addedIds.push(stateStore.addComponent("navbar", undefined, { brand: brandName(), links: ["首页", "文章", "分类", "关于"] }, null, "ai").id);
-      addedIds.push(stateStore.addComponent("text_section", undefined, { title: "深入理解 TypeScript 类型系统", body: "TypeScript 的类型系统是其最强大的特性之一。通过静态类型检查，我们可以在编译时捕获大量潜在错误，提升代码质量和可维护性。" }, null, "ai").id);
-      addedIds.push(stateStore.addComponent("text_section", undefined, { title: "高级类型技巧", body: "条件类型和映射类型是 TypeScript 中最强大但也最复杂的特性。掌握它们可以让你写出更加灵活和可复用的类型定义。" }, null, "ai").id);
-      addedIds.push(stateStore.addComponent("footer", undefined, { copyright: copyright(), links: ["关于", "订阅", "归档"] }, null, "ai").id);
+      addedIds.push(svcAddComponent("navbar", undefined, { brand: brandName(), links: ["首页", "文章", "分类", "关于"] }, null, "ai").id);
+      addedIds.push(svcAddComponent("text_section", undefined, { title: "深入理解 TypeScript 类型系统", body: "TypeScript 的类型系统是其最强大的特性之一。通过静态类型检查，我们可以在编译时捕获大量潜在错误，提升代码质量和可维护性。" }, null, "ai").id);
+      addedIds.push(svcAddComponent("text_section", undefined, { title: "高级类型技巧", body: "条件类型和映射类型是 TypeScript 中最强大但也最复杂的特性。掌握它们可以让你写出更加灵活和可复用的类型定义。" }, null, "ai").id);
+      addedIds.push(svcAddComponent("footer", undefined, { copyright: copyright(), links: ["关于", "订阅", "归档"] }, null, "ai").id);
     },
     portfolio: () => {
-      addedIds.push(stateStore.addComponent("navbar", undefined, { brand: brandName(), links: ["作品", "关于", "服务", "联系"] }, null, "ai").id);
-      addedIds.push(stateStore.addComponent("hero", "centered", { title: "创意设计工作室", subtitle: "用设计连接品牌与用户", button_text: "查看作品" }, null, "ai").id);
-      addedIds.push(stateStore.addComponent("card_grid", "4col", { items: [
+      addedIds.push(svcAddComponent("navbar", undefined, { brand: brandName(), links: ["作品", "关于", "服务", "联系"] }, null, "ai").id);
+      addedIds.push(svcAddComponent("hero", "centered", { title: "创意设计工作室", subtitle: "用设计连接品牌与用户", button_text: "查看作品" }, null, "ai").id);
+      addedIds.push(svcAddComponent("card_grid", "4col", { items: [
         { title: "品牌设计", description: "视觉识别系统" },
         { title: "网页设计", description: "响应式网站" },
         { title: "UI/UX设计", description: "用户体验优化" },
         { title: "插画设计", description: "商业插画创作" },
       ] }, null, "ai").id);
-      addedIds.push(stateStore.addComponent("text_section", undefined, { title: "关于我们", body: "我们是一支充满激情的设计团队，专注于为品牌打造独特的视觉体验。" }, null, "ai").id);
-      addedIds.push(stateStore.addComponent("footer", undefined, { copyright: copyright(), links: ["作品", "关于", "联系"] }, null, "ai").id);
+      addedIds.push(svcAddComponent("text_section", undefined, { title: "关于我们", body: "我们是一支充满激情的设计团队，专注于为品牌打造独特的视觉体验。" }, null, "ai").id);
+      addedIds.push(svcAddComponent("footer", undefined, { copyright: copyright(), links: ["作品", "关于", "联系"] }, null, "ai").id);
     },
     dashboard: () => {
-      addedIds.push(stateStore.addComponent("navbar", undefined, { brand: brandName(), links: ["概览", "分析", "设置"] }, null, "ai").id);
-      addedIds.push(stateStore.addComponent("stats", undefined, { title: "今日数据", items: [
+      addedIds.push(svcAddComponent("navbar", undefined, { brand: brandName(), links: ["概览", "分析", "设置"] }, null, "ai").id);
+      addedIds.push(svcAddComponent("stats", undefined, { title: "今日数据", items: [
         { label: "访问量", value: "12,345" },
         { label: "订单数", value: "328" },
         { label: "收入", value: "¥45,600" },
         { label: "转化率", value: "2.6%" },
       ] }, null, "ai").id);
-      addedIds.push(stateStore.addComponent("card_grid", "2col", { items: [
+      addedIds.push(svcAddComponent("card_grid", "2col", { items: [
         { title: "销售趋势", description: "近30天销售数据走势" },
         { title: "用户分析", description: "用户行为深度分析" },
         { title: "热销商品", description: "TOP10商品排行" },
         { title: "地区分布", description: "销售地区分布图" },
       ] }, null, "ai").id);
-      addedIds.push(stateStore.addComponent("feature_list", undefined, { title: "快捷操作", items: [
+      addedIds.push(svcAddComponent("feature_list", undefined, { title: "快捷操作", items: [
         { title: "导出报表", description: "一键导出数据报表" },
         { title: "添加商品", description: "快速上架新商品" },
         { title: "消息通知", description: "查看系统消息通知" },

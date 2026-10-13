@@ -10,8 +10,8 @@ import fs from "fs";
 import path from "path";
 import { z } from "zod";
 import { importHtmlString } from "../import-project.js";
-import { stateStore } from "../state.js";
 import { getProjectDir } from "../project-store.js";
+import { setImport as svcSetImport } from "../service/design-service.js";
 
 const MAX_HTML = 2_000_000;
 
@@ -103,7 +103,7 @@ Exactly one of url or html is required.`,
             fs.mkdirSync(importsDir, { recursive: true });
             const htmlFile = path.join(importsDir, `${result.pageId}.html`);
             fs.writeFileSync(htmlFile, html, "utf-8");
-            stateStore.setImport(
+            svcSetImport(
               result.pageId,
               {
                 kind: (params.url ? "url" : "html") as "url" | "html",

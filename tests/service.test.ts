@@ -14,18 +14,18 @@ beforeEach(() => {
 });
 
 test("component type allowlist matches the MCP-exportable set", () => {
-  assert.equal(COMPONENT_TYPES.size, 40);
+  assert.equal(COMPONENT_TYPES.size, 38);
   for (const type of [
     // sections & layout
     "hero", "navbar", "card_grid", "card", "cta", "footer", "text_section", "feature_list",
-    "stats", "pricing", "testimonial", "banner", "timeline", "faq", "form", "image",
+    "stats", "pricing", "testimonial", "timeline", "faq", "form", "image",
     // interactive & data
     "button", "tabs", "accordion", "carousel", "sidebar", "breadcrumb", "pagination",
     "progress", "badge", "avatar", "input", "grid", "table", "alert", "tooltip",
     // composed & decorative
     "bento_grid", "skeleton", "glass_card", "marquee", "feature_grid",
     // structural
-    "text", "section", "container", "html_fragment",
+    "text", "container", "html_fragment",
   ]) {
     assert.ok(isKnownComponentType(type), `expected ${type} to be known`);
   }

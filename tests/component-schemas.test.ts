@@ -18,12 +18,11 @@ test("every catalogued type has a prop schema and vice versa", () => {
 test("component schemas cover every known component type", () => {
   const expected = [
     "hero", "navbar", "card_grid", "card", "cta", "footer", "text_section",
-    "feature_list", "button", "stats", "pricing", "testimonial", "banner",
-    "timeline", "faq", "form", "image", "tabs", "accordion", "carousel",
+    "feature_list", "button", "stats", "pricing", "testimonial", "timeline", "faq", "form", "image", "tabs", "accordion", "carousel",
     "sidebar", "breadcrumb", "pagination", "progress", "badge",
     "avatar", "input", "grid", "table", "alert", "tooltip", "bento_grid",
     "skeleton", "glass_card", "marquee",
-    "feature_grid", "text", "section", "container", "html_fragment",
+    "feature_grid", "text", "container", "html_fragment",
   ];
   assert.equal(expected.length, COMPONENT_TYPES.size, "expected list must cover the whole catalog");
   for (const type of [...expected].sort()) {

@@ -38,3 +38,5 @@ examples/variant-audit.html
 # Environment
 .env
 .env.local
+# Transient commit-message drafts
+.commit-msg*.txt

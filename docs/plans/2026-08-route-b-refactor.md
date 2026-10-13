@@ -2,7 +2,10 @@
 
 > **状态：已完成并验证（2026-08）。**
 >
-> | 指标 | 重构前 | 重构后 |
+> 下表的「重构后」一列记录的是**重构完成当时**的数字。此后又经过三轮改动
+> （组件目录裁剪、死代码清理、DSH 集成），当前实际数字见每张表下方的补充说明。
+>
+> | 指标 | 重构前 | 重构后（当时） |
 > |---|---|---|
 > | MCP 工具 | 82 | **41**（注册集合 == `design_list_capabilities` 清单，测试强制） |
 > | REST 端点 | 93 | **0** |
@@ -12,14 +15,23 @@
 > | `src/` 行数 | ~30.4k | **~12.7k** |
 > | 测试文件 / 用例 | 46 个文件（571 用例） | **20 个文件（176 用例，全绿）** |
 >
-> 验证方式：`npm run build` ✅、`npm run lint` ✅、`npm test` ✅ 176/176、
-> `npm run smoke`（真实 stdio 握手：41 工具 / 4 resource / 3 prompt）✅。
+> **当前实际数字（2026-08 后续改动之后）**：
+> - MCP 工具 **42**（新增 `design_preview_sync`，用于实时预览产物）
+> - 组件类型 **38**（由 45 再裁剪：移除在静态导出中无意义或与其它类型重复的条目）
+> - 测试 **166 用例 / 18 套件**（删除了随死代码一起失效的 4 个测试文件，
+>   新增变更路径、组件契约、模板与主题、变体 CSS 等守卫测试）
+> - `src/` **39 个文件 / ~11.0k 行**（删除了 606 行布局几何层死代码）
+> - 另有 `dsh-plugin/`：DSH bundle（MCP 连接 + 实时预览面板）
+>
+> 验证方式：`npm run build` ✅、`npm run lint` ✅、`npm test` ✅、
+> `npm run smoke`（真实 stdio 握手）✅。CI 与 pre-push 均包含 smoke。
 >
 > 与本节下方原始计划的差异（计划 → 实际）：
-> - 工具数由 22 变为 **41**：实现时保留了五套页面模板（`design_apply_template`）、
->   18 个会话工具、3 个持久化工具与 `design_semantic_style`；
->   删除 `design_list_components` / `design_list_pages`（`design_get_state` 已覆盖）。
-> - 组件类型由 55 收敛到 **45**：移除了 6 个画布绘制残留类型
+> - 工具数由 22 变为 **41**（此后为 42）：实现时保留了五套页面模板
+>   （`design_apply_template`）、18 个会话工具、3 个持久化工具与
+>   `design_semantic_style`；删除 `design_list_components` / `design_list_pages`
+>   （`design_get_state` 已覆盖）。
+> - 组件类型由 55 收敛到 **45**（此后为 38）：移除了 6 个画布绘制残留类型
 >   （`rect`/`ellipse`/`arrow`/`line`/`note`/`connector`）与 4 个盒子模式类型
 >   （`chart`/`echarts`/`rich_text`/`editor`）——两者都无法被导出器有意义地渲染。
 > - `design_render_preview` 的 PNG 路径改为**可选**：Playwright 不再是依赖。
@@ -35,7 +47,8 @@
 >
 > **文档清理（同一轮）**：`DESIGN.md`、`PRD.md`、`prism-product-definition-v2.md`、
 > `docs/archive/*`（7 份）与三个 V2.0 计划全部删除——它们描述的是已移除的形态、
-> 且与代码脱节。现在仓库只保留 `README.md` 与本文件两份文档。
+> 且与代码脱节。现在仓库的文档是：`README.md` 与其中文版 `README.zh-CN.md`、
+> `docs/dsh-integration.md` 与其中文版 `docs/dsh-integration.zh-CN.md`、以及本文件。
 
 > 原始基线：`npm run build` 通过，`npm test` **571 通过 / 0 失败**（重构前）。
 

@@ -5,15 +5,18 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
 [![MCP](https://img.shields.io/badge/MCP-stdio-purple.svg)](https://modelcontextprotocol.io/)
 
+**中文文档：[README.zh-CN.md](./README.zh-CN.md)**
+
 **An MCP server for design work.** Give an AI agent the ability to generate design
-tokens, assemble a page from 45 component types, review it for accessibility and
+tokens, assemble a page from 38 component types, review it for accessibility and
 design quality, and export it as code or tokens.
 
-- **41 tools**, 4 resources, 3 prompts over **stdio**
-- **45 component types** with validated Zod prop schemas
+- **42 tools**, 4 resources, 3 prompts over **stdio**
+- **38 component types** with validated Zod prop schemas
 - **Export** to HTML, React, Vue, React-TS, Svelte, CSS, presentation, Flutter, SwiftUI
 - **Tokens** in DTCG, CSS custom properties, Style Dictionary, Figma Tokens, Tailwind v4 `@theme`, DESIGN.md
 - **Sessions** are stateful and persisted: save/load a project as `.prism.json`
+- **Live preview**: one stable artifact a viewer can follow (`design_preview_sync`), plus a DeepSeek Harness panel
 - **No dashboard, no HTTP server, no external APIs.** Exported pages are self-contained (pure CSS animation, no CDN runtime)
 
 ---
@@ -51,7 +54,7 @@ The agent will call `design_init` → `design_add_component` → `design_audit_a
 ### Verify the server
 
 ```bash
-node smoke-mcp.mjs    # spawns dist/index.js, handshakes, lists tools/resources/prompts
+npm run smoke    # spawns dist/index.js, handshakes, lists tools/resources/prompts
 ```
 
 ---
@@ -132,21 +135,26 @@ also installs a preview panel in the Harness Sidebar.
 
 ## Component types
 
-45 types the exporter can render. Values are validated by
-`src/component-schemas.ts` (unknown keys pass through, missing keys are tolerant).
+38 types the exporter can render. Values are validated by
+`src/component-schemas.ts` (unknown keys pass through, missing keys are tolerant);
+a test asserts the schema map and the catalog list the same types.
 
-`hero` · `navbar` · `card_grid` · `card` · `cta` · `footer` · `text_section` ·
-`feature_list` · `stats` · `pricing` · `testimonial` · `banner` · `timeline` ·
-`faq` · `form` · `image` · `button` · `tabs` · `accordion` · `carousel` ·
-`modal` · `sidebar` · `breadcrumb` · `pagination` · `progress` · `badge` ·
-`avatar` · `input` · `grid` · `table` · `alert` · `tooltip` · `toggle` ·
-`bento_grid` · `skeleton` · `command_palette` · `glass_card` · `fab` ·
-`marquee` · `feature_grid` · `cookie_banner` · `text` · `section` ·
-`container` · `html_fragment`
+`accordion` · `alert` · `avatar` · `badge` · `bento_grid` · `breadcrumb` · `button` ·
+`card` · `card_grid` · `carousel` · `container` · `cta` · `faq` · `feature_grid` ·
+`feature_list` · `footer` · `form` · `glass_card` · `grid` · `hero` ·
+`html_fragment` · `image` · `input` · `marquee` · `navbar` · `pagination` ·
+`pricing` · `progress` · `sidebar` · `skeleton` · `stats` · `table` · `tabs` ·
+`testimonial` · `text` · `text_section` · `timeline` · `tooltip`
+
+Two of them are produced by the store rather than typed by hand: `text` comes from
+`promoteElementToComponent`, and `container` from `groupComponents`. `items` is the
+canonical list prop for every list-bearing type (`links` / `plans` / `tabs` /
+`slides` are accepted aliases), and `design_add_component` warns instead of silently
+rendering an empty component when the list is missing or is not an array.
 
 `html_fragment` is how imported HTML is represented: an imported page becomes
 faithful regions (header / nav / main / footer / section-N / content) that keep
-the original CSS, and `demo`-style edits are written back through
+the original CSS, and edits are written back through
 `applyHtmlFragmentsToDocument` with head and scripts preserved.
 
 ---
@@ -172,7 +180,7 @@ the exported files you ask for.
 ```
 ┌──────────────┐   stdio (MCP)   ┌────────────────────────────────────────┐
 │  MCP client  │ ◄─────────────► │  src/index.ts                          │
-│  (agent)     │                 │   ├─ McpServer: 41 tools               │
+│  (agent)     │                 │   ├─ McpServer: 42 tools               │
 └──────────────┘                 │   ├─ 4 resources · 3 prompts           │
                                  │   └─ DesignStateStore (in-memory + disk)│
                                  └────────────────────────────────────────┘
@@ -181,22 +189,30 @@ the exported files you ask for.
 One mutation path: every tool calls `design-service`, which calls
 `DesignStateStore`. Undo/redo, activity logging, conflict detection and the
 export pipeline all hang off that single store, so no two tools can disagree
-about state.
+about state. This is enforced: `tests/mutation-path.test.ts` fails if a tool
+reaches past the service to a store mutator, which is what keeps the component
+type allowlist, the prop schemas and the token-category check from being bypassed.
 
 ```
 src/
 ├── index.ts              # MCP registration + stdio bootstrap
 ├── state.ts              # DesignStateStore: state, undo/redo, mutators
-├── service/design-service.ts  # shared mutation layer + input validation
-├── component-schemas.ts  # per-type Zod prop schemas (45)
-├── tools/                # 41 tool registrations, one module per area
-├── tokens.ts + tokens/dtcg.ts # token generation and interop
-├── layout-engine.ts, layout/  # server-side page composition and tidy-up
+├── service/design-service.ts  # the only mutation path + input validation
+├── component-schemas.ts  # per-type Zod prop schemas + the list-prop contract
+├── tools/                # one module per area (design-tools, design-preview, …)
+├── tokens.ts + tokens/dtcgi.ts # token generation and interop
+├── layout/snap.ts        # grid snapping used by snapComponentsToGrid
 ├── import-project.ts     # HTML → html_fragment regions → back again
 ├── semantics.ts          # adjective → token deltas
 ├── project-store.ts      # .prism.json persistence + autosave
 └── resources/, prompts/  # MCP context surfaces
+
+dsh-plugin/               # DeepSeek Harness bundle (MCP connection + preview panel)
 ```
+
+The geometry layer (a layout engine, a tidy-up pass, and an auto-layout pass) was
+removed: exports are CSS flow layout and never read `layout` coordinates, so
+nothing consumed it.
 
 ---
 
@@ -210,18 +226,33 @@ npm run lint     # eslint
 npm run check    # lint + test
 ```
 
-The test suite is 176 tests covering the state store, service layer, all 41 tool
-contracts, component schemas, the export formats, token interop, layout, and
-HTML import fidelity. Two contract tests are worth knowing about:
+The test suite is 166 tests over 18 suites, covering the state store, the service
+layer, all 42 tool contracts, component schemas, the export formats, token interop,
+and HTML import fidelity. Three contract tests are worth knowing about:
 
 - `tests/tools.test.ts` — the registered tool set must equal the
   `design_list_capabilities` manifest, every tool must accept its documented
   parameters and respond.
-- `tests/service.test.ts` — the component allowlist and the transport-agnostic
-  mutation schema.
+- `tests/mutation-path.test.ts` — no tool may call a `DesignStateStore` mutator
+  directly; the service's validation must not be bypassable.
+- `tests/component-schemas.test.ts` — the prop-schema map and the component
+  catalog must list exactly the same types.
 
-`.githooks/pre-push` runs `npm run lint && npm test`; install it with
-`npm run hooks:install`.
+`.githooks/pre-push` runs `npm run lint && npm test && npm run smoke`; install it
+with `npm run hooks:install`. CI runs the same plus a dependency audit.
+
+### Reproducible audits
+
+Three scripts check properties that unit tests cannot, and each regenerates what
+it needs:
+
+| Script | What it proves |
+|---|---|
+| `npm run smoke` | The server starts over real stdio, handshakes, and registers the expected surface |
+| `node audit-rendered-css.mjs` | Every variant class an export emits actually has a CSS rule that takes effect in a browser |
+| `node verify-components.mjs` | The reworked components behave (tabs switch, tooltip hides until hover, marquee animates, carousel scrolls) |
+
+These need `playwright` (a devDependency) and a cached Chromium.
 
 ---
 
@@ -236,13 +267,18 @@ drifted from the code (much of the documentation described features that had bee
 deleted, and the capability manifest advertised tools that were never registered).
 
 The refactor is recorded in [`docs/plans/2026-08-route-b-refactor.md`](./docs/plans/2026-08-route-b-refactor.md).
-
 The earlier narrative documents (`DESIGN.md`, `PRD.md`,
 `prism-product-definition-v2.md`, `docs/archive/*`, and the dated V2.0 plans)
 described that removed product and had drifted out of sync with the code, so they
-were deleted rather than left to mislead. This README and
-`docs/plans/2026-08-route-b-refactor.md` are the only product documentation that
-remains; `src/` is the source of truth.
+were deleted rather than left to mislead. What remains is this README, its
+[Chinese translation](./README.zh-CN.md), the
+[DeepSeek Harness integration guide](./docs/dsh-integration.md), and the refactor
+plan; `src/` is the source of truth.
+
+Two later cleanups happened after that refactor and are worth knowing about:
+the component catalog was trimmed from 45 to 38 types (removing entries that
+either could not do anything meaningful in a static export, or duplicated another
+type), and the dead layout geometry layer was deleted.
 
 ## License
 

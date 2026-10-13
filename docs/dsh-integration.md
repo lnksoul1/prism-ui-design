@@ -1,5 +1,7 @@
 # Prism in DeepSeek Harness
 
+**中文文档：[dsh-integration.zh-CN.md](./dsh-integration.zh-CN.md)**
+
 Prism is an MCP server, and DSH ships an MCP client, so this integration is a
 configuration-only bundle plus one small UI panel. The bundle lives in
 [`dsh-plugin/`](../dsh-plugin/).

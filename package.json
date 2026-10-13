@@ -1,51 +1,43 @@
 {
   "name": "ui-design-mcp-server",
-  "version": "1.1.0",
-  "description": "Prism — a visual UI/UX adjustment surface for non-designers: import your website/app, precisely adjust any component or its inner parts on a freeform canvas, then apply the changes back with one click (MCP + dashboard + Electron desktop app)",
+  "version": "2.0.0",
+  "description": "Prism — an MCP server for design work: generate design tokens, assemble pages from 40 component types, review them for accessibility and quality, and export to HTML/React/Vue/Svelte/CSS or DTCG tokens. Stdio-only, no dashboard.",
   "type": "module",
-  "main": "electron/main.cjs",
+  "main": "dist/index.js",
+  "bin": {
+    "prism-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
-    "app": "npm run build && electron .",
-    "app:package": "electron-builder --dir",
     "build": "tsc",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true}); require('fs').rmSync('.test-build',{recursive:true,force:true})\"",
     "lint": "eslint .",
-    "format": "prettier --write .",
+    "smoke": "npm run build && node scripts/smoke-mcp.mjs",
     "check": "npm run lint && npm test",
-    "test:e2e": "playwright test tests/e2e",
     "hooks:install": "git config core.hooksPath .githooks",
     "hooks:uninstall": "git config --unset core.hooksPath",
-    "test": "npm run build && tsc -p tsconfig.tests.json && node --test .test-build/tests/state.test.js .test-build/tests/tokens.test.js .test-build/tests/tools.test.js .test-build/tests/service.test.js .test-build/tests/component-schemas.test.js .test-build/tests/project-store.test.js .test-build/tests/token-interop.test.js .test-build/tests/audit.test.js .test-build/tests/render.test.js .test-build/tests/versions.test.js .test-build/tests/design-md.test.js .test-build/tests/semantics.test.js .test-build/tests/webpage-import.test.js .test-build/tests/design-review.test.js .test-build/tests/exports.test.js .test-build/tests/collab-platform.test.js .test-build/tests/prompt-executor.test.js .test-build/tests/explain.test.js .test-build/tests/llm.test.js .test-build/tests/electron.test.js .test-build/tests/apply.test.js .test-build/tests/writeback.test.js .test-build/tests/server.test.js .test-build/tests/animations.test.js .test-build/tests/upgrade-modules.test.js .test-build/tests/design-library.test.js .test-build/tests/layout-engine.test.js .test-build/tests/responsive.test.js .test-build/tests/responsive-routes.test.js .test-build/tests/token-usage.test.js .test-build/tests/versions-patch.test.js .test-build/tests/batch.test.js .test-build/tests/layout-snap.test.js .test-build/tests/layout-tidy.test.js .test-build/tests/box-mode.test.js .test-build/tests/llm-stream.test.js .test-build/tests/collab-server.test.js .test-build/tests/collab-flatten.test.js .test-build/tests/collab-bridge.test.js .test-build/tests/comments.test.js .test-build/tests/action-flow.test.js .test-build/tests/page-links.test.js .test-build/tests/code-sync.test.js .test-build/tests/prompt-brief.test.js .test-build/tests/page-constraints.test.js .test-build/tests/edit.test.js"
+    "test": "npm run build && tsc -p tsconfig.tests.json && node --test \".test-build/tests/*.test.js\""
   },
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
-    "@babel/parser": "^8.0.4",
     "@modelcontextprotocol/sdk": "^1.6.1",
-    "express": "^4.21.2",
-    "fast-json-patch": "^3.1.1",
     "js-yaml": "^5.2.3",
-    "lib0": "^0.2.117",
-    "recast": "^0.24.0",
-    "ws": "^8.18.0",
-    "y-protocols": "^1.0.7",
-    "yjs": "^13.6.32",
     "zod": "^3.23.8"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@playwright/test": "^1.62.1",
-    "@types/express": "^5.0.0",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.10.0",
-    "@types/ws": "^8.5.13",
-    "electron": "^43.4.0",
     "eslint": "^10.8.1",
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.11.0",
+    "playwright": "^1.64.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "typescript-eslint": "^8.67.0"

@@ -1,5 +1,5 @@
 /**
- * Accessibility audit tool (improvement plan B2).
+ * Accessibility audit tool.
  *
  * Evaluates the current design against a pragmatic WCAG-oriented rule set:
  * color contrast (AA/AAA), image alt text, form labels, accessible names for
@@ -164,7 +164,7 @@ export function auditDesign(level: "AA" | "AAA" = "AA"): {
   }
 
   // --- WCAG 2.2 target size (advisory: measurable in rendered output) ---
-  const interactive = components.filter((c) => ["button", "cta", "navbar", "fab", "toggle"].includes(c.type));
+  const interactive = components.filter((c) => ["button", "cta", "navbar", "input"].includes(c.type));
   if (interactive.length > 0) {
     findings.push({
       rule: "target-size",

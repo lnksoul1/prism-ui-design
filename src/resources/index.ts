@@ -1,5 +1,5 @@
 /**
- * MCP Resources (improvement plan B4).
+ * MCP Resources: design context an agent can read without a tool call.
  *
  * Resources give agents structured context about the current design without
  * requiring a tool call: active tokens, the component catalog, the audit

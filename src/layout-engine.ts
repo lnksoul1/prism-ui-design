@@ -1,5 +1,5 @@
 /**
- * Server-side smart canvas layout engine (DESIGN.md v1.1 §5.1).
+ * Server-side page layout engine.
  *
  * The canvas is a single streaming column: components are laid out vertically
  * with `x = 16`, `y = cursor`, `w = containerWidth - 32` and `gap = 16`.
@@ -7,7 +7,7 @@
  * re-layout until "auto arrange" is invoked again.
  */
 
-import type { ComponentNode, ComponentLayout } from "./state.js";
+import type { ComponentNode } from "./state.js";
 
 export const FLOW_X = 16;
 export const FLOW_GAP = 16;
@@ -134,12 +134,3 @@ export function autoLayoutTopLevel(
 }
 
 /** Apply auto-layout to every page in the state pages list. */
-export function autoLayoutPages(
-  pages: Array<{ id: string; name: string; components: ComponentNode[] }>,
-  platform?: string
-): void {
-  const containerWidth = containerWidthForPlatform(platform);
-  for (const page of pages) {
-    ensureTopLevelLayouts(page.components, containerWidth);
-  }
-}

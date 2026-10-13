@@ -1,14 +1,15 @@
 /**
- * Visual verification loop (improvement plan B1 / functional plan F5).
+ * Visual verification loop.
  *
  * `design_render_preview` always returns the standalone HTML of the current
- * design. When Playwright + Chromium are installed (optional dependency) it
- * also renders a PNG screenshot so the AI agent can see its own output.
+ * design. If the optional `playwright` package is present it also writes a PNG
+ * screenshot next to the previews so an agent can look at its own output; when
+ * it is absent the tool still succeeds and explains how to enable screenshots.
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { mkdirSync, writeFileSync } from "fs";
+import { mkdirSync } from "fs";
 import path from "path";
 import { exportDesign } from "./design-tools.js";
 
@@ -18,6 +19,7 @@ const VIEWPORTS: Record<string, { width: number; height: number; label: string }
   mobile: { width: 390, height: 844, label: "Mobile" },
 };
 
+/** Directory for rendered previews (`PRISM_PREVIEWS_DIR` or `<cwd>/.prism-previews`). */
 export function previewsDir(): string {
   const dir = process.env.PRISM_PREVIEWS_DIR || path.join(process.cwd(), ".prism-previews");
   mkdirSync(dir, { recursive: true });
@@ -25,7 +27,7 @@ export function previewsDir(): string {
 }
 
 async function renderPng(html: string, viewport: { width: number; height: number }, outFile: string): Promise<void> {
-  // Optional dependency: installed with `npm i -D playwright && npx playwright install chromium`.
+  // Optional dependency: `npm i -D playwright && npx playwright install chromium`.
   const { chromium } = (await import("playwright" as string)) as {
     chromium: {
       launch(): Promise<{
@@ -42,65 +44,6 @@ async function renderPng(html: string, viewport: { width: number; height: number
     const page = await browser.newPage({ viewport: { width: viewport.width, height: viewport.height } });
     await page.setContent(html, { waitUntil: "networkidle" });
     await page.screenshot({ path: outFile, fullPage: false });
-  } finally {
-    await browser.close();
-  }
-}
-
-/**
- * Render the given HTML to a PNG buffer with Playwright.
- * Throws when Playwright/Chromium are unavailable (callers degrade gracefully).
- */
-export async function renderHtmlToPng(
-  html: string,
-  viewportName: string = "desktop"
-): Promise<Buffer> {
-  const viewport = VIEWPORTS[viewportName] || VIEWPORTS.desktop;
-  const { chromium } = (await import("playwright" as string)) as {
-    chromium: {
-      launch(): Promise<{
-        newPage(options?: { viewport?: { width: number; height: number } }): Promise<{
-          setContent(html: string, options?: { waitUntil?: string }): Promise<void>;
-          screenshot(options?: { fullPage?: boolean }): Promise<Buffer>;
-        }>;
-        close(): Promise<void>;
-      }>;
-    };
-  };
-  const browser = await chromium.launch();
-  try {
-    const page = await browser.newPage({ viewport: { width: viewport.width, height: viewport.height } });
-    await page.setContent(html, { waitUntil: "networkidle" });
-    return await page.screenshot({ fullPage: false });
-  } finally {
-    await browser.close();
-  }
-}
-
-/**
- * Open a live URL in headless Chromium and return a PNG buffer of the page.
- * Throws when Playwright/Chromium are unavailable.
- */
-export async function captureUrlPng(url: string, viewportName: string = "desktop"): Promise<Buffer> {
-  const viewport = VIEWPORTS[viewportName] || VIEWPORTS.desktop;
-  const { chromium } = (await import("playwright" as string)) as {
-    chromium: {
-      launch(): Promise<{
-        newPage(options?: { viewport?: { width: number; height: number } }): Promise<{
-          goto(url: string, options?: { waitUntil?: string; timeout?: number }): Promise<unknown>;
-          waitForTimeout(ms: number): Promise<void>;
-          screenshot(options?: { fullPage?: boolean }): Promise<Buffer>;
-        }>;
-        close(): Promise<void>;
-      }>;
-    };
-  };
-  const browser = await chromium.launch();
-  try {
-    const page = await browser.newPage({ viewport: { width: viewport.width, height: viewport.height } });
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20000 });
-    await page.waitForTimeout(600);
-    return await page.screenshot();
   } finally {
     await browser.close();
   }

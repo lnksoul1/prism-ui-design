@@ -1,19 +1,23 @@
 /**
- * Self-describing capability manifest (functional plan F3 #3).
+ * Self-describing capability manifest.
  *
  * `design_list_capabilities` returns a JSON manifest of every tool, resource,
- * prompt, component type, template, style guide, and semantic adjective so an
- * agent can drive the server without scraping help texts.
+ * prompt, component type and semantic adjective so an agent can drive the server
+ * without scraping help texts.
+ *
+ * INVARIANT (route B refactor): this manifest must list **exactly** the tools
+ * that `src/index.ts` registers 鈥?no more, no fewer. `tests/tools.test.ts`
+ * asserts the two sets are equal, so the manifest can never silently drift from
+ * the registry again (it previously advertised three unregistered tools).
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { SERVER_NAME, SERVER_VERSION } from "../constants.js";
 import { COMPONENT_TYPES } from "../service/design-service.js";
-import { listDesignComponents, listDesignStyles } from "../design-library.js";
 import { adjectiveCatalog } from "./semantic-tools.js";
 
 const TOOL_MANIFEST: Array<{ name: string; group: string; summary: string; example: string }> = [
-  // Generation
+  // ===== Generation: stateless token/asset generators =====
   { name: "ui_generate_color_palette", group: "generation", summary: "Color theory palette generation (6 harmony schemes)", example: 'ui_generate_color_palette(base_color="#2563EB", scheme="complementary")' },
   { name: "ui_suggest_typography", group: "generation", summary: "Curated font pairings with Google Fonts links", example: 'ui_suggest_typography(style="minimal")' },
   { name: "ui_generate_type_scale", group: "generation", summary: "Modular type scale", example: 'ui_generate_type_scale(base_size=16, ratio="perfect_fourth")' },
@@ -23,98 +27,48 @@ const TOOL_MANIFEST: Array<{ name: string; group: string; summary: string; examp
   { name: "ui_check_color_contrast", group: "generation", summary: "WCAG contrast check", example: 'ui_check_color_contrast(foreground="#333", background="#FFF")' },
   { name: "ui_generate_gradient", group: "generation", summary: "CSS gradient generator", example: 'ui_generate_gradient(base_color="#6366F1", type="linear")' },
   { name: "ui_suggest_breakpoints", group: "generation", summary: "Responsive breakpoint systems", example: 'ui_suggest_breakpoints(framework="tailwind")' },
-  { name: "ui_generate_design_tokens", group: "generation", summary: "Complete design token system", example: 'ui_generate_design_tokens(style="minimal")' },
-  // Design operations
-  { name: "design_init", group: "design", summary: "Initialize project + style preset + tokens", example: 'design_init(project_name="Summer Sale", style="bold")' },
-  { name: "design_add_component", group: "design", summary: "Add a component to the canvas", example: 'design_add_component(type="hero", variant="centered", props={title:"Hi"})' },
-  { name: "design_update_component", group: "design", summary: "Update component props", example: 'design_update_component(id="comp_x", props={title:"New"})' },
-  { name: "design_rename_component", group: "design", summary: "Rename a component's layer (shown in the layers panel)", example: 'design_rename_component(component_id="comp_x", name="Hero 主标题")' },
-  { name: "design_remove_component", group: "design", summary: "Remove a component", example: 'design_remove_component(id="comp_x")' },
-  { name: "design_set_animation", group: "design", summary: "Set entry/hover animation", example: 'design_set_animation(component_id="comp_x", entry="fadeUp")' },
-  { name: "design_set_token", group: "design", summary: "Set a single design token", example: 'design_set_token(category="colors", key="color-primary", value="#FF5733")' },
-  { name: "design_get_state", group: "design", summary: "Full design state", example: "design_get_state()" },
-  { name: "design_undo", group: "design", summary: "Undo last operation", example: "design_undo()" },
-  { name: "design_redo", group: "design", summary: "Redo an undone operation", example: "design_redo()" },
-  { name: "design_add_page", group: "design", summary: "Add a page", example: 'design_add_page(name="About")' },
-  { name: "design_switch_page", group: "design", summary: "Switch current page", example: 'design_switch_page(page_id="page_x")' },
-  { name: "design_remove_page", group: "design", summary: "Remove a page", example: 'design_remove_page(page_id="page_x")' },
-  { name: "design_apply_template", group: "design", summary: "Apply a built-in page template", example: 'design_apply_template(template="saas_landing")' },
-  { name: "design_export", group: "design", summary: "Export design as code", example: 'design_export(format="html")' },
-  { name: "design_reorder_component", group: "design", summary: "Reorder components", example: 'design_reorder_component(from_id="a", to_id="b", position="before")' },
-  { name: "design_set_theme", group: "design", summary: "Light/dark theme", example: 'design_set_theme(mode="dark")' },
-  { name: "design_get_conflicts", group: "design", summary: "Token contrast conflicts", example: "design_get_conflicts()" },
-  { name: "design_check_prompts", group: "design", summary: "Read pending user prompts", example: "design_check_prompts()" },
-  // Persistence & templates
-  { name: "design_save_project", group: "persistence", summary: "Save project to disk", example: 'design_save_project(name="Landing")' },
-  { name: "design_load_project", group: "persistence", summary: "Load a project file", example: 'design_load_project(file="path.prism.json")' },
-  { name: "design_list_projects", group: "persistence", summary: "List saved projects", example: "design_list_projects()" },
-  { name: "design_save_template", group: "persistence", summary: "Save current design as template", example: 'design_save_template(name="Pricing Page")' },
-  { name: "design_load_template", group: "persistence", summary: "Load a saved template", example: 'design_load_template(file="t.prism-template.json")' },
-  { name: "design_list_templates", group: "persistence", summary: "List saved templates", example: "design_list_templates()" },
-  // Versions
-  { name: "design_create_version", group: "versioning", summary: "Snapshot current design", example: 'design_create_version(name="v1")' },
-  { name: "design_list_versions", group: "versioning", summary: "List version snapshots", example: "design_list_versions()" },
-  { name: "design_restore_version", group: "versioning", summary: "Restore a version", example: 'design_restore_version(version_id="ver_x")' },
-  { name: "design_diff_versions", group: "versioning", summary: "Diff two versions", example: 'design_diff_versions(from_id="a", to_id="b")' },
-  // Interop & quality
-  { name: "design_export_tokens", group: "interop", summary: "Export tokens (DTCG/CSS/Style Dictionary/Figma Tokens/DESIGN.md)", example: 'design_export_tokens(format="dtcg")' },
-  { name: "design_import_tokens", group: "interop", summary: "Import DTCG tokens", example: 'design_import_tokens(tokens_json="{...}")' },
-  { name: "design_import_design_md", group: "interop", summary: "Import Google DESIGN.md tokens", example: 'design_import_design_md(markdown="---...")' },
-  { name: "design_audit_accessibility", group: "quality", summary: "WCAG-oriented accessibility audit", example: 'design_audit_accessibility(level="AA")' },
-  { name: "design_render_preview", group: "quality", summary: "Render design as HTML/PNG", example: 'design_render_preview(viewport="desktop")' },
-  { name: "design_import_webpage", group: "interop", summary: "Import a webpage URL/HTML as components", example: 'design_import_webpage(url="https://example.com")' },
-  // Semantic & style guides
-  { name: "design_semantic_style", group: "semantics", summary: "Adjective → token semantic mapping", example: 'design_semantic_style(description="温暖落地页", adjectives=["温暖","简约"])' },
-  { name: "design_list_design_library", group: "design-library", summary: "List the unified design library (24 styles, 117 components, term templates)", example: "design_list_design_library()" },
-  { name: "design_apply_design_style", group: "design-library", summary: "Apply a design-library style by id", example: 'design_apply_design_style(style_id="glassmorphism")' },
-  { name: "design_list_capabilities", group: "meta", summary: "Self-describing capability manifest", example: "design_list_capabilities()" },
-  // Spec §8.2 alignment
-  { name: "design_list_components", group: "design", summary: "List components on the current page", example: "design_list_components()" },
-  { name: "design_list_pages", group: "design", summary: "List all pages", example: "design_list_pages()" },
-  { name: "design_set_project_name", group: "design", summary: "Rename the project", example: 'design_set_project_name(name="Landing")' },
-  { name: "design_get_tokens", group: "interop", summary: "Get current tokens (DTCG JSON)", example: 'design_get_tokens(category="colors")' },
-  { name: "design_set_token_batch", group: "interop", summary: "Batch-set tokens in a category", example: 'design_set_token_batch(category="colors", tokens={"color-primary":"#FF0000"})' },
-  { name: "design_delete_token", group: "interop", summary: "Delete a single token", example: 'design_delete_token(category="colors", key="color-primary")' },
-  // Design review
-  { name: "design_suggest_improvements", group: "review", summary: "Heuristic design review with actionable suggestions", example: "design_suggest_improvements()" },
-  { name: "design_create_brand_style", group: "review", summary: "Learn a brand style from its colors", example: 'design_create_brand_style(name="Acme", colors=["#3366FF","#FF5733"])' },
-  { name: "design_reflow", group: "review", summary: "Reorder page into canonical section order", example: "design_reflow()" },
-  { name: "design_auto_improve", group: "review", summary: "Apply common structural fixes (tokens/navbar/hero/footer)", example: "design_auto_improve()" },
-  { name: "design_set_platform", group: "design", summary: "Set the preview platform", example: 'design_set_platform(platform="mobile-ios")' },
-  // C2 platform snapshots
-  { name: "design_save_platform", group: "design", summary: "Save current pages as a platform design", example: 'design_save_platform(platform="mobile-ios")' },
-  { name: "design_load_platform", group: "design", summary: "Restore a platform design", example: 'design_load_platform(platform="mobile-ios")' },
-  { name: "design_list_platforms", group: "design", summary: "List saved platform designs", example: "design_list_platforms()" },
-  // C5 comments
-  { name: "design_add_comment", group: "collaboration", summary: "Attach a review comment to a component", example: 'design_add_comment(component_id="comp_x", text="按钮对比度偏低", author="designer")' },
-  { name: "design_list_comments", group: "collaboration", summary: "List review comments", example: "design_list_comments()" },
-  { name: "design_remove_comment", group: "collaboration", summary: "Remove a comment", example: 'design_remove_comment(comment_id="cmt_x")' },
-  // C6 one-shot generation
-  { name: "design_generate_page", group: "semantics", summary: "Generate a page from a brief (template + semantic style)", example: 'design_generate_page(brief="电商促销首页", adjectives=["温暖","简约"])' },
-  { name: "design_review_and_improve", group: "review", summary: "One-call review loop: score, fix, re-score + a11y audit", example: "design_review_and_improve()" },
-  // Non-professional UX
-  { name: "design_explain_design", group: "semantics", summary: "Explain the current design in plain language + suggest follow-up instructions", example: 'design_explain_design(lang="zh")' },
-  
-  { name: "design_apply_design_component", group: "design-library", summary: "Add a design-library component, or replace an existing component in place", example: 'design_apply_design_component(component_id="hero_split", target_id="comp_5")' },
-  
-  { name: "design_align_components", group: "design", summary: "Align/distribute multiple components (freeform, single undo step)", example: 'design_align_components(ids=["comp_1","comp_2"], mode="center_x")' },
-  { name: "design_z_order_component", group: "design", summary: "Reorder component stacking (front/back/forward/backward)", example: 'design_z_order_component(component_id="comp_x", mode="front")' },
-  // Upgrade plan U1: Lenis smooth scroll + GSAP animation engine
-  { name: "design_set_scroll", group: "upgrade", summary: "Configure scroll mode (native/smooth/lenis-gsap)", example: 'design_set_scroll(mode="lenis-gsap")' },
-  { name: "design_get_scroll", group: "upgrade", summary: "Read current scroll config", example: "design_get_scroll()" },
-  { name: "design_scroll_to", group: "upgrade", summary: "Register scroll-to target/anchor", example: 'design_scroll_to(target_id="hero", offset=0)' },
-  { name: "design_list_animation_engines", group: "upgrade", summary: "List animation engines (css/gsap) + presets", example: "design_list_animation_engines()" },
-  { name: "design_preview_animation", group: "upgrade", summary: "Preview an animation preset as standalone HTML", example: 'design_preview_animation(name="fadeUp")' },
-  { name: "design_set_scroll_trigger", group: "upgrade", summary: "Bind GSAP ScrollTrigger to a component", example: 'design_set_scroll_trigger(component_id="comp_x", start="top center")' },
-  { name: "design_set_export_runtime", group: "upgrade", summary: "Set export runtime level (minimal/standard/full)", example: 'design_set_export_runtime(runtime="full")' },
-  // Upgrade plan U2: Vanta.js 3D backgrounds
-  { name: "design_list_vanta_effects", group: "upgrade", summary: "List the 14 Vanta 3D background effects", example: "design_list_vanta_effects()" },
-  { name: "design_set_vanta_background", group: "upgrade", summary: "Attach a Vanta 3D background to a component", example: 'design_set_vanta_background(component_id="comp_x", effect="waves")' },
-  { name: "design_preview_vanta", group: "upgrade", summary: "Preview a Vanta effect as standalone HTML", example: 'design_preview_vanta(effect="net")' },
-  // Upgrade plan U3: React Bits animated components
-  { name: "design_list_react_bits", group: "upgrade", summary: "List React Bits animated components", example: 'design_list_react_bits(category="text")' },
-  { name: "design_add_react_bits_component", group: "upgrade", summary: "Add a React Bits component to the canvas", example: 'design_add_react_bits_component(name="BlurText", variant="TS-TW")' },
-  { name: "design_get_react_bits_code", group: "upgrade", summary: "Export a React Bits component as code", example: 'design_get_react_bits_code(name="SpotlightCard")' },
+  { name: "ui_generate_design_tokens", group: "generation", summary: "Complete design token system in one call", example: 'ui_generate_design_tokens(style="minimal")' },
+
+  // ===== Session: build a design in the server's state =====
+  { name: "design_init", group: "session", summary: "Initialize a design session with neutral default tokens", example: 'design_init(project_name="Summer Sale", style="bold")' },
+  { name: "design_add_component", group: "session", summary: "Add a component (55 supported types, validated props)", example: 'design_add_component(type="hero", variant="centered", props={title:"Hi"})' },
+  { name: "design_update_component", group: "session", summary: "Update a component's props, layout, visibility or lock", example: 'design_update_component(id="comp_x", props={title:"New"})' },
+  { name: "design_rename_component", group: "session", summary: "Rename a component's layer name", example: 'design_rename_component(component_id="comp_x", name="Hero title")' },
+  { name: "design_remove_component", group: "session", summary: "Remove a component from the current page", example: 'design_remove_component(id="comp_x")' },
+  { name: "design_reorder_component", group: "session", summary: "Reorder components (before/after a sibling)", example: 'design_reorder_component(from_id="a", to_id="b", position="before")' },
+  { name: "design_align_components", group: "session", summary: "Align/distribute components in one undo step", example: 'design_align_components(ids=["comp_1","comp_2"], mode="center_x")' },
+  { name: "design_z_order_component", group: "session", summary: "Reorder stacking (front/back/forward/backward)", example: 'design_z_order_component(component_id="comp_x", mode="front")' },
+  { name: "design_set_token", group: "session", summary: "Set a single design token", example: 'design_set_token(category="colors", key="color-primary", value="#FF5733")' },
+  { name: "design_set_theme", group: "session", summary: "Switch the session between light and dark", example: 'design_set_theme(mode="dark")' },
+  { name: "design_apply_template", group: "session", summary: "Apply one of 5 built-in page templates", example: 'design_apply_template(template="saas_landing")' },
+  { name: "design_add_page", group: "session", summary: "Add a page", example: 'design_add_page(name="About")' },
+  { name: "design_switch_page", group: "session", summary: "Switch the current page", example: 'design_switch_page(page_id="page_x")' },
+  { name: "design_remove_page", group: "session", summary: "Remove a page", example: 'design_remove_page(page_id="page_x")' },
+  { name: "design_get_state", group: "session", summary: "Read the full state (tokens, pages, components, activity)", example: "design_get_state()" },
+  { name: "design_get_conflicts", group: "session", summary: "List token contrast conflicts", example: "design_get_conflicts()" },
+  { name: "design_undo", group: "session", summary: "Undo the last operation", example: "design_undo()" },
+  { name: "design_redo", group: "session", summary: "Redo an undone operation", example: "design_redo()" },
+
+  // ===== Persistence: keep a multi-turn session recoverable =====
+  { name: "design_save_project", group: "persistence", summary: "Save the session to a .prism.json file", example: 'design_save_project(name="Landing")' },
+  { name: "design_load_project", group: "persistence", summary: "Load a session from a .prism.json file", example: 'design_load_project(file="path.prism.json")' },
+  { name: "design_list_projects", group: "persistence", summary: "List saved project files", example: "design_list_projects()" },
+
+  // ===== Review & delivery =====
+  { name: "design_audit_accessibility", group: "quality", summary: "WCAG-oriented accessibility audit with a score", example: 'design_audit_accessibility(level="AA")' },
+  { name: "design_suggest_improvements", group: "quality", summary: "Heuristic design review with actionable suggestions", example: "design_suggest_improvements()" },
+  { name: "design_render_preview", group: "delivery", summary: "Render a standalone HTML preview (PNG when Playwright is installed)", example: 'design_render_preview(viewport="desktop")' },
+  { name: "design_export", group: "delivery", summary: "Export as html/react/vue/react-ts/svelte/css/presentation/flutter/swiftui", example: 'design_export(format="html")' },
+  { name: "design_export_tokens", group: "delivery", summary: "Export tokens as DTCG/CSS/Style Dictionary/Figma Tokens/DESIGN.md/Tailwind", example: 'design_export_tokens(format="dtcg")' },
+  { name: "design_import_tokens", group: "delivery", summary: "Import DTCG tokens (replace / merge strategies)", example: 'design_import_tokens(tokens_json="{...}")' },
+  { name: "design_import_webpage", group: "delivery", summary: "Import a webpage URL or pasted HTML as components", example: 'design_import_webpage(url="https://example.com")' },
+  { name: "design_import_design_md", group: "delivery", summary: "Import tokens from a Google DESIGN.md document", example: 'design_import_design_md(markdown="---...")' },
+
+  // ===== Semantics =====
+  { name: "design_semantic_style", group: "semantics", summary: "Map natural-language adjectives onto measurable token deltas", example: 'design_semantic_style(description="warm landing page", adjectives=["温暖"])' },
+
+  // ===== Meta =====
+  { name: "design_list_capabilities", group: "meta", summary: "This manifest: tools, resources, prompts, component types", example: "design_list_capabilities()" },
 ];
 
 export function registerCapabilitiesTool(server: McpServer): void {
@@ -146,19 +100,13 @@ export function registerCapabilitiesTool(server: McpServer): void {
           ],
           prompts: ["build_page", "design_review", "import_project"],
           component_types: [...COMPONENT_TYPES].sort(),
-          design_library: {
-              source: "https://vibe-hub.org/topics/design",
-              styles: listDesignStyles().map((s) => ({ id: s.id, name: s.name, tags: s.tags })),
-              components: listDesignComponents().map((c) => ({ id: c.id, name: c.name, type: c.type, variant: c.variant, baseId: c.baseId })),
-            },
-          design_library_source: "https://vibe-hub.org/topics/design",
           semantic_adjectives: adjectiveCatalog(),
         };
         return {
           content: [
             {
               type: "text" as const,
-              text: `# Prism Capabilities\n\n${manifest.tool_count} tools · ${manifest.component_types.length} component types · ${manifest.design_library.styles.length} design styles · ${manifest.design_library.components.length} design components · ${manifest.semantic_adjectives.length} semantic adjectives\n\nDesign library source: https://vibe-hub.org/topics/design`,
+              text: `# Prism Capabilities\n\n${manifest.tool_count} tools 路 ${manifest.component_types.length} component types 路 ${manifest.semantic_adjectives.length} semantic adjectives\n\nExported pages are self-contained: no external CDN runtime is injected.`,
             },
           ],
           structuredContent: { success: true, json: manifest },

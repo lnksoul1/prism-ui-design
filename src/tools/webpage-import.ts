@@ -1,5 +1,5 @@
 /**
- * Webpage import (functional plan F1 #2).
+ * Webpage import: fetch a URL or accept pasted HTML.
  *
  * `design_import_webpage` fetches a URL (or accepts pasted HTML) and runs the
  * existing HTML extraction pipeline to produce Prism components.

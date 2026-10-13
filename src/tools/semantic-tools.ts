@@ -1,5 +1,5 @@
 /**
- * Semantic style tool (improvement plan C1):
+ * Semantic style tool:
  *   - design_semantic_style
  */
 
@@ -22,7 +22,7 @@ Args:
   - description (string): Free-form style description (e.g. "看起来专业、温暖的主页")
   - adjectives (string[]): One or more style adjectives (Chinese or English), e.g. ["专业", "温暖"]
   - base_style (string, optional): Style preset to start from (default: current style)
-  - base_color (string, optional): Base hex color (default: preset color)
+  - base_color (string, optional): Hex color to shift from (default: the project's current color-primary, so adjectives adjust your brand color rather than replacing it)
 
 Example:
   design_semantic_style(description="温和的落地页", adjectives=["温暖", "简约"])`,

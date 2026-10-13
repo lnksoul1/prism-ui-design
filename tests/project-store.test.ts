@@ -95,7 +95,6 @@ test("loadProject rejects invalid files", () => {
 test("restoreSnapshot resets undo history and pending prompt", () => {
   stateStore.setProjectName("Snap", "ai");
   const saved = saveProject();
-  stateStore.setPendingPrompt("please change color");
   stateStore.addComponent("button", undefined, { text: "x" }, null, "ai");
   assert.equal(stateStore.canUndo(), true);
 

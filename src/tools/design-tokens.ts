@@ -14,7 +14,6 @@ import {
   FONT_PAIRINGS,
   TYPE_SCALE_RATIOS,
 } from "../constants.js";
-import { formatCssVariables } from "../utils/formatter.js";
 
 export function registerDesignTokensTool(server: McpServer): void {
   server.registerTool(

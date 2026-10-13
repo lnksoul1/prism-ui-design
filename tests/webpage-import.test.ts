@@ -4,9 +4,7 @@ import { stateStore } from "../src/state.js";
 import {
   applyHtmlFragmentsToDocument,
   extractHtmlFragments,
-  importClientUi,
   importHtmlString,
-  splitClientRegions,
 } from "../src/import-project.js";
 
 beforeEach(() => {
@@ -80,46 +78,6 @@ test("importHtmlString wraps loose content into a content fragment (full parse)"
   assert.match(String((comp.props as { html?: string }).html ?? ""), /just text/);
 });
 
-test("importClientUi opens the Prism dashboard shell as html_fragment regions", () => {
-  const result = importClientUi(false);
-  assert.equal(result.pageName, "Prism 客户端 UI");
-  assert.ok(result.pageId.startsWith("page_"));
-  assert.ok(result.imported >= 3, `expected >= 3 region components, got ${result.imported}`);
-  const types = result.components.map((c) => c.type);
-  assert.ok(types.every((t) => t === "html_fragment"), `all html_fragment: ${types}`);
-  const regions = result.components.map((c) => String((c.props as { region?: string }).region ?? ""));
-  for (const expected of ["topbar", "toplib", "main"]) {
-    assert.ok(regions.includes(expected), `expected region ${expected} in ${regions}`);
-  }
-  // 忠实还原：topbar 含真实 logo，toplib 含 13 个 top-lib-tab，
-  // main 保留三栏 flex 布局（left/canvas/right 同容器 → 并排显示）
-  const toplib = result.components.find((c) => (c.props as { region?: string }).region === "toplib");
-  const toplibHtml = String((toplib?.props as { html?: string }).html ?? "");
-  const tabCount = (toplibHtml.match(/class="top-lib-tab"/g) || []).length;
-  assert.equal(tabCount, 13, `expected 13 top-lib-tab, got ${tabCount}`);
-  const topbar = result.components.find((c) => (c.props as { region?: string }).region === "topbar");
-  assert.match(String((topbar?.props as { html?: string }).html ?? ""), /🔮 Prism/);
-  const main = result.components.find((c) => (c.props as { region?: string }).region === "main");
-  const mainHtml = String((main?.props as { html?: string }).html ?? "");
-  assert.ok(mainHtml.includes("main-layout"), "main region keeps the flex layout container");
-  assert.ok(mainHtml.includes("panel panel-left") && mainHtml.includes("panel panel-right"), "both side panels in main");
-  // 聊天框已删除：不应再出现 prompt-input
-  assert.ok(!JSON.stringify(result.components.map((c) => c.props)).includes('id="prompt-input"'), "no chat box fragment");
-  const state = stateStore.getState();
-  const currentPage = state.pages.find((p) => p.id === result.pageId);
-  assert.equal(currentPage?.components.length, result.imported);
-});
-
-test("splitClientRegions parses region markers", () => {
-  const html =
-    "<html><body>" +
-    "<!-- prism-region:a --><div id=\"a\">old a</div><!-- /prism-region:a -->" +
-    "<!-- prism-region:b --><div id=\"b\">old b</div><!-- /prism-region:b -->" +
-    "</body></html>";
-  const regions = splitClientRegions(html);
-  assert.equal(regions.a, '<div id="a">old a</div>');
-  assert.equal(regions.b, '<div id="b">old b</div>');
-
 test("applyHtmlFragmentsToDocument keeps head/scripts and patches edited regions", () => {
   const original = `<!DOCTYPE html>
 <html>
@@ -163,6 +121,4 @@ test("applyHtmlFragmentsToDocument removes deleted regions and appends added fra
   const rebuilt = applyHtmlFragmentsToDocument(original, withoutFooter);
   assert.match(rebuilt, /新导航/);
   assert.doesNotMatch(rebuilt, /<footer>f<\/footer>/, "deleted footer is removed");
-});
-
 });

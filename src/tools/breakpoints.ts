@@ -62,7 +62,7 @@ Examples:
         const cssLines: string[] = [];
         if (params.strategy === "mobile_first") {
           cssLines.push("/* Mobile-first: Base styles apply to all screens */");
-          breakpoints.forEach((bp, i) => {
+          breakpoints.forEach((bp) => {
             if (bp.px === 0) return;
             cssLines.push("");
             cssLines.push(`/* ${bp.name}: ${bp.usage} */`);

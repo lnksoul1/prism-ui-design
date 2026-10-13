@@ -190,15 +190,6 @@ const carousel = z.object({
   items: z.array(z.unknown()).optional(),
 }).passthrough().partial();
 
-const modal = z.object({
-  title: z.string().optional(),
-  text: z.string().optional(),
-  body: z.string().optional(),
-  description: z.string().optional(),
-  cancel_text: z.string().optional(),
-  confirm_text: z.string().optional(),
-}).passthrough().partial();
-
 const sidebar = z.object({
   title: z.string().optional(),
   links: z.array(z.union([z.string(), z.object({
@@ -280,23 +271,10 @@ const skeleton = z.object({
   width: z.string().optional(),
 }).passthrough().partial();
 
-const command_palette = z.object({
-  placeholder: z.string().optional(),
-  items: z.array(z.object({
-    label: z.string().optional(),
-    icon: z.string().optional(),
-  }).passthrough()).optional(),
-}).passthrough().partial();
-
 const glass_card = z.object({
   title: z.string().optional(),
   text: z.string().optional(),
   description: z.string().optional(),
-}).passthrough().partial();
-
-const fab = z.object({
-  label: z.string().optional(),
-  hint: z.string().optional(),
 }).passthrough().partial();
 
 const marquee = z.object({
@@ -312,17 +290,6 @@ const feature_grid = z.object({
     description: z.string().optional(),
     icon: z.string().optional(),
   }).passthrough()).optional(),
-}).passthrough().partial();
-
-const cookie_banner = z.object({
-  text: z.string().optional(),
-  accept_text: z.string().optional(),
-  decline_text: z.string().optional(),
-}).passthrough().partial();
-
-const toggle = z.object({
-  label: z.string().optional(),
-  checked: z.boolean().optional(),
 }).passthrough().partial();
 
 // ===== Registry =====
@@ -349,7 +316,6 @@ export const COMPONENT_PROP_SCHEMAS: Record<string, z.ZodType> = {
   tabs,
   accordion,
   carousel,
-  modal,
   sidebar,
   breadcrumb,
   pagination,
@@ -363,17 +329,16 @@ export const COMPONENT_PROP_SCHEMAS: Record<string, z.ZodType> = {
   tooltip,
   bento_grid,
   skeleton,
-  command_palette,
   glass_card,
-  fab,
   marquee,
   feature_grid,
-  cookie_banner,
-  toggle,
-  // Canvas-first fidelity types (created by shapesToComponents)
+  // 忠实还原类型（html_fragment 导入 / 内部元素组件化产物）
   text: z.object({ text: z.string().optional(), fontSize: z.string().optional(), fontFamily: z.string().optional(), align: z.string().optional() }).passthrough().partial(),
   section: z.object({ title: z.string().optional() }).passthrough().partial(),
   container: z.object({ text: z.string().optional() }).passthrough().partial(),
+  // Imported HTML region: the css/html are injected verbatim, so only the
+  // region label is constrained here.
+  html_fragment: z.object({ html: z.string().optional(), css: z.string().optional(), region: z.string().optional() }).passthrough().partial(),
 };
 
 /**

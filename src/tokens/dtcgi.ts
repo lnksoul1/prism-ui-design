@@ -1,5 +1,5 @@
 /**
- * Design-token interoperability (improvement plan B3).
+ * Design-token interoperability.
  *
  * Converts the internal token shape `{ value, source }` to and from:
  *   - W3C DTCG JSON   (`$value` / `$type` / `$description`)
@@ -10,7 +10,7 @@
  * community group). Unknown values are kept as-is and typed `string`.
  */
 
-import type { DesignTokens, DesignToken } from "../state.js";
+import type { DesignTokens } from "../state.js";
 import { load as parseYaml, dump as stringifyYaml } from "js-yaml";
 
 export type DtcgExportFormat =
@@ -239,13 +239,4 @@ export function applyImportedTokens(
     });
   });
   return count;
-}
-
-export function sampleToken(tokens: DesignTokens): DesignToken {
-  const first =
-    Object.values(tokens.colors)[0] ||
-    Object.values(tokens.typography)[0] ||
-    Object.values(tokens.spacing)[0] ||
-    { value: "", source: "preset" as const };
-  return first;
 }

@@ -1,27 +1,19 @@
-﻿/**
+/**
  * Shared design-mutation service.
  *
- * Both the REST endpoints and the WebSocket message handler in `index.ts`
- * route every mutation through these functions so the two channels can never
- * drift apart (improvement plan A3). The service also validates inputs that
- * the state store itself is intentionally permissive about (e.g. the set of
+ * Every mutation path (MCP tools, and any future transport) routes through these
+ * functions so channels cannot drift apart. The service also validates inputs
+ * that the state store itself is intentionally permissive about (e.g. the set of
  * supported component types).
  */
 
-import { z } from "zod";
 import { stateStore, type AlignMode, type AnimationDef, type ComponentBehavior, type ComponentLayout, type ElementMeta, type PageBackground, type ZOrderMode } from "../state.js";
 import { applyStyleTokenSet } from "../tokens.js";
-
-import { getBehaviorTemplate, getComponentTemplate } from "../template-catalog.js";
-import { executeUserPrompt, type PromptExecutionResult } from "../prompt-executor.js";
-
-import { applyDesignLibraryComponent, applyDesignStyle } from "../design-library.js";
-import { validateComponentProps, describeComponentProps } from "../component-schemas.js";
-import { BOX_MODE_TYPES } from "../box-mode.js";
+import { validateComponentProps } from "../component-schemas.js";
 
 export type MutationSource = "ai" | "user";
 
-/** Component types rendered by the dashboard client (kept in sync with client/app.js). */
+/** Component types the exporter knows how to render. */
 export const COMPONENT_TYPES = new Set([
   "hero",
   "navbar",
@@ -43,7 +35,6 @@ export const COMPONENT_TYPES = new Set([
   "tabs",
   "accordion",
   "carousel",
-  "modal",
   "sidebar",
   "breadcrumb",
   "pagination",
@@ -57,38 +48,17 @@ export const COMPONENT_TYPES = new Set([
   "tooltip",
   "bento_grid",
   "skeleton",
-  "command_palette",
   "glass_card",
-  "fab",
   "marquee",
   "feature_grid",
-  "cookie_banner",
-  "toggle",
   "text",
   "section",
   "container",
-  "rect",
-  "ellipse",
-  "arrow",
-  "line",
-  "note",
-  "connector",
   "html_fragment",
-  // 盒子模式富类型（M2 缺口补齐）：可直接经 POST /api/component 创建，
-  // 客户端 isBoxModeComponent 按 type 自动识别并渲染盒子占位，内部配置经 box-mode 端点注入。
-  ...BOX_MODE_TYPES,
 ]);
 
 export function isKnownComponentType(type: string): boolean {
   return COMPONENT_TYPES.has(type);
-}
-
-export function assertKnownComponentType(type: string): void {
-  if (!isKnownComponentType(type)) {
-    throw new Error(
-      `Unknown component type "${type}". Supported types: ${[...COMPONENT_TYPES].sort().join(", ")}`
-    );
-  }
 }
 
 // ===== Project / style =====
@@ -189,7 +159,11 @@ export function addComponent(
   parentId: string | null,
   source: MutationSource = "user"
 ) {
-  assertKnownComponentType(type);
+  if (!isKnownComponentType(type)) {
+    throw new Error(
+      `Unknown component type "${type}". Supported types: ${[...COMPONENT_TYPES].sort().join(", ")}`
+    );
+  }
   // 组件 props schema (Phase 2.2): 校验并按类型规范化，AI 参数更可预测。
   const normalized = validateComponentProps(type, props);
   return stateStore.addComponent(type, variant, normalized, parentId, source);
@@ -242,10 +216,20 @@ export function setBehavior(componentId: string, behavior: ComponentBehavior | n
 export function setElementMeta(
   componentId: string,
   path: string,
-  meta: { behavior?: ComponentBehavior | null; kind?: ElementMeta["kind"] | null } | null,
+  meta: { behavior?: ComponentBehavior | null; kind?: ElementMeta["kind"] | null; css?: Record<string, string> | null } | null,
   source: MutationSource = "user"
 ): boolean {
   return stateStore.setElementMeta(componentId, path, meta, source);
+}
+
+export function moveArrayItem(
+  componentId: string,
+  path: string,
+  position: "before" | "after",
+  targetPath: string,
+  source: MutationSource = "user"
+): boolean {
+  return stateStore.moveArrayItem(componentId, path, position, targetPath, source);
 }
 
 export function setPageBackground(background: PageBackground | null, source: MutationSource = "user"): boolean {
@@ -274,100 +258,6 @@ export function ungroupComponents(groupId: string, source: MutationSource = "use
 
 export function moveComponentToPage(id: string, targetPageId: string, source: MutationSource = "user"): boolean {
   return stateStore.moveComponentToPage(id, targetPageId, source);
-}
-
-// ===== 模板快速变更 (v3.2 支柱⑦ P0) =====
-
-export interface ApplyComponentTemplateResult {
-  ok: boolean;
-  /** "added" (new block) or "replaced" (swapped an existing component). */
-  mode?: "added" | "replaced";
-  component_id?: string;
-  template_id?: string;
-  detail?: string;
-}
-
-/**
- * Apply a component template (组件模板): adds the block to the canvas, or —
- * when `targetId` is given — replaces that component in place (keeping its
- * layout position). Falls back to adding when the target no longer exists.
- */
-export function applyComponentTemplate(
-  templateId: string,
-  targetId: string | null,
-  source: MutationSource = "user"
-): ApplyComponentTemplateResult {
-  const template = getComponentTemplate(templateId);
-  if (!template) {
-    return { ok: false, template_id: templateId, detail: `Unknown component template "${templateId}"` };
-  }
-  const props = JSON.parse(JSON.stringify(template.props)) as Record<string, unknown>;
-
-  if (targetId) {
-    const replaced = stateStore.replaceComponent(
-      targetId,
-      { type: template.type, variant: template.variant, props, behavior: template.behavior ?? null },
-      source
-    );
-    if (replaced) {
-      return {
-        ok: true,
-        mode: "replaced",
-        component_id: targetId,
-        template_id: templateId,
-        detail: `Replaced component ${targetId} with ${template.name}`,
-      };
-    }
-    // Target missing — fall through and add a fresh block.
-  }
-
-  const node = stateStore.addComponent(template.type, template.variant, props, null, source);
-  if (template.behavior) {
-    stateStore.setBehavior(node.id, template.behavior, source);
-  }
-  return {
-    ok: true,
-    mode: "added",
-    component_id: node.id,
-    template_id: templateId,
-    detail: `Added ${template.name} (${node.id})`,
-  };
-}
-
-export interface ApplyBehaviorTemplateResult {
-  ok: boolean;
-  component_id?: string;
-  template_id?: string;
-  behavior?: ComponentBehavior;
-  detail?: string;
-}
-
-/**
- * Apply a behavior template (交互模板): builds the preset interaction with
- * sensible defaults and binds it to the selected component. Undoable.
- */
-export function applyBehaviorTemplate(
-  componentId: string,
-  templateId: string,
-  selectedComponentId: string | null,
-  source: MutationSource = "user"
-): ApplyBehaviorTemplateResult {
-  const template = getBehaviorTemplate(templateId);
-  if (!template) {
-    return { ok: false, template_id: templateId, detail: `Unknown behavior template "${templateId}"` };
-  }
-  const state = stateStore.getState();
-  const pageIds = state.pages.map((p) => p.id);
-  const behavior = template.build({
-    currentPageId: state.currentPageId ?? pageIds[0] ?? null,
-    pageIds,
-    selectedComponentId,
-  });
-  const ok = stateStore.setBehavior(componentId, behavior, source);
-  if (!ok) {
-    return { ok: false, component_id: componentId, template_id: templateId, detail: `Component ${componentId} not found` };
-  }
-  return { ok: true, component_id: componentId, template_id: templateId, behavior, detail: `Bound ${template.name} to ${componentId}` };
 }
 
 // ===== Pages =====
@@ -408,353 +298,7 @@ export function redo() {
   return stateStore.redo();
 }
 
-/**
- * Queue a user prompt and run the built-in executor against it. Returns the
- * executor result so both the REST and WebSocket channels can acknowledge
- * the outcome (executed locally vs. queued for an external agent).
- */
-export function submitPrompt(prompt: string): PromptExecutionResult {
-  stateStore.setPendingPrompt(prompt);
-  stateStore.recordPrompt(prompt);
-  const result = executeUserPrompt(prompt);
-  if (result.executed) {
-    // Handled by the built-in engine: don't leave it queued for the agent.
-    stateStore.clearPendingPrompt();
-    stateStore.recordPromptExecuted(result.summary, result.action || "prompt_executed");
-  }
-  return result;
-}
-
-/** @deprecated Use submitPrompt (returns the execution result). */
-export function setPendingPrompt(prompt: string): void {
-  submitPrompt(prompt);
-}
-
-// ===== WebSocket message schemas =====
-
-export const wsMessageSchema = z.discriminatedUnion("type", [
-  z.strictObject({
-    type: z.literal("set_token"),
-    category: z.string(),
-    key: z.string().min(1),
-    value: z.string().min(1),
-  }),
-  z.strictObject({
-    type: z.literal("update_component"),
-    id: z.string().min(1),
-    props: z.record(z.unknown()),
-    layout: z
-      .object({
-        x: z.number().optional(),
-        y: z.number().optional(),
-        w: z.number().optional(),
-        h: z.number().optional(),
-      })
-      .optional(),
-    visible: z.boolean().optional(),
-    locked: z.boolean().optional(),
-  }),
-  z.strictObject({
-    type: z.literal("rename_component"),
-    id: z.string().min(1),
-    name: z.string(),
-  }),
-  z.strictObject({
-    type: z.literal("remove_component"),
-    id: z.string().min(1),
-  }),
-  z.strictObject({
-    type: z.literal("duplicate_component"),
-    id: z.string().min(1),
-  }),
-  z.strictObject({ type: z.literal("undo") }),
-  z.strictObject({ type: z.literal("redo") }),
-  z.strictObject({
-    type: z.literal("add_page"),
-    name: z.string().min(1),
-  }),
-  z.strictObject({
-    type: z.literal("switch_page"),
-    pageId: z.string().min(1),
-  }),
-  z.strictObject({
-    type: z.literal("remove_page"),
-    pageId: z.string().min(1),
-  }),
-  z.strictObject({
-    type: z.literal("rename_page"),
-    pageId: z.string().min(1),
-    name: z.string().min(1),
-  }),
-  z.strictObject({
-    type: z.literal("reorder_component"),
-    fromId: z.string().min(1),
-    toId: z.string().min(1),
-    position: z.enum(["before", "after"]),
-  }),
-  z.strictObject({
-    type: z.literal("set_theme"),
-    mode: z.enum(["light", "dark"]),
-  }),
-  z.strictObject({
-    type: z.literal("set_platform"),
-    platform: z.string().min(1),
-  }),
-  z.strictObject({
-    type: z.literal("prompt"),
-    prompt: z.string().min(1),
-  }),
-  z.strictObject({
-    type: z.literal("add_component"),
-    component_type: z.string().min(1),
-    variant: z.string().optional(),
-    props: z.record(z.unknown()).optional(),
-  }),
-  z.strictObject({
-    type: z.literal("set_animation"),
-    component_id: z.string().min(1),
-    entry: z.string().optional(),
-    hover: z.string().optional(),
-    duration: z.number().optional(),
-    delay: z.number().optional(),
-    curve: z.string().optional(),
-    stagger: z.number().optional(),
-  }),
-    /*
-  z.strictObject({
-    type: z.literal("set_behavior"),
-    component_id: z.string().min(1),
-    behavior: z
-      .object({
-        type: z.enum(["navigate", "link", "toggle", "toast", "submit", "prompt"]),
-        page_id: z.string().optional(),
-        url: z.string().optional(),
-        new_tab: z.boolean().optional(),
-        target_component_id: z.string().optional(),
-        message: z.string().optional(),
-        form_id: z.string().optional(),
-        prompt: z.string().optional(),
-      })
-      .nullable(),
-  }),
-  z.strictObject({
-    type: z.literal("set_element_meta"),
-    component_id: z.string().min(1),
-    path: z.string().min(1),
-    behavior: z
-      .object({
-        type: z.enum(["navigate", "link", "toggle", "toast", "submit", "prompt"]),
-        page_id: z.string().optional(),
-        url: z.string().optional(),
-        new_tab: z.boolean().optional(),
-        target_component_id: z.string().optional(),
-        message: z.string().optional(),
-        form_id: z.string().optional(),
-        prompt: z.string().optional(),
-      })
-      .nullable()
-      .optional(),
-    kind: z.enum(["text", "button", "link"]).nullable().optional(),
-  }),
-    */
-  z.strictObject({
-    type: z.literal("set_page_background"),
-    background: z
-      .object({
-        type: z.enum(["color", "gradient", "image", "pattern", "animation"]),
-        value: z.string().min(1),
-        animation: z.string().optional(),
-        params: z.record(z.union([z.string(), z.number()])).optional(),
-      })
-      .nullable(),
-  }),
-  z.strictObject({
-    type: z.literal("align_components"),
-    ids: z.array(z.string().min(1)).min(2),
-    mode: z.enum(["left", "center_x", "right", "top", "center_y", "bottom", "distribute_x", "distribute_y"]),
-  }),
-  z.strictObject({
-    type: z.literal("z_order_component"),
-    id: z.string().min(1),
-    mode: z.enum(["front", "back", "forward", "backward"]),
-  }),
-    z.strictObject({
-      type: z.literal("apply_design_style"),
-      style_id: z.string().min(1),
-    }),
-    z.strictObject({
-      type: z.literal("apply_component_template"),
-      component_id: z.string().min(1),
-      target_id: z.string().optional(),
-    }),
-    /*
-  z.strictObject({
-    type: z.literal("apply_style"),
-    style: z.string().min(1),
-  }),
-  z.strictObject({
-    type: z.literal("apply_style_guide"),
-    tag: z.string().min(1),
-  }),
-  z.strictObject({
-    type: z.literal("apply_component_template"),
-    template_id: z.string().min(1),
-    target_id: z.string().optional(),
-  }),
-  z.strictObject({
-    type: z.literal("apply_behavior_template"),
-    component_id: z.string().min(1),
-    template_id: z.string().min(1),
-  }),
-    */
-]);
-
-export type WsClientMessage = z.infer<typeof wsMessageSchema>;
-
-/**
- * Apply a validated WebSocket client message to the state store.
- * Returns a short human-readable summary (or null when there is nothing to
- * report back, e.g. undo/redo where the client derives state from broadcasts).
- */
-export function applyClientMessage(msg: WsClientMessage): { ok: boolean; detail: string } {
-  switch (msg.type) {
-    case "set_token":
-      setToken(msg.category, msg.key, msg.value, "user");
-      return { ok: true, detail: `token ${msg.category}.${msg.key}` };
-    case "update_component": {
-      const ok = updateComponent(msg.id, msg.props, "user", msg.layout, {
-        visible: msg.visible,
-        locked: msg.locked,
-      });
-      return { ok, detail: ok ? `component ${msg.id}` : `component ${msg.id} not found` };
-    }
-    case "rename_component": {
-      const ok = renameComponent(msg.id, msg.name, "user");
-      return { ok, detail: ok ? `renamed ${msg.id}` : `component ${msg.id} not found` };
-    }
-    case "remove_component": {
-      const ok = removeComponent(msg.id, "user");
-      return { ok, detail: ok ? `component ${msg.id}` : `component ${msg.id} not found` };
-    }
-    case "duplicate_component": {
-      const copy = duplicateComponent(msg.id, "user");
-      return {
-        ok: !!copy,
-        detail: copy ? `component ${copy.id}` : `component ${msg.id} not found`,
-      };
-    }
-    case "undo":
-      return { ok: undo(), detail: "undo" };
-    case "redo":
-      return { ok: redo(), detail: "redo" };
-    case "add_page": {
-      const page = addPage(msg.name, "user");
-      return { ok: true, detail: `page ${page.name}` };
-    }
-    case "switch_page": {
-      const ok = switchPage(msg.pageId, "user");
-      return { ok, detail: ok ? `page ${msg.pageId}` : `page ${msg.pageId} not found` };
-    }
-    case "remove_page": {
-      const ok = removePage(msg.pageId, "user");
-      return { ok, detail: ok ? `page ${msg.pageId}` : `page ${msg.pageId} not found` };
-    }
-    case "rename_page": {
-      const ok = renamePage(msg.pageId, msg.name, "user");
-      return { ok, detail: ok ? `page ${msg.pageId}` : `page ${msg.pageId} not found` };
-    }
-    case "reorder_component": {
-      const ok = reorderComponent(msg.fromId, msg.toId, msg.position, "user");
-      return { ok, detail: ok ? `${msg.fromId} → ${msg.toId}` : "reorder failed" };
-    }
-    case "set_theme":
-      setTheme(msg.mode, "user");
-      return { ok: true, detail: `theme ${msg.mode}` };
-    case "set_platform":
-      setPlatform(msg.platform, "user");
-      return { ok: true, detail: `platform ${msg.platform}` };
-    case "prompt":
-      setPendingPrompt(msg.prompt);
-      return { ok: true, detail: "prompt queued" };
-    case "add_component": {
-      try {
-        const node = addComponent(msg.component_type, msg.variant, msg.props || {}, null, "user");
-        return { ok: true, detail: `${node.type} ${node.id}` };
-      } catch (error) {
-        return { ok: false, detail: error instanceof Error ? error.message : String(error) };
-      }
-    }
-    case "set_animation": {
-      const animation: AnimationDef = {};
-      if (msg.entry !== undefined) animation.entry = msg.entry;
-      if (msg.hover !== undefined) animation.hover = msg.hover;
-      if (msg.duration !== undefined) animation.duration = msg.duration;
-      if (msg.delay !== undefined) animation.delay = msg.delay;
-      if (msg.curve !== undefined) animation.curve = msg.curve;
-      if (msg.stagger !== undefined) animation.stagger = msg.stagger;
-      const ok = setAnimation(msg.component_id, animation, "user");
-      return { ok, detail: ok ? `animation ${msg.component_id}` : `component ${msg.component_id} not found` };
-    }
-      case "apply_design_style": {
-        const result = applyDesignStyle(msg.style_id, "user");
-        return { ok: result.ok, detail: result.ok ? `design style ${result.style_name} applied` : result.detail || "apply design style failed" };
-      }
-      case "apply_component_template": {
-        const result = applyDesignLibraryComponent(msg.component_id, msg.target_id || null, "user");
-        return { ok: result.ok, detail: result.detail || "apply component template failed" };
-      }
-      /*
-    case "set_behavior": {
-      const ok = setBehavior(msg.component_id, msg.behavior, "user");
-      return { ok, detail: ok ? `behavior ${msg.component_id}` : `component ${msg.component_id} not found` };
-    }
-    case "set_element_meta": {
-      // 语义：字段 undefined → 保留原值；字段 null → 清除该字段；
-      // behavior 与 kind 都未提供 → 清除整个条目。
-      const meta =
-        msg.behavior === undefined && msg.kind === undefined
-          ? null
-          : { behavior: msg.behavior, kind: msg.kind };
-      const ok = setElementMeta(msg.component_id, msg.path, meta, "user");
-      return { ok, detail: ok ? `element meta ${msg.component_id}#${msg.path}` : `component ${msg.component_id} not found` };
-    }
-        */
-    case "set_page_background": {
-      const ok = setPageBackground(msg.background, "user");
-      return { ok, detail: ok ? `page background ${msg.background ? msg.background.type : "cleared"}` : "page background failed" };
-    }
-    case "align_components": {
-      const ok = alignComponents(msg.ids, msg.mode, "user");
-      return { ok, detail: ok ? `align ${msg.ids.length} components` : "align failed (need 2+ valid components)" };
-    }
-    case "z_order_component": {
-      const ok = zOrderComponent(msg.id, msg.mode, "user");
-      return { ok, detail: ok ? `z-order ${msg.id}` : `component ${msg.id} not found` };
-    }
-        /*
-    case "apply_style": {
-      // 兼容旧客户端：apply_style 现在映射到中性默认 token（风格预设已移除）。
-      const ok = applyStyle(msg.style, "user");
-      return { ok, detail: ok ? `style ${msg.style}` : `unknown style ${msg.style}` };
-    }
-    case "apply_style_guide": {
-      try {
-        const result = applyStyleGuide(msg.tag);
-        return { ok: true, detail: `design system ${result.guide_name} applied (${result.overrides.length} overrides)` };
-      } catch (error) {
-        return { ok: false, detail: error instanceof Error ? error.message : String(error) };
-      }
-    }
-    case "apply_component_template": {
-      const result = applyComponentTemplate(msg.template_id, msg.target_id || null, "user");
-      return { ok: result.ok, detail: result.detail || result.template_id || "apply component template failed" };
-    }
-    case "apply_behavior_template": {
-      const result = applyBehaviorTemplate(msg.component_id, msg.template_id, msg.component_id, "user");
-      return { ok: result.ok, detail: result.detail || result.template_id || "apply behavior template failed" };
-    }
-      */
-    default:
-      return { ok: false, detail: `unsupported message type` };
-  }
-}
+// NOTE: the HTTP/WebSocket transport was removed in the route-B refactor.
+// The former `wsMessageSchema` + `applyClientMessage` vocabulary lived here;
+// it had no callers left. Every mutation now arrives through a registered MCP
+// tool, which calls the functions above directly.

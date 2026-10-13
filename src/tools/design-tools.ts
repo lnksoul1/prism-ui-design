@@ -8,15 +8,6 @@ import {
   type DesignState,
 } from "../state.js";
 import { applyStyleTokenSet } from "../tokens.js";
-import { getMotionProfile } from "../constants.js";
-import { applyBehaviorTemplate, applyComponentTemplate } from "../service/design-service.js";
-import {
-  CDN_URLS,
-  cdnScriptsForDeps,
-  collectDeps,
-  generateLenisGsapInit,
-} from "../animations/serializer.js";
-import { getVantaEffect } from "../vanta-effects.js";
 
 // All methods used below now live directly on DesignStateStore (state.ts),
 // so no type extension or cast is needed.
@@ -42,6 +33,18 @@ function cssIdent(value: string | undefined): string {
   const sanitized = String(value || "prismBgFlow").replace(/[^a-zA-Z0-9_-]/g, "");
   return sanitized || "prismBgFlow";
 }
+
+/** Deterministic per-node id suffix, so pure-CSS controls stay uniquely scoped. */
+function nodeUid(id: string): string {
+  return id.replace(/[^a-zA-Z0-9_-]/g, "");
+}
+
+/**
+ * Keyframes used by component renderers rather than by the page background.
+ * Pure CSS, so they keep working in a static export with no script.
+ */
+const COMPONENT_KEYFRAMES_CSS = `    @keyframes prism-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+    @keyframes prism-shimmer { from { opacity: 0.55; } to { opacity: 1; } }`;
 
 /** Built-in page-background animation keyframes (背景编辑 P1). */
 function pageBackgroundAnimationCSS(name: string | undefined): string {
@@ -73,6 +76,45 @@ function pageBackgroundAnimationCSS(name: string | undefined): string {
   }
 }
 
+/**
+ * Dark-mode token overrides.
+ *
+ * `design_set_theme("dark")` previously had no effect on exported HTML: the
+ * exporter only ever read `state.tokens`. These fixed surface/text overrides are
+ * emitted alongside the explicit overrides in a `[data-theme="dark"]` block, and
+ * the same block is reused for automatic dark mode (an explicit dark session
+ * should not flip back to light just because the reader prefers light).
+ */
+const DARK_TOKEN_OVERRIDES: Record<string, string> = {
+  "color-bg": "#0B0B0C",
+  "color-surface": "#17171A",
+  "color-text": "#F2F2F3",
+  "color-text-muted": "#A1A1AA",
+  "color-border": "#2A2A2E",
+  "shadow-sm": "0 1px 2px 0 rgba(0,0,0,0.6)",
+  "shadow-md": "0 4px 10px -1px rgba(0,0,0,0.65)",
+  "shadow-lg": "0 10px 24px -4px rgba(0,0,0,0.7)",
+};
+
+/** Build the `[data-theme="dark"]` override block from the current tokens. */
+function darkTokenBlock(tokens: DesignTokens): string {
+  const lines: string[] = ['  [data-theme="dark"] {'];
+  const emitted = new Set<string>();
+  for (const [key, value] of Object.entries(DARK_TOKEN_OVERRIDES)) {
+    lines.push(`    --${key}: ${value};`);
+    emitted.add(key);
+  }
+  // Carry over any colour token the author explicitly set in dark mode.
+  Object.entries(tokens.colors).forEach(([key, token]) => {
+    if (emitted.has(key)) return;
+    if (token.description && token.description.includes("暗色")) {
+      lines.push(`    --${key}: ${token.value};`);
+    }
+  });
+  lines.push("  }");
+  return lines.join("\n");
+}
+
 function tokensToCSSVariables(tokens: DesignTokens): string {
   const lines: string[] = ["  :root {"];
   (
@@ -89,33 +131,22 @@ function tokensToCSSVariables(tokens: DesignTokens): string {
   return lines.join("\n");
 }
 
-function tokensToObject(tokens: DesignTokens): Record<string, Record<string, string>> {
-  const result: Record<string, Record<string, string>> = {};
-  (
-    Object.entries(tokens) as [
-      keyof DesignTokens,
-      Record<string, DesignToken>
-    ][]
-  ).forEach(([category, categoryTokens]) => {
-    result[category as string] = {};
-    Object.entries(categoryTokens).forEach(([key, token]) => {
-      result[category as string][key] = token.value;
-    });
-  });
-  return result;
-}
-
 export function componentToHTML(node: ComponentNode): string {
   const p = node.props;
-  const v = node.variant ? ` ${node.type}--${node.variant}` : "";
+  // The exported stylesheet uses hyphenated class names (`card-grid--3col`,
+  // `bento-grid--mixed`), so an underscore component type must be normalised
+  // before building the variant class — otherwise the rule never matches.
+  const typeClass = node.type.replace(/_/g, "-");
+  const v = node.variant ? ` ${typeClass}--${node.variant}` : "";
 
   let html: string;
 
   switch (node.type) {
     case "navbar": {
       const brand = escapeHTML(String(p.brand ?? ""));
-      const links = Array.isArray(p.links)
-        ? (p.links as unknown[]).map((l) => `<a href="#">${escapeHTML(String(l))}</a>`).join("")
+      const navList = Array.isArray(p.items) ? p.items : Array.isArray(p.links) ? p.links : null;
+      const links = navList
+        ? (navList as unknown[]).map((l) => `<a href="#">${escapeHTML(String(l))}</a>`).join("")
         : "";
       const ctaBtn = p.cta_text
         ? `<button class="btn btn--primary">${escapeHTML(String(p.cta_text))}</button>`
@@ -171,8 +202,9 @@ export function componentToHTML(node: ComponentNode): string {
     }
     case "footer": {
       const copyright = escapeHTML(String(p.copyright ?? ""));
-      const links = Array.isArray(p.links)
-        ? (p.links as unknown[]).map((l) => `<a href="#">${escapeHTML(String(l))}</a>`).join("")
+      const footList = Array.isArray(p.items) ? p.items : Array.isArray(p.links) ? p.links : null;
+      const links = footList
+        ? (footList as unknown[]).map((l) => `<a href="#">${escapeHTML(String(l))}</a>`).join("")
         : "";
       html = `<footer class="footer${v}"><div class="footer__copyright">${copyright}</div><div class="footer__links">${links}</div></footer>`;
       break;
@@ -205,8 +237,9 @@ export function componentToHTML(node: ComponentNode): string {
     }
     case "pricing": {
       const title = p.title ? `<h2>${escapeHTML(String(p.title))}</h2>` : "";
-      const plans = Array.isArray(p.plans)
-        ? (p.plans as Record<string, unknown>[])
+      const planList = Array.isArray(p.items) ? p.items : Array.isArray(p.plans) ? p.plans : null;
+      const plans = planList
+        ? (planList as Record<string, unknown>[])
             .map((plan) => {
               const features = Array.isArray(plan.features)
                 ? (plan.features as unknown[])
@@ -231,7 +264,11 @@ export function componentToHTML(node: ComponentNode): string {
     case "image": {
       const src = escapeHTML(String(p.src ?? p.image_url ?? ""));
       const alt = escapeHTML(String(p.alt ?? ""));
-      html = `<figure class="image${v}"><img src="${src}" alt="${alt}"/></figure>`;
+      // With no source there is nothing to show: an <img src=""> renders as a
+      // broken-image icon, so fall back to a labelled placeholder box instead.
+      html = src
+        ? `<figure class="image${v}"><img src="${src}" alt="${alt}"/></figure>`
+        : `<figure class="image${v} image--placeholder"><div class="image__placeholder" role="img" aria-label="${alt}">${alt || "Image"}</div></figure>`;
       break;
     }
     case "button": {
@@ -287,15 +324,34 @@ export function componentToHTML(node: ComponentNode): string {
       break;
     }
     case "tabs": {
-      const tabs = Array.isArray(p.tabs)
-        ? (p.tabs as Record<string, unknown>[])
-            .map(
-              (t, i) =>
-                `<div class="tab${i === 0 ? " tab--active" : ""}">${escapeHTML(String(t.label ?? t.title ?? ""))}</div>`
-            )
-            .join("")
-        : "";
-      html = `<div class="tabs${v}">${tabs}</div>`;
+      // Accepts `items` like every other list component; `tabs` is kept as an
+      // alias so existing payloads keep working.
+      //
+      // Previously this rendered the labels and silently dropped every panel's
+      // content. It now emits radio inputs + panels and reveals the panels via
+      // :checked, so the tabs genuinely work with no JavaScript.
+      const list = Array.isArray(p.items) ? p.items : Array.isArray(p.tabs) ? p.tabs : null;
+      const tabList = (list ?? []) as Record<string, unknown>[];
+      const prefix = `tabs-${nodeUid(node.id)}`;
+      const inputs = tabList
+        .map(
+          (_, i) =>
+            `<input class="tabs__radio" type="radio" name="${prefix}" id="${prefix}-${i}"${i === 0 ? " checked" : ""}/>`
+        )
+        .join("");
+      const labels = tabList
+        .map(
+          (t, i) =>
+            `<label class="tab" for="${prefix}-${i}">${escapeHTML(String(t.label ?? t.title ?? t ?? ""))}</label>`
+        )
+        .join("");
+      const panels = tabList
+        .map((t, i) => {
+          const content = t.content ?? t.body ?? t.text ?? "";
+          return `<div class="tabs__panel" data-panel="${i}">${content ? `<p>${escapeHTML(String(content))}</p>` : ""}</div>`;
+        })
+        .join("");
+      html = `<div class="tabs${v}">${inputs}<div class="tabs__nav">${labels}</div><div class="tabs__panels">${panels}</div></div>`;
       break;
     }
     case "accordion": {
@@ -311,8 +367,10 @@ export function componentToHTML(node: ComponentNode): string {
       break;
     }
     case "carousel": {
-      const slides = Array.isArray(p.slides)
-        ? (p.slides as Record<string, unknown>[])
+      // Accepts `items` like every other list component; `slides` is the alias.
+      const slideList = Array.isArray(p.items) ? p.items : Array.isArray(p.slides) ? p.slides : null;
+      const slides = slideList
+        ? (slideList as Record<string, unknown>[])
             .map(
               (s) =>
                 `<div class="carousel__slide"><h3>${escapeHTML(String(s.title ?? ""))}</h3><p>${escapeHTML(String(s.description ?? ""))}</p></div>`
@@ -322,15 +380,17 @@ export function componentToHTML(node: ComponentNode): string {
       html = `<div class="carousel${v}">${slides}</div>`;
       break;
     }
-    case "modal": {
-      const title = escapeHTML(String(p.title ?? ""));
-      const body = escapeHTML(String(p.body ?? ""));
-      html = `<div class="modal${v}"><div class="modal__content"><h3>${title}</h3><p>${body}</p></div></div>`;
-      break;
-    }
     case "sidebar": {
-      const links = Array.isArray(p.links)
-        ? (p.links as unknown[]).map((l) => `<a href="#">${escapeHTML(String(l))}</a>`).join("")
+      // Accepts `items` like every other list component; `links` is the alias.
+      const linkList = Array.isArray(p.items) ? p.items : Array.isArray(p.links) ? p.links : null;
+      const links = linkList
+        ? (linkList as unknown[])
+            .map((l) =>
+              typeof l === "string" || typeof l === "number"
+                ? `<a href="#">${escapeHTML(String(l))}</a>`
+                : `<a href="#">${escapeHTML(String((l as Record<string, unknown>).label ?? (l as Record<string, unknown>).title ?? ""))}</a>`
+            )
+            .join("")
         : "";
       html = `<aside class="sidebar${v}">${links}</aside>`;
       break;
@@ -355,8 +415,10 @@ export function componentToHTML(node: ComponentNode): string {
       break;
     }
     case "progress": {
-      const value = Number(p.value ?? 50);
-      html = `<div class="progress${v}"><div class="progress__bar" style="width: ${value}%"></div></div>`;
+      const value = Math.max(0, Math.min(100, Number(p.value ?? 50) || 0));
+      const label = escapeHTML(String(p.label ?? ""));
+      const aria = `role="progressbar" aria-valuenow="${value}" aria-valuemin="0" aria-valuemax="100"`;
+      html = `<div class="progress${v}">${label ? `<span class="progress__label">${label}</span>` : ""}<div class="progress__track" ${aria}><div class="progress__bar" style="width: ${value}%"></div></div><span class="progress__value">${value}%</span></div>`;
       break;
     }
     case "badge": {
@@ -398,7 +460,7 @@ export function componentToHTML(node: ComponentNode): string {
             .map((row) => `<tr>${row.map((cell) => `<td>${escapeHTML(String(cell))}</td>`).join("")}</tr>`)
             .join("")
         : "";
-      html = `<table class="table${v}"><thead><tr>${columns}</tr></thead><tbody>${rows}</tbody></table>`;
+      html = `<div class="table-wrap"><table class="table${v}"><thead><tr>${columns}</tr></thead><tbody>${rows}</tbody></table></div>`;
       break;
     }
     case "alert": {
@@ -407,7 +469,11 @@ export function componentToHTML(node: ComponentNode): string {
       break;
     }
     case "tooltip": {
-      html = `<span class="tooltip${v}">${escapeHTML(String(p.trigger ?? "?"))}<span class="tooltip__bubble">${escapeHTML(String(p.text ?? ""))}</span></span>`;
+      // The bubble was permanently visible before. It is now revealed on hover or
+      // keyboard focus by CSS, so it behaves like a tooltip in a static page.
+      const trigger = escapeHTML(String(p.trigger ?? p.label ?? "?"));
+      const bubbleText = escapeHTML(String(p.text ?? p.content ?? ""));
+      html = `<span class="tooltip${v}" tabindex="0"><span class="tooltip__trigger">${trigger}</span><span class="tooltip__bubble" role="tooltip">${bubbleText}</span></span>`;
       break;
     }
     case "bento_grid": {
@@ -423,34 +489,23 @@ export function componentToHTML(node: ComponentNode): string {
       break;
     }
     case "skeleton": {
-      const rows = Number(p.rows ?? 3);
-      html = `<div class="skeleton${v}">${Array.from({ length: rows }, (_, i) => `<div class="skeleton__line" style="width:${92 - i * 14}%"></div>`).join("")}</div>`;
-      break;
-    }
-    case "command_palette": {
-      const items = Array.isArray(p.items)
-        ? (p.items as (string | Record<string, unknown>)[])
-            .map((it) => `<div class="command__item">${escapeHTML(typeof it === "string" ? it : String(it.label ?? ""))}</div>`)
-            .join("")
-        : "";
-      html = `<div class="command${v}"><div class="command__search">⌘ ${escapeHTML(String(p.placeholder ?? ""))}</div>${items}</div>`;
+      // Accepts `items` (count or array) as well as `rows`/`lines`.
+      const asked = p.items ?? p.rows ?? p.lines;
+      const rows = Array.isArray(asked) ? asked.length : Number(asked ?? 3) || 3;
+      html = `<div class="skeleton${v}" aria-busy="true">${Array.from({ length: rows }, (_, i) => `<div class="skeleton__line" style="width:${92 - i * 14}%"></div>`).join("")}</div>`;
       break;
     }
     case "glass_card": {
       html = `<div class="glass-card${v}"><h3>${escapeHTML(String(p.title ?? ""))}</h3><p>${escapeHTML(String(p.text ?? ""))}</p></div>`;
       break;
     }
-    case "fab": {
-      html = `<button class="fab${v}" title="${escapeHTML(String(p.hint ?? ""))}">${escapeHTML(String(p.label ?? "+"))}</button>`;
-      break;
-    }
     case "marquee": {
-      const items = Array.isArray(p.items)
-        ? (p.items as (string | Record<string, unknown>)[])
-            .map((it) => `<span class="marquee__item">${escapeHTML(typeof it === "string" ? it : String(it.title ?? ""))}</span>`)
-            .join("")
-        : "";
-      html = `<div class="marquee${v}">${items}</div>`;
+      // The item list is duplicated so the CSS translate(-50%) loop is seamless.
+      const marqueeItems = Array.isArray(p.items) ? p.items : [];
+      const one = marqueeItems
+        .map((it) => `<span class="marquee__item">${escapeHTML(typeof it === "string" ? it : String((it as Record<string, unknown>).title ?? ""))}</span>`)
+        .join("");
+      html = `<div class="marquee${v}" role="marquee"><div class="marquee__track">${one}${one}</div></div>`;
       break;
     }
     case "feature_grid": {
@@ -465,15 +520,6 @@ export function componentToHTML(node: ComponentNode): string {
       html = `<div class="feature-grid${v}">${items}</div>`;
       break;
     }
-    case "cookie_banner": {
-      html = `<div class="cookie-banner${v}"><span>🍪 ${escapeHTML(String(p.text ?? ""))}</span><button class="btn">${escapeHTML(String(p.accept_text ?? "接受"))}</button><button class="btn btn--ghost">${escapeHTML(String(p.decline_text ?? "拒绝"))}</button></div>`;
-      break;
-    }
-    case "toggle": {
-      const checked = p.checked ? " checked" : "";
-      html = `<label class="toggle${v}"><span class="toggle__track${checked}"><span class="toggle__thumb"></span></span><span>${escapeHTML(String(p.label ?? ""))}</span></label>`;
-      break;
-    }
     case "html_fragment": {
       // 忠实显示：原片段 HTML + 原 CSS（Shadow DOM 由客户端渲染；导出时
       // 内联 <style> + 片段一起输出，保证写回产物与画布一致）。
@@ -482,9 +528,36 @@ export function componentToHTML(node: ComponentNode): string {
       html = `<div class="prism-fragment prism-fragment-${escapeHTML(String(p.region ?? "region"))}">${fragCss ? `<style>${fragCss}</style>` : ""}${fragHtml}</div>`;
       break;
     }
+    case "text": {
+      const content = p.text ?? p.content ?? p.body ?? "";
+      const as = p.as === "h2" || p.as === "h3" || p.as === "p" ? String(p.as) : "p";
+      const cls = p.class ? ` class="${escapeHTML(String(p.class))}"` : "";
+      html = `<div class="text-block${v}"><${as}${cls}>${escapeHTML(String(content))}</${as}></div>`;
+      break;
+    }
+    case "section": {
+      const id = p.id ? ` id="${escapeHTML(String(p.id))}"` : "";
+      const heading = p.title
+        ? `<h2 class="section__title">${escapeHTML(String(p.title))}</h2>`
+        : "";
+      const body = p.body ?? p.text;
+      const para = body
+        ? `<p class="section__body">${escapeHTML(String(body))}</p>`
+        : "";
+      html = `<section class="section${v}"${id}>${heading}${para}</section>`;
+      break;
+    }
+    case "container": {
+      // Layout-only wrapper: content arrives through node.children.
+      const gap = typeof p.gap === "number" ? ` style="gap:${p.gap}px"` : "";
+      html = `<div class="container${v}"${gap}></div>`;
+      break;
+    }
     default: {
-      const text = escapeHTML(JSON.stringify(p));
-      html = `<div class="component component--${escapeHTML(node.type)}">${text}</div>`;
+      // No renderer for this type. Emit a clearly-labelled placeholder rather
+      // than stringifying the props into the page, which used to leak raw JSON
+      // into the exported HTML (and into whatever the user shipped).
+      html = `<div class="component component--${escapeHTML(node.type)}" data-unsupported="${escapeHTML(node.type)}"></div>`;
       break;
     }
   }
@@ -512,122 +585,18 @@ export function htmlToJSX(html: string): string {
 }
 
 /**
- * Export a single component as code (Inspect mode).
- * - html: raw semantic HTML fragment
- * - react: JSX fragment (className/self-closing tags normalized)
- * - css: design-token CSS variables the component styling depends on
- */
-export function exportComponentCode(
-  node: ComponentNode,
-  format: string,
-  tokens?: DesignTokens
-): string {
-  const html = componentToHTML(node);
-  switch (format) {
-    case "react":
-      return htmlToJSX(html);
-    case "css":
-      return tokens ? tokensToCSSVariables(tokens) : "/* no tokens available */";
-    case "html":
-    default:
-      return html;
-  }
-}
-
-/**
- * Build the runtime asset blocks (head CDNs + body init scripts) for HTML export,
- * gated by the `exportRuntime` level (upgrade plan U4):
- *   - minimal  : no external JS; only inline CSS animations are emitted.
- *   - standard : inject GSAP (+ ScrollTrigger) and Lenis when the style prefers
- *                gsap or the scroll mode is lenis-gsap.
- *   - full     : standard + Vanta/three.js CDNs and per-background init scripts.
+ * Runtime asset blocks (head CDNs + body init scripts) for HTML export.
  *
- * Per-component animation codegen is the serializer's job; this helper only
- * bootstraps the runtime so the exported page is ready to run those animations.
+ * Route B: the optional-runtime subsystem (Lenis smooth scroll, GSAP engine,
+ * Vanta 3D backgrounds, React Bits) was removed with the dashboard. Exported
+ * pages are therefore **self-contained**: only inline CSS animations defined by
+ * the token/component layer are emitted, with no external CDN dependency.
+ *
+ * Kept as a function (rather than inlined) so the export pipeline keeps a single
+ * place to reintroduce a runtime later if that becomes a product requirement.
  */
-function buildRuntimeAssets(state: DesignState): { headScripts: string; bodyScripts: string } {
-  const runtime = state.exportRuntime || "standard";
-  if (runtime === "minimal") {
-    return { headScripts: "", bodyScripts: "" };
-  }
-
-  const motion = getMotionProfile(state.style || "minimal");
-  const scrollMode = state.scroll?.mode || "native";
-  const vantaEntries = Object.entries(state.vantaBackgrounds || {});
-
-  const needGsap = motion.engine === "gsap" || scrollMode === "lenis-gsap";
-  const needLenis = scrollMode === "lenis-gsap";
-  const needVanta = runtime === "full" && vantaEntries.length > 0;
-  const needScrollTrigger =
-    (needGsap && (motion.scrollReveal || scrollMode === "lenis-gsap")) || needVanta;
-
-  const head: string[] = [];
-  const body: string[] = [];
-
-  // ----- Head: CDN <script> tags -----
-  if (needLenis) {
-    head.push(`<link rel="stylesheet" href="${CDN_URLS.lenisCSS}">`);
-    head.push(`<script src="${CDN_URLS.lenisJS}"></script>`);
-  }
-  if (needGsap) {
-    const deps = new Set<string>(["gsap"]);
-    if (needScrollTrigger) deps.add("ScrollTrigger");
-    // Pull in any extra deps declared by components' gsap animations.
-    const componentAnims: Array<{ engine: "css" | "gsap"; preset: string }> = [];
-    const walk = (list: ComponentNode[]): void => {
-      for (const c of list) {
-        if (c.animation?.engine === "gsap" && c.animation.entry) {
-          componentAnims.push({ engine: "gsap", preset: c.animation.entry });
-        }
-        if (c.children?.length) walk(c.children);
-      }
-    };
-    walk(state.pages.find((p) => p.id === state.currentPageId)?.components || state.components);
-    collectDeps(componentAnims).forEach((d) => deps.add(d));
-    head.push(...cdnScriptsForDeps(Array.from(deps)));
-  }
-  if (needVanta) {
-    head.push(`<script src="${CDN_URLS.three}"></script>`);
-    head.push(`<script src="${CDN_URLS.vantaBase}"></script>`);
-    const seenEffect = new Set<string>();
-    for (const [, cfg] of vantaEntries) {
-      const fx = getVantaEffect(cfg.effect);
-      if (fx && !seenEffect.has(fx.scriptFile)) {
-        head.push(`<script src="https://cdn.jsdelivr.net/npm/vanta/dist/${fx.scriptFile}"></script>`);
-        seenEffect.add(fx.scriptFile);
-      }
-    }
-  }
-
-  // ----- Body: init scripts -----
-  if (needLenis) {
-    body.push(generateLenisGsapInit(state.scroll?.options || {}));
-  }
-  if (needVanta) {
-    const vantaInits = vantaEntries
-      .map(([id, cfg]) => {
-        const fx = getVantaEffect(cfg.effect);
-        if (!fx) return "";
-        const effectCtor = `VANTA.${fx.key}`;
-        const params = JSON.stringify({
-          el: `#${id}`,
-          mouseControls: cfg.mouseControls ?? true,
-          touchControls: cfg.touchControls ?? false,
-          gyroControls: cfg.gyroControls ?? false,
-          ...cfg.params,
-        });
-        return `  if (window.${effectCtor}) { ${effectCtor}(${params}); }`;
-      })
-      .filter(Boolean)
-      .join("\n");
-    if (vantaInits) {
-      body.push(`<script>\n(function(){\n${vantaInits}\n})();\n</script>`);
-    }
-  }
-
-  const headScripts = head.length ? head.join("\n") : "";
-  const bodyScripts = body.length ? `\n${body.join("\n")}` : "";
-  return { headScripts, bodyScripts };
+function buildRuntimeAssets(_state: DesignState): { headScripts: string; bodyScripts: string } {
+  return { headScripts: "", bodyScripts: "" };
 }
 
 function exportToHTML(state: DesignState, components: ComponentNode[] = state.components): string {
@@ -648,14 +617,26 @@ function exportToHTML(state: DesignState, components: ComponentNode[] = state.co
     ? ` animation: ${cssIdent(state.pageBackground.animation || "prismBgFlow")} 18s ease-in-out infinite alternate;`
     : "";
 
+  const isDark = state.themeMode === "dark";
+  const darkOverrides = darkTokenBlock(state.tokens);
+  // An explicitly dark session is dark for everyone (and must not flip back to
+  // light for a reader who prefers light). A light session still offers dark to
+  // readers whose OS asks for it.
+  const darkCss = isDark
+    ? `${darkOverrides}\n  :root { color-scheme: dark; }`
+    : `  @media (prefers-color-scheme: dark) {\n${darkOverrides}\n  }`;
+
   return `<!DOCTYPE html>
-<html lang="zh">
+<html lang="zh"${isDark ? ' data-theme="dark"' : ""}>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="${isDark ? "dark" : "light dark"}">
   <title>${escapeHTML(state.projectName)}</title>
   <style>
 ${cssVars}
+${darkCss}
+${COMPONENT_KEYFRAMES_CSS}
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: var(--font-body, sans-serif); ${bodyBg} color: var(--color-text, #1a1a1a); line-height: var(--line-height-normal, 1.5);${pageBgBodyExtra} }
 ${pageBgKeyframes}
@@ -706,13 +687,36 @@ ${pageBgKeyframes}
     .faq__item { margin-bottom: 1rem; }
     .timeline { padding: 3rem 2rem; max-width: 800px; margin: 0 auto; }
     .timeline__item { padding-left: 2rem; border-left: 2px solid var(--color-border, #e5e5e5); margin-bottom: 2rem; }
-    .tabs { display: flex; gap: 1rem; padding: 1rem 2rem; border-bottom: 1px solid var(--color-border, #e5e5e5); }
-    .tab { padding: 0.5rem 1rem; cursor: pointer; }
+    .tabs { padding: 1rem 2rem; max-width: 1200px; margin: 0 auto; }
+    .tabs__radio { position: absolute; opacity: 0; pointer-events: none; }
+    .tabs__nav { display: flex; gap: 0.25rem; border-bottom: 1px solid var(--color-border, #e5e5e5); margin-bottom: 1rem; }
+    .tab { padding: 0.5rem 1rem; cursor: pointer; color: var(--color-text-muted, #6B6B6B); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+    .tabs__panel { display: none; padding: 0.5rem 0; }
+    /* Reveal the selected panel: the radios precede the panels as siblings. */
+    .tabs__radio:nth-of-type(1):checked ~ .tabs__panels .tabs__panel:nth-child(1),
+    .tabs__radio:nth-of-type(2):checked ~ .tabs__panels .tabs__panel:nth-child(2),
+    .tabs__radio:nth-of-type(3):checked ~ .tabs__panels .tabs__panel:nth-child(3),
+    .tabs__radio:nth-of-type(4):checked ~ .tabs__panels .tabs__panel:nth-child(4),
+    .tabs__radio:nth-of-type(5):checked ~ .tabs__panels .tabs__panel:nth-child(5) { display: block; }
+    .tabs__radio:nth-of-type(1):checked ~ .tabs__nav .tab:nth-child(1),
+    .tabs__radio:nth-of-type(2):checked ~ .tabs__nav .tab:nth-child(2),
+    .tabs__radio:nth-of-type(3):checked ~ .tabs__nav .tab:nth-child(3),
+    .tabs__radio:nth-of-type(4):checked ~ .tabs__nav .tab:nth-child(4),
+    .tabs__radio:nth-of-type(5):checked ~ .tabs__nav .tab:nth-child(5) { color: var(--color-text, #1a1a1a); border-bottom-color: var(--color-primary, #6366F1); font-weight: 600; }
     .tab--active { border-bottom: 2px solid var(--color-primary, #6366F1); font-weight: 600; }
+    /* Tooltip: bubble hidden until hover or keyboard focus. */
+    .tooltip { position: relative; display: inline-flex; cursor: help; }
+    .tooltip__trigger { border-bottom: 1px dotted var(--color-text-muted, #6B6B6B); }
+    .tooltip__bubble { position: absolute; bottom: 125%; left: 50%; transform: translateX(-50%); padding: 0.375rem 0.625rem; border-radius: var(--radius-sm, 4px); background: var(--color-text, #1a1a1a); color: var(--color-bg, #fff); font-size: var(--text-xs, 0.75rem); white-space: nowrap; opacity: 0; visibility: hidden; transition: opacity var(--transition-normal, 250ms ease); z-index: 20; }
+    .tooltip:hover .tooltip__bubble, .tooltip:focus .tooltip__bubble, .tooltip:focus-within .tooltip__bubble { opacity: 1; visibility: visible; }
+    /* Marquee: the track holds the list twice, so -50% loops seamlessly. */
+    .marquee { overflow: hidden; padding: 1rem 0; }
+    .marquee__track { display: inline-flex; gap: 2rem; white-space: nowrap; animation: prism-marquee 22s linear infinite; }
+    .marquee__item { flex: 0 0 auto; }
     .accordion__item { margin-bottom: 0.5rem; }
     .accordion__item summary { cursor: pointer; padding: 1rem; background: var(--color-surface, #f5f5f5); border-radius: var(--radius-sm, 4px); }
-    .carousel { position: relative; overflow: hidden; }
-    .carousel__slide { padding: 3rem; text-align: center; background: var(--color-surface, #f5f5f5); }
+    .carousel { display: flex; gap: 1rem; overflow-x: auto; scroll-snap-type: x mandatory; padding: 1.5rem; max-width: 1200px; margin: 0 auto; -webkit-overflow-scrolling: touch; }
+    .carousel__slide { flex: 0 0 18rem; scroll-snap-align: start; padding: 2rem; border-radius: var(--radius-lg, 16px); background: var(--color-surface, #f5f5f5); border: 1px solid var(--color-border, #e5e5e5); }
     .sidebar { padding: 1.5rem; background: var(--color-surface, #f5f5f5); min-height: 100vh; }
     .sidebar a { display: block; padding: 0.5rem 0; text-decoration: none; color: var(--color-text, #333); }
     .breadcrumb { padding: 1rem 2rem; }
@@ -721,11 +725,113 @@ ${pageBgKeyframes}
     .pagination { display: flex; gap: 0.5rem; justify-content: center; padding: 1rem; }
     .pagination__page { padding: 0.5rem 1rem; border: 1px solid var(--color-border, #e5e5e5); border-radius: var(--radius-sm, 4px); cursor: pointer; }
     .pagination__page--active { background: var(--color-primary, #6366F1); color: #fff; }
-    .progress { height: 8px; background: var(--color-border, #e5e5e5); border-radius: var(--radius-full, 9999px); overflow: hidden; }
+    .progress { display: flex; align-items: center; gap: 0.75rem; padding: 1rem 2rem; max-width: 48rem; margin: 0 auto; }
+    .progress__label { font-size: var(--text-sm, 0.875rem); color: var(--color-text-muted, #6B6B6B); }
+    .progress__value { font-size: var(--text-sm, 0.875rem); font-variant-numeric: tabular-nums; color: var(--color-text-muted, #6B6B6B); }
+    .progress__track { flex: 1; height: 8px; background: var(--color-border, #e5e5e5); border-radius: var(--radius-full, 9999px); overflow: hidden; }
     .progress__bar { height: 100%; background: var(--color-primary, #6366F1); transition: width var(--transition-normal, 250ms ease); }
     .badge { display: inline-block; padding: 0.25rem 0.75rem; border-radius: var(--radius-full, 9999px); font-size: var(--text-sm, 0.875rem); background: var(--color-primary, #6366F1); color: #fff; }
     .avatar { display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px; border-radius: var(--radius-full, 9999px); background: var(--color-primary, #6366F1); color: #fff; overflow: hidden; }
     .avatar img { width: 100%; height: 100%; object-fit: cover; }
+    /* text / section / container had no renderer at all and used to fall through
+       to a fallback that stringified their props straight into the page. */
+    .section { padding: 3rem 2rem; max-width: 1200px; margin: 0 auto; }
+    .section__title { font-family: var(--font-display, sans-serif); font-size: var(--text-2xl, 1.5rem); margin-bottom: 0.75rem; }
+    .section__body { color: var(--color-text-muted, #6B6B6B); line-height: var(--line-height-relaxed, 1.75); }
+    .text-block { padding: 1rem 2rem; max-width: 72ch; margin: 0 auto; }
+    .text-block p { line-height: var(--line-height-relaxed, 1.75); }
+    .container { display: flex; flex-direction: column; gap: 1.5rem; max-width: 1200px; margin: 0 auto; padding: 0 2rem; }
+    .component[data-unsupported] { display: none; }
+    /* ---- Base rules that were missing ----
+       The .bento, .grid and .toggle root classes had no base rule at all, so
+       their variant/grid rules could set grid-template-columns on an element
+       that was never made a grid (it stayed a plain stacked block). */
+    .bento { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; padding: 2rem; max-width: 1200px; margin: 0 auto; }
+    .bento__tile { background: var(--color-surface, #fff); border: 1px solid var(--color-border, #e5e5e5); border-radius: var(--radius-lg, 16px); padding: 1.25rem; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.5rem; padding: 2rem; max-width: 1200px; margin: 0 auto; }
+    .grid__cell { background: var(--color-surface, #fff); border-radius: var(--radius-md, 8px); padding: 1.25rem; }
+    /* ---- Variant rules ----
+       Most variants are cosmetic, but the layout-altering ones must exist or the
+       variant class is inert (a grid silently renders as a stacked column). */
+    .hero--split { justify-content: space-between; }
+    .hero--split > div:only-child { max-width: 46rem; margin: 0 auto; }
+    .hero--image_right { flex-direction: row-reverse; }
+    .navbar--centered { flex-direction: column; gap: 0.75rem; }
+    .navbar--centered .navbar__links { display: flex; justify-content: center; }
+    .feature-list__grid { gap: 2rem; }
+    .feature-list--numbered .feature-list__grid { counter-reset: fl; }
+    .feature-list--icon_grid .feature-list__grid { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+    .stats--inline .stats__grid { justify-content: flex-start; gap: 2.5rem; }
+    .grid--2col { grid-template-columns: repeat(2, 1fr); }
+    .grid--3col { grid-template-columns: repeat(3, 1fr); }
+    .grid--4col { grid-template-columns: repeat(4, 1fr); }
+    /* bento_grid normalises to the "bento-grid--*" variant class (the type class
+       becomes "bento-grid"), while the base container class is ".bento". */
+    .bento-grid--mixed { grid-template-columns: repeat(3, 1fr); grid-auto-rows: minmax(120px, auto); }
+    .bento-grid--feature .bento__tile:first-child { grid-column: span 2; grid-row: span 2; }
+    .pricing--2col .pricing__grid { display: grid; grid-template-columns: repeat(2, 1fr); }
+    .pricing--3col .pricing__grid { display: grid; grid-template-columns: repeat(3, 1fr); align-items: start; }
+    .pricing--toggle .pricing__grid { display: grid; grid-template-columns: repeat(3, 1fr); }
+    /* The exporter puts the variant class on the same element as the base class
+       (e.g. section class="testimonials testimonial--grid"), so a rule must
+       target that element itself — a descendant selector such as
+       ".testimonial--grid .testimonials" can never match. */
+    .testimonials.testimonial--grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.5rem; }
+    .testimonials.testimonial--single .testimonial { max-width: 42rem; margin: 0 auto 2rem; }
+    .faq--accordion .faq__item { border-bottom: 1px solid var(--color-border, #e5e5e5); padding-bottom: 0.75rem; }
+    .faq--grid .faq { max-width: 1200px; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; }
+    .faq--single .faq__item { margin-bottom: 2rem; }
+    .timeline--horizontal .timeline { display: flex; gap: 2rem; overflow-x: auto; }
+    .timeline--alternating .timeline__item:nth-child(even) { margin-left: 3rem; }
+    .tabs--pill .tab { border-radius: var(--radius-full, 9999px); padding: 0.375rem 0.875rem; }
+    .tabs--line .tab { border-bottom: 1px solid var(--color-border, #e5e5e5); }
+    .input--textarea textarea, .input--textarea .input__field { min-height: 6rem; }
+    .input--search .input__field { border-radius: var(--radius-full, 9999px); }
+    .image--rounded img { border-radius: var(--radius-lg, 16px); }
+    .image__placeholder { display: flex; align-items: center; justify-content: center; min-height: 220px; border: 1px dashed var(--color-border, #d4d4d8); border-radius: var(--radius-lg, 16px); background: var(--color-surface, #fff); color: var(--color-text-muted, #6B6B6B); font-size: var(--text-sm, 0.875rem); }
+    .image--caption figcaption { margin-top: 0.5rem; font-size: var(--text-sm, 0.875rem); color: var(--color-text-muted, #6B6B6B); }
+    .sidebar--compact { width: 12rem; }
+    .sidebar--icon { width: 4.5rem; }
+    .glass-card--bordered { border: 1px solid var(--color-border, rgba(255,255,255,0.35)); }
+    .glass-card--gradient { background-image: linear-gradient(135deg, var(--color-primary, #6366F1), var(--color-accent, #22D3EE)); }
+    .footer--multi_column { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 2rem; text-align: left; }
+    .footer--social .footer__links { display: flex; justify-content: center; gap: 1rem; }
+    .form--signup, .form--login { max-width: 26rem; margin: 0 auto; }
+    .form--contact { max-width: 34rem; margin: 0 auto; }
+    .badge--dot { width: 0.625rem; height: 0.625rem; padding: 0; border-radius: var(--radius-full, 9999px); }
+    .badge--pill { border-radius: var(--radius-full, 9999px); }
+    .avatar--rounded { border-radius: var(--radius-md, 8px); }
+    .avatar--group { display: inline-flex; }
+    .avatar--group .avatar { margin-left: -0.75rem; border: 2px solid var(--color-surface, #fff); }
+    .card--article { text-align: left; padding: 1.5rem; }
+    .card--default { padding: 1.25rem; }
+    .carousel--hero .carousel__slide { flex-basis: 100%; }
+    .progress--circle .progress { height: 48px; width: 48px; border-radius: 50%; }
+    .pagination--compact .pagination__page { padding: 0.25rem 0.625rem; }
+    .breadcrumb--slash .breadcrumb__sep::before { content: "/"; }
+    .breadcrumb--arrow .breadcrumb__sep::before { content: "›"; }
+    .banner--gradient { background-image: linear-gradient(135deg, var(--color-primary, #6366F1), var(--color-accent, #22D3EE)); color: #fff; }
+    .banner--image { background-size: cover; background-position: center; }
+    /* Skeleton had no base rule at all, so it rendered as invisible boxes. */
+    .skeleton { display: flex; flex-direction: column; gap: 0.5rem; padding: 1.5rem 2rem; max-width: 1200px; margin: 0 auto; }
+    .skeleton__line { height: 1rem; border-radius: var(--radius-sm, 4px); background: var(--color-border, #e5e5e5); animation: prism-shimmer 1.4s ease-in-out infinite alternate; }
+    .skeleton--text .skeleton__line { height: 0.75rem; margin-bottom: 0.5rem; }
+    .skeleton--card { min-height: 10rem; }
+    .marquee--logo .marquee__item { opacity: 0.75; }
+    .alert--info { border-left: 4px solid var(--color-primary, #6366F1); }
+    .alert--success { border-left: 4px solid #16a34a; }
+    .alert--warning { border-left: 4px solid #f59e0b; }
+    .tooltip--rich { max-width: 20rem; text-align: left; }
+    /* Tables were emitted without any styling (only an orphan .table-wrap rule
+       existed), so every exported table rendered as unstyled text. */
+    .table-wrap { overflow-x: auto; max-width: 1200px; margin: 0 auto; padding: 2rem; }
+    .table { width: 100%; border-collapse: collapse; font-size: var(--text-sm, 0.875rem); }
+    .table th, .table td { padding: 0.625rem 0.875rem; text-align: left; border-bottom: 1px solid var(--color-border, #e5e5e5); }
+    .table th { font-weight: 600; color: var(--color-text-muted, #6B6B6B); text-transform: none; }
+    .table tbody tr:last-child td { border-bottom: none; }
+    .table--striped tbody tr:nth-child(odd) { background: var(--color-surface, #fff); }
+    .table--striped tbody tr:nth-child(even) { background: var(--color-bg, #F7F7F5); }
+    .table--compact th, .table--compact td { padding: 0.375rem 0.5rem; }
     /* 移动端响应式 (Phase 3.2): grids collapse to a single column on phones. */
     @media (max-width: 480px) {
       .card-grid--2col, .card-grid--3col, .card-grid--4col,
@@ -751,13 +857,8 @@ ${runtime.bodyScripts}
 </html>`;
 }
 
-/** Full standalone HTML for a single page (used by the presentation export). */
-function exportPageHTML(state: DesignState, page: { id: string; name: string; components: ComponentNode[] }): string {
-  return exportToHTML({ ...state, projectName: `${state.projectName} — ${page.name}` }, page.components);
-}
-
 /**
- * Export all pages as a navigable HTML slide deck (functional plan F9).
+ * Export all pages as a navigable HTML slide deck.
  * Each page becomes a slide; arrow keys navigate, Print renders all slides.
  */
 function exportPresentationHTML(state: DesignState): string {
@@ -1002,7 +1103,7 @@ function exportToFlutter(state: DesignState): string {
   const surface = tokenHex(colors["color-surface"]?.value, "#F5F5F5");
   const text = tokenHex(colors["color-text"]?.value, "#1A1A1A");
 
-  const widgets = state.components.map((c) => `      ${componentToFlutter(c, text)}`).join("\n");
+  const widgets = state.components.map((c) => `      ${componentToFlutter(c)}`).join("\n");
 
   return `// ${escapeHTML(state.projectName)} — generated by UI Design MCP Server
 import 'package:flutter/material.dart';
@@ -1043,7 +1144,7 @@ ${widgets}
 `;
 }
 
-function componentToFlutter(node: ComponentNode, textColor: string): string {
+function componentToFlutter(node: ComponentNode): string {
   const p = node.props;
   switch (node.type) {
     case "navbar": {
@@ -1249,7 +1350,6 @@ export function exportDesign(
 
 // ===== Tool: design_init =====
 // Initialize a design project with neutral default tokens and optional base color.
-// Prism 无风格预设：换肤统一走 design_apply_style_guide（设计系统）。
 
 export function registerDesignInitTool(server: McpServer): void {
   server.registerTool(
@@ -1258,13 +1358,11 @@ export function registerDesignInitTool(server: McpServer): void {
       title: "Initialize Design Project",
       description: `Initialize a new design project: neutral default token set + optional base color, and clears any previous state.
 
-The client dashboard will update in real-time when this is called.
-
 Args:
   - project_name (string): Name for this design project
   - base_color (string, optional): Override the base color (hex like "#6366F1")
 
-To restyle the project afterwards, use design_apply_style_guide (17 brand design systems).
+To restyle afterwards, set individual tokens with design_set_token or apply an adjective-driven adjustment with design_semantic_style.
 
 Examples:
   - design_init(project_name="电商促销页", base_color="#F97316")
@@ -1308,8 +1406,8 @@ Examples:
           `- Radii: ${Object.keys(tokens.radii).length}`,
           `- Transitions: ${Object.keys(tokens.transitions).length}`,
           ``,
-          `Restyle anytime with design_apply_style_guide (17 brand design systems).`,
-          `The client dashboard is now live. Use design_add_component to start building the UI.`,
+          `Restyle with design_set_token or design_semantic_style.`,
+          `Use design_add_component to start building the page, or design_apply_template for a ready-made structure.`,
         ].join("\n");
 
         return {
@@ -1338,14 +1436,12 @@ Examples:
 
 // ===== Tool: design_add_component =====
 
-import { describeComponentProps } from "../component-schemas.js";
-
 export function registerDesignAddComponentTool(server: McpServer): void {
   server.registerTool(
     "design_add_component",
     {
       title: "Add UI Component",
-      description: `Add a UI component to the design canvas. The component will appear in the client dashboard in real-time.
+      description: `Add a UI component to the current page.
 
 Component types: hero, navbar, card, card_grid, button, form, text_section, image, cta, footer, stats, timeline, pricing, testimonial, faq, feature_list, banner, tabs, accordion, carousel, modal, sidebar, breadcrumb, pagination, progress, badge, avatar
 
@@ -1422,7 +1518,7 @@ Examples:
         return {
           content: [{
             type: "text",
-            text: `Component added: ${params.type}${params.variant ? ` (${params.variant})` : ""}\nID: ${node.id}\nThe client dashboard has been updated.`,
+            text: `Component added: ${params.type}${params.variant ? ` (${params.variant})` : ""}\nID: ${node.id}`,
           }],
           structuredContent: { success: true, component_id: node.id, type: params.type, variant: params.variant },
         };
@@ -1442,7 +1538,7 @@ export function registerDesignUpdateComponentTool(server: McpServer): void {
     "design_update_component",
     {
       title: "Update Component Properties",
-      description: `Update properties of an existing component on the canvas. Changes appear in real-time on the client dashboard.
+      description: `Update properties of an existing component.
 
 Args:
   - id (string): Component ID (from design_add_component response)
@@ -1488,7 +1584,7 @@ Example:
           };
         }
         return {
-          content: [{ type: "text", text: `Component ${params.id} updated. Client dashboard refreshed.` }],
+          content: [{ type: "text", text: `Component ${params.id} updated.` }],
           structuredContent: { success: true, component_id: params.id },
         };
       } catch (error) {
@@ -1539,154 +1635,10 @@ Example:
           content: [
             {
               type: "text",
-              text: `Component ${params.component_id} renamed to "${label}". Client dashboard refreshed.`,
+              text: `Component ${params.component_id} renamed to "${label}".`,
             },
           ],
           structuredContent: { success: true, component_id: params.component_id, name: label },
-        };
-      } catch (error) {
-        return {
-          content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
-        };
-      }
-    }
-  );
-}
-
-// ===== Tool: design_set_animation =====
-
-export function registerDesignAnimationTool(server: McpServer): void {
-  server.registerTool(
-    "design_set_animation",
-    {
-      title: "Set Component Animation",
-      description: `Set animation for a component. The client dashboard will play the animation in real-time.
-
-Animation entries (13): fadeUp, fadeIn, scaleIn, slideLeft, slideRight, slideUp, spring,
-bounceIn, flipIn, cinematic, shimmer, glitch, morphBlob
-Hover animations (7): scaleUp, lift, glow, ripple, spotlight, magnetic, tilt
-Curves: ease, easeOut, easeInOut, spring, linear, bounce
-
-Args:
-  - component_id (string): Component to animate
-  - entry (string, optional): Entry animation type
-  - hover (string, optional): Hover animation type
-  - duration (number, optional): Duration in seconds (0.1 - 3.0). Default: 0.3
-  - delay (number, optional): Delay in seconds (0 - 3.0). Default: 0
-  - curve (string, optional): Easing curve. Default: 'easeOut'
-  - stagger (number, optional): Child stagger delay in seconds (0 - 1.0). Default: 0
-
-Example:
-  - design_set_animation(component_id="comp_123", entry="bounceIn", duration=0.5, stagger=0.08, curve="spring")`,
-      inputSchema: {
-        component_id: z.string().describe("Component ID"),
-        entry: z.string().optional().describe("Entry animation (13 types: fadeUp, fadeIn, scaleIn, slideLeft, slideRight, slideUp, spring, bounceIn, flipIn, cinematic, shimmer, glitch, morphBlob)"),
-        hover: z.string().optional().describe("Hover animation (7 types: scaleUp, lift, glow, ripple, spotlight, magnetic, tilt)"),
-        duration: z.number().min(0.1).max(3.0).optional().describe("Duration in seconds"),
-        delay: z.number().min(0).max(3.0).optional().describe("Delay in seconds"),
-        curve: z.string().optional().describe("Easing curve (ease, easeOut, spring, etc.)"),
-        stagger: z.number().min(0).max(1.0).optional().describe("Child stagger delay in seconds"),
-      },
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
-      },
-    },
-    async (params) => {
-      try {
-        const success = stateStore.setAnimation(params.component_id, {
-          entry: params.entry,
-          hover: params.hover,
-          duration: params.duration,
-          delay: params.delay,
-          curve: params.curve,
-          stagger: params.stagger,
-        }, "ai");
-
-        if (!success) {
-          return {
-            content: [{ type: "text", text: `Error: Component "${params.component_id}" not found.` }],
-          };
-        }
-        return {
-          content: [{ type: "text", text: `Animation set for component ${params.component_id}. Playing in client dashboard.` }],
-          structuredContent: { success: true, component_id: params.component_id },
-        };
-      } catch (error) {
-        return {
-          content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
-        };
-      }
-    }
-  );
-}
-
-// ===== Tool: design_set_behavior =====
-
-export function registerDesignBehaviorTool(server: McpServer): void {
-  server.registerTool(
-    "design_set_behavior",
-    {
-      title: "Set Component Behavior",
-      description: `Bind an interaction behavior to a component (行为模型 P1). Triggered in play mode when the user clicks the element.
-
-Behavior types:
-  - navigate: jump to another page (page_id)
-  - link: open a URL (url, new_tab)
-  - toggle: show/hide another component (target_component_id)
-  - toast: show a transient message (message)
-  - submit: simulate a form submit (form_id)
-  - prompt: trigger a natural-language instruction for the built-in AI (prompt)
-
-Pass behavior=null to remove the current behavior.
-
-Example:
-  - design_set_behavior(component_id="comp_123", behavior={"type":"navigate","page_id":"page_2"})
-  - design_set_behavior(component_id="comp_123", behavior={"type":"toast","message":"已加入购物车"})
-  - design_set_behavior(component_id="comp_123", behavior=null)`,
-      inputSchema: {
-        component_id: z.string().describe("Component ID"),
-        behavior: z
-          .object({
-            type: z.enum(["navigate", "link", "toggle", "toast", "submit", "prompt"]).describe("Behavior type"),
-            page_id: z.string().optional().describe("navigate: target page id"),
-            url: z.string().optional().describe("link: URL to open"),
-            new_tab: z.boolean().optional().describe("link: open in a new tab (default true)"),
-            target_component_id: z.string().optional().describe("toggle: component to show/hide"),
-            message: z.string().optional().describe("toast: message text"),
-            form_id: z.string().optional().describe("submit: form component id"),
-            prompt: z.string().optional().describe("prompt: instruction for the built-in AI"),
-          })
-          .nullable()
-          .describe("Behavior spec, or null to remove"),
-      },
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
-      },
-    },
-    async (params) => {
-      try {
-        const success = stateStore.setBehavior(params.component_id, params.behavior, "ai");
-        if (!success) {
-          return {
-            content: [{ type: "text", text: `Error: Component "${params.component_id}" not found.` }],
-            structuredContent: { success: false, component_id: params.component_id },
-          };
-        }
-        const label = params.behavior ? params.behavior.type : "none";
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Behavior "${label}" set on component ${params.component_id}. It triggers in play mode.`,
-            },
-          ],
-          structuredContent: { success: true, component_id: params.component_id, behavior: params.behavior },
         };
       } catch (error) {
         return {
@@ -1797,133 +1749,6 @@ Example:
   );
 }
 
-// ===== Tool: design_apply_component_template =====
-
-export function registerDesignComponentTemplateTool(server: McpServer): void {
-  server.registerTool(
-    "design_apply_component_template",
-    {
-      title: "Apply Component Template",
-      description: `Apply a ready-made component block to the canvas (模板快速变更 v3.2 支柱⑦ P0: 组件模板).
-When target_id is given the selected component is REPLACED in place (keeping its
-layout position); otherwise the block is added as a new component. Undoable.
-
-Component templates:
-  - hero_split_cta: Hero 分屏 + CTA
-  - navbar_cta: 导航栏 + 行动按钮
-  - pricing_3col: 定价三档
-  - signup_form: 注册表单（提交弹出成功提示）
-  - testimonial_grid: 用户评价墙
-  - stats_bar: 数据统计条
-  - faq_accordion: FAQ 手风琴
-  - cta_banner: CTA 转化横幅（点击打开链接）
-  - cookie_consent: Cookie 同意横幅
-  - bento_features: 便当盒功能网格
-
-Example:
-  - design_apply_component_template(template_id="hero_split_cta")
-  - design_apply_component_template(template_id="pricing_3col", target_id="comp_5")`,
-      inputSchema: {
-        template_id: z.string().describe("Component template id (see list above)"),
-        target_id: z.string().optional().describe("Replace this component in place (keeps its layout)"),
-      },
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: true,
-        idempotentHint: false,
-        openWorldHint: false,
-      },
-    },
-    async (params) => {
-      try {
-        const result = applyComponentTemplate(params.template_id, params.target_id || null, "ai");
-        if (!result.ok) {
-          return {
-            content: [{ type: "text", text: `Error: ${result.detail || "unknown template"}` }],
-            structuredContent: { success: false, template_id: params.template_id },
-          };
-        }
-        return {
-          content: [{ type: "text", text: `${result.detail}. Client dashboard updated.` }],
-          structuredContent: {
-            success: true,
-            template_id: params.template_id,
-            component_id: result.component_id,
-            mode: result.mode,
-          },
-        };
-      } catch (error) {
-        return {
-          content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
-        };
-      }
-    }
-  );
-}
-
-// ===== Tool: design_apply_behavior_template =====
-
-export function registerDesignBehaviorTemplateTool(server: McpServer): void {
-  server.registerTool(
-    "design_apply_behavior_template",
-    {
-      title: "Apply Behavior Template",
-      description: `Bind a preset interaction to a component in one click (模板快速变更 v3.2 支柱⑦ P0: 交互模板).
-Triggered in play mode when the user clicks the element. Undoable.
-
-Behavior templates:
-  - open_link_new_tab: 打开链接（新标签页）
-  - toast_feedback: 点击提示
-  - navigate_home: 跳转首页
-  - toggle_self: 显隐切换（自身）
-  - submit_feedback: 表单提交反馈
-  - ai_enhance: AI 联动指令
-
-Example:
-  - design_apply_behavior_template(component_id="comp_5", template_id="toast_feedback")`,
-      inputSchema: {
-        component_id: z.string().describe("Component ID to bind the interaction to"),
-        template_id: z.string().describe("Behavior template id (see list above)"),
-      },
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
-      },
-    },
-    async (params) => {
-      try {
-        const result = applyBehaviorTemplate(params.component_id, params.template_id, params.component_id, "ai");
-        if (!result.ok) {
-          return {
-            content: [{ type: "text", text: `Error: ${result.detail || "unknown template"}` }],
-            structuredContent: { success: false, template_id: params.template_id },
-          };
-        }
-        return {
-          content: [
-            {
-              type: "text",
-              text: `${result.detail}. It triggers in play mode. Client dashboard updated.`,
-            },
-          ],
-          structuredContent: {
-            success: true,
-            component_id: params.component_id,
-            template_id: params.template_id,
-            behavior: result.behavior,
-          },
-        };
-      } catch (error) {
-        return {
-          content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
-        };
-      }
-    }
-  );
-}
-
 // ===== Tool: design_get_state =====
 
 export function registerDesignGetStateTool(server: McpServer): void {
@@ -1933,7 +1758,7 @@ export function registerDesignGetStateTool(server: McpServer): void {
       title: "Get Current Design State",
       description: `Get the complete current design state including all tokens, components, and animations.
 
-Use this to check what's on the canvas before making changes, or to see if the user has made manual adjustments via the client dashboard.
+Use this to check what is on the page before making changes.
 
 Returns: Full design state (project name, style, all tokens, component tree, activity log)`,
       inputSchema: {},
@@ -1984,7 +1809,7 @@ export function registerDesignSetTokenTool(server: McpServer): void {
     "design_set_token",
     {
       title: "Set Design Token",
-      description: `Set or update a single design token. The client dashboard updates in real-time.
+      description: `Set or update a single design token.
 
 Categories: colors, typography, spacing, shadows, radii, transitions
 
@@ -2298,14 +2123,23 @@ Example:
 
 /**
  * Apply one of the built-in page templates and return the created component
- * IDs. Shared by `design_apply_template` and `design_generate_page` so the
- * template definitions never drift apart.
+ * IDs.
+ *
+ * Templates are *starting points*, so brand text comes from the session's
+ * project name and the copyright year is computed at apply time — baking
+ * "ShopMax" / "© 2024" into every page was misleading (the user's project is
+ * named something else). Remote image URLs are avoided too, so an exported page
+ * stays self-contained.
  */
 export function applyPageTemplate(template: string): string[] {
   const addedIds: string[] = [];
+  const projectName = stateStore.getState().projectName?.trim();
+  const brandName = () => projectName || "Prism";
+  const copyright = () => `© ${new Date().getFullYear()} ${brandName()}`;
+
   const templates: Record<string, () => void> = {
     ecommerce_home: () => {
-      addedIds.push(stateStore.addComponent("navbar", undefined, { brand: "ShopMax", links: ["首页", "商品", "优惠", "关于"] }, null, "ai").id);
+      addedIds.push(stateStore.addComponent("navbar", undefined, { brand: brandName(), links: ["首页", "商品", "优惠", "关于"] }, null, "ai").id);
       addedIds.push(stateStore.addComponent("hero", "centered", { title: "夏季大促", subtitle: "精选商品5折起", button_text: "立即抢购" }, null, "ai").id);
       addedIds.push(stateStore.addComponent("card_grid", "3col", { items: [
         { title: "商品A", price: "¥99", description: "优质好物" },
@@ -2313,11 +2147,11 @@ export function applyPageTemplate(template: string): string[] {
         { title: "商品C", price: "¥299", description: "品质之选" },
       ] }, null, "ai").id);
       addedIds.push(stateStore.addComponent("cta", "centered", { title: "立即下单", subtitle: "限时优惠，不容错过", button_text: "去购物" }, null, "ai").id);
-      addedIds.push(stateStore.addComponent("footer", undefined, { copyright: "© 2024 ShopMax", links: ["关于我们", "联系方式", "隐私政策"] }, null, "ai").id);
+      addedIds.push(stateStore.addComponent("footer", undefined, { copyright: copyright(), links: ["关于我们", "联系方式", "隐私政策"] }, null, "ai").id);
     },
     saas_landing: () => {
-      addedIds.push(stateStore.addComponent("navbar", "with_cta", { brand: "CloudFlow", links: ["功能", "价格", "文档", "博客"], cta_text: "免费试用" }, null, "ai").id);
-      addedIds.push(stateStore.addComponent("hero", "split", { title: "提升团队效率十倍", subtitle: "一站式协作平台，让工作更高效", button_text: "开始使用", image_url: "https://picsum.photos/seed/saas/600/400" }, null, "ai").id);
+      addedIds.push(stateStore.addComponent("navbar", "with_cta", { brand: brandName(), links: ["功能", "价格", "文档", "博客"], cta_text: "免费试用" }, null, "ai").id);
+      addedIds.push(stateStore.addComponent("hero", "split", { title: "提升团队效率十倍", subtitle: "一站式协作平台，让工作更高效", button_text: "开始使用" }, null, "ai").id);
       addedIds.push(stateStore.addComponent("feature_list", undefined, { title: "核心功能", items: [
         { title: "任务管理", description: "可视化任务看板，高效追踪进度" },
         { title: "实时协作", description: "多人同时编辑，无缝协作" },
@@ -2335,17 +2169,16 @@ export function applyPageTemplate(template: string): string[] {
         { name: "企业版", price: "定制", features: ["不限人数", "无限存储", "专属客服", "定制开发"] },
       ] }, null, "ai").id);
       addedIds.push(stateStore.addComponent("cta", "banner", { title: "立即开启高效协作", subtitle: "14天免费试用，无需信用卡", button_text: "免费开始" }, null, "ai").id);
-      addedIds.push(stateStore.addComponent("footer", undefined, { copyright: "© 2024 CloudFlow", links: ["关于我们", "联系方式", "隐私政策", "服务条款"] }, null, "ai").id);
+      addedIds.push(stateStore.addComponent("footer", undefined, { copyright: copyright(), links: ["关于我们", "联系方式", "隐私政策", "服务条款"] }, null, "ai").id);
     },
     blog_post: () => {
-      addedIds.push(stateStore.addComponent("navbar", undefined, { brand: "技术博客", links: ["首页", "文章", "分类", "关于"] }, null, "ai").id);
+      addedIds.push(stateStore.addComponent("navbar", undefined, { brand: brandName(), links: ["首页", "文章", "分类", "关于"] }, null, "ai").id);
       addedIds.push(stateStore.addComponent("text_section", undefined, { title: "深入理解 TypeScript 类型系统", body: "TypeScript 的类型系统是其最强大的特性之一。通过静态类型检查，我们可以在编译时捕获大量潜在错误，提升代码质量和可维护性。" }, null, "ai").id);
-      addedIds.push(stateStore.addComponent("image", undefined, { src: "https://picsum.photos/seed/blog/800/400", alt: "TypeScript 类型系统图解" }, null, "ai").id);
       addedIds.push(stateStore.addComponent("text_section", undefined, { title: "高级类型技巧", body: "条件类型和映射类型是 TypeScript 中最强大但也最复杂的特性。掌握它们可以让你写出更加灵活和可复用的类型定义。" }, null, "ai").id);
-      addedIds.push(stateStore.addComponent("footer", undefined, { copyright: "© 2024 技术博客", links: ["关于", "订阅", "归档"] }, null, "ai").id);
+      addedIds.push(stateStore.addComponent("footer", undefined, { copyright: copyright(), links: ["关于", "订阅", "归档"] }, null, "ai").id);
     },
     portfolio: () => {
-      addedIds.push(stateStore.addComponent("navbar", undefined, { brand: "Design Studio", links: ["作品", "关于", "服务", "联系"] }, null, "ai").id);
+      addedIds.push(stateStore.addComponent("navbar", undefined, { brand: brandName(), links: ["作品", "关于", "服务", "联系"] }, null, "ai").id);
       addedIds.push(stateStore.addComponent("hero", "centered", { title: "创意设计工作室", subtitle: "用设计连接品牌与用户", button_text: "查看作品" }, null, "ai").id);
       addedIds.push(stateStore.addComponent("card_grid", "4col", { items: [
         { title: "品牌设计", description: "视觉识别系统" },
@@ -2354,10 +2187,10 @@ export function applyPageTemplate(template: string): string[] {
         { title: "插画设计", description: "商业插画创作" },
       ] }, null, "ai").id);
       addedIds.push(stateStore.addComponent("text_section", undefined, { title: "关于我们", body: "我们是一支充满激情的设计团队，专注于为品牌打造独特的视觉体验。" }, null, "ai").id);
-      addedIds.push(stateStore.addComponent("footer", undefined, { copyright: "© 2024 Design Studio", links: ["作品", "关于", "联系"] }, null, "ai").id);
+      addedIds.push(stateStore.addComponent("footer", undefined, { copyright: copyright(), links: ["作品", "关于", "联系"] }, null, "ai").id);
     },
     dashboard: () => {
-      addedIds.push(stateStore.addComponent("navbar", undefined, { brand: "数据看板", links: ["概览", "分析", "设置"] }, null, "ai").id);
+      addedIds.push(stateStore.addComponent("navbar", undefined, { brand: brandName(), links: ["概览", "分析", "设置"] }, null, "ai").id);
       addedIds.push(stateStore.addComponent("stats", undefined, { title: "今日数据", items: [
         { label: "访问量", value: "12,345" },
         { label: "订单数", value: "328" },
@@ -2551,7 +2384,7 @@ export function registerDesignSetThemeTool(server: McpServer): void {
     "design_set_theme",
     {
       title: "Set Theme Mode",
-      description: `Set the theme mode for the design project (light or dark). The client dashboard will update accordingly.
+      description: `Set the theme mode for the design project (light or dark).
 
 Args:
   - mode (string): Theme mode — 'light' or 'dark'
@@ -2623,72 +2456,3 @@ No arguments required. Returns a list of conflicts found, or an empty list if no
 
 // ===== Tool: design_check_prompts =====
 
-export function registerDesignCheckPromptsTool(server: McpServer): void {
-  server.registerTool(
-    "design_check_prompts",
-    {
-      title: "Check User Prompts",
-      description: `Check if the user has sent any natural language prompts via the client dashboard.
-
-If a pending prompt exists, it is returned and then cleared. Use this to periodically poll for user instructions sent from the browser client.
-
-No arguments required.`,
-      inputSchema: {},
-      annotations: {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
-      },
-    },
-    async () => {
-      try {
-        const prompt = store.consumePendingPrompt();
-        if (prompt) {
-          store.recordPromptAccepted(prompt);
-          return {
-            content: [{ type: "text", text: `# User Prompt Found\n\nThe user sent the following instruction via the client dashboard:\n\n"${prompt}"\n\nThe prompt has been cleared. Consider acting on it now.` }],
-            structuredContent: { success: true, has_prompt: true, prompt },
-          };
-        }
-        return {
-          content: [{ type: "text", text: `No pending user prompts.` }],
-          structuredContent: { success: true, has_prompt: false, prompt: null },
-        };
-      } catch (error) {
-        return {
-          content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
-        };
-      }
-    }
-  );
-}
-
-// ===== Register All Design Tools =====
-
-export function registerAllDesignTools(server: McpServer): void {
-  registerDesignInitTool(server);
-  registerDesignAddComponentTool(server);
-  registerDesignUpdateComponentTool(server);
-  registerDesignRenameTool(server);
-  registerDesignAnimationTool(server);
-  
-  registerDesignAlignTool(server);
-  registerDesignZOrderTool(server);
-  
-  
-  registerDesignGetStateTool(server);
-  registerDesignSetTokenTool(server);
-  registerDesignRemoveComponentTool(server);
-  registerDesignUndoTool(server);
-  registerDesignRedoTool(server);
-  registerDesignAddPageTool(server);
-  registerDesignSwitchPageTool(server);
-  registerDesignRemovePageTool(server);
-  registerDesignApplyTemplateTool(server);
-  registerDesignExportTool(server);
-  registerDesignReorderComponentTool(server);
-  registerDesignSetThemeTool(server);
-  registerDesignGetConflictsTool(server);
-  registerDesignCheckPromptsTool(server);
-}

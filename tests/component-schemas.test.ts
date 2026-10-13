@@ -5,18 +5,28 @@ import {
   validateComponentProps,
   describeComponentProps,
 } from "../src/component-schemas.js";
+import { COMPONENT_TYPES } from "../src/service/design-service.js";
+
+test("every catalogued type has a prop schema and vice versa", () => {
+  // Guards against catalog/schema drift: this pair of lists used to be
+  // maintained by hand and fell out of sync when types were removed.
+  const schemaTypes = Object.keys(COMPONENT_PROP_SCHEMAS).sort();
+  const catalogTypes = [...COMPONENT_TYPES].sort();
+  assert.deepEqual(schemaTypes, catalogTypes, "schema map and component catalog must agree");
+});
 
 test("component schemas cover every known component type", () => {
   const expected = [
     "hero", "navbar", "card_grid", "card", "cta", "footer", "text_section",
     "feature_list", "button", "stats", "pricing", "testimonial", "banner",
     "timeline", "faq", "form", "image", "tabs", "accordion", "carousel",
-    "modal", "sidebar", "breadcrumb", "pagination", "progress", "badge",
+    "sidebar", "breadcrumb", "pagination", "progress", "badge",
     "avatar", "input", "grid", "table", "alert", "tooltip", "bento_grid",
-    "skeleton", "command_palette", "glass_card", "fab", "marquee",
-    "feature_grid", "cookie_banner", "toggle", "text", "section", "container",
+    "skeleton", "glass_card", "marquee",
+    "feature_grid", "text", "section", "container", "html_fragment",
   ];
-  for (const type of expected) {
+  assert.equal(expected.length, COMPONENT_TYPES.size, "expected list must cover the whole catalog");
+  for (const type of [...expected].sort()) {
     assert.ok(COMPONENT_PROP_SCHEMAS[type], `missing schema for ${type}`);
   }
 });

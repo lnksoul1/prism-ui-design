@@ -22,6 +22,47 @@ test("flutter export produces a MaterialApp with token-derived theme", () => {
   assert.match(code, /const Color kPrimary = Color\(0xFF/);
 });
 
+test("variant classes on underscore component types match the exported stylesheet", () => {
+  // Regression: `card_grid` + variant "3col" used to emit `card_grid--3col`
+  // while every rule in the stylesheet is hyphenated (`.card-grid--3col`), so
+  // the grid never applied and cards rendered as full-width stacked blocks.
+  stateStore.addComponent(
+    "card_grid",
+    "3col",
+    { title: "Products", items: [{ title: "A" }, { title: "B" }, { title: "C" }] },
+    null,
+    "ai"
+  );
+  const html = exportDesign("html");
+
+  // The markup must use the hyphenated variant class...
+  assert.match(html, /class="card-grid card-grid--3col"/);
+  assert.doesNotMatch(html, /card_grid--/, "no underscore variant classes in the output");
+
+  // ...and that class must actually be defined in the inlined stylesheet.
+  const style = html.slice(html.indexOf("<style"), html.indexOf("</style>"));
+  assert.match(style, /\.card-grid--3col\s*\{[^}]*grid-template-columns/);
+});
+
+test("tables are emitted inside a styled wrapper", () => {
+  // Regression: `.table` had no CSS at all and the only `.table-wrap` rule had
+  // nothing emitting that class, so exported tables were unstyled text.
+  stateStore.addComponent(
+    "table",
+    "striped",
+    { title: "Deploys", columns: ["Service", "Env"], rows: [["api", "prod"]] },
+    null,
+    "ai"
+  );
+  const html = exportDesign("html");
+  assert.match(html, /<div class="table-wrap"><table class="table table--striped">/);
+
+  const style = html.slice(html.indexOf("<style"), html.indexOf("</style>"));
+  assert.match(style, /\.table\s*\{/, ".table base rule missing");
+  assert.match(style, /\.table th, \.table td\s*\{[^}]*padding/, "table cell rule missing");
+  assert.match(style, /\.table-wrap\s*\{[^}]*overflow-x/, ".table-wrap rule missing");
+});
+
 test("swiftui export produces a SwiftUI view with token colors", () => {
   const code = exportDesign("swiftui");
   assert.match(code, /import SwiftUI/);

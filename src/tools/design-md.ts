@@ -1,5 +1,5 @@
 /**
- * DESIGN.md import (functional plan F1 / F3).
+ * DESIGN.md import (Google's design-token document format).
  *
  * Google's DESIGN.md format (YAML front matter tokens + prose) is becoming a
  * standard way to carry design systems into agent workflows. This tool parses

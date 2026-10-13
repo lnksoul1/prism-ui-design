@@ -43,6 +43,38 @@ test("applySemanticStyle throws when no adjectives are recognized", () => {
   assert.throws(() => applySemanticStyle("desc", ["zzz"]), /No recognized adjectives/);
 });
 
+test("applySemanticStyle shifts the project's current primary instead of replacing it", () => {
+  // Regression: the tool used to fall back to a neutral hue-220 default whenever
+  // the caller did not pass base_color, silently overwriting a brand colour with
+  // blue. Adjectives must adjust whatever primary the project already has.
+  stateStore.setToken("colors", "color-primary", "#8B5E3C", "user"); // warm brown
+  const before = stateStore.getState().tokens.colors["color-primary"].value;
+
+  applySemanticStyle("温暖的落地页", ["温暖"]);
+
+  const after = stateStore.getState().tokens.colors["color-primary"].value;
+  assert.notEqual(after, before, "a hue-shifting adjective should move the colour");
+  // Still in the warm half of the wheel — not reset to a neutral/blue default.
+  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(after);
+  assert.ok(m, `expected a hex colour, got ${after}`);
+  const r = parseInt(m![1], 16);
+  const b = parseInt(m![3], 16);
+  assert.ok(r > b, `expected a warm colour (r>b) after「温暖」, got ${after}`);
+});
+
+test("an explicit base_color still wins over the current primary", () => {
+  stateStore.setToken("colors", "color-primary", "#8B5E3C", "user"); // warm brown
+  applySemanticStyle("x", ["科技"], "tech", "#06B6D4"); // explicit cyan
+  const after = stateStore.getState().tokens.colors["color-primary"].value;
+  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(after)!;
+  const r = parseInt(m[1], 16);
+  const g = parseInt(m[2], 16);
+  const b = parseInt(m[3], 16);
+  // Cyan is "cool": blue/green dominate red. (Hue shifts can land on teal, so
+  // assert dominance rather than blue>green.)
+  assert.ok(g > r && b > r, `expected a cool colour (green and blue above red), got ${after}`);
+});
+
 test("semantic style is idempotent and deterministic", () => {
   const a = applySemanticStyle("x", ["科技"], "tech", "#06B6D4");
   const b = applySemanticStyle("x", ["科技"], "tech", "#06B6D4");

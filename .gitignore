@@ -22,13 +22,13 @@ Thumbs.db
 npm-debug.log*
 
 # Generated design artifacts (regenerated on demand)
-client/canvas-page.html
-client/design-writeback.html
 .prism-previews/
 
-# Scratch / local experiment copies
-.tmp-shot/
-prism-ui-design-mcp/
+# Scratch output from the preview/audit scripts (showcase.mjs,
+# audit-rendered-css.mjs and survey-types.mjs regenerate these on demand)
+examples/type-probe.html
+examples/variant-audit.html
+.tmp-*/
 
 # DSH harness inspection scratch
 .dsh-plugin-inspect/

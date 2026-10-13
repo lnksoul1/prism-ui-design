@@ -3,8 +3,7 @@ import { getContrastRatio } from "./utils/color.js";
 import { isBreakpoint as isBreakpointSafe } from "./responsive.js";
 import { runBatch } from "./commands/batch.js";
 import { snapToGrid } from "./layout/snap.js";
-import { smartLayout } from "./layout/smart.js";
-import { isFlowActionType, type ActionFlow } from "./action-flow.js";
+
 
 // ===== Design State Types =====
 
@@ -287,19 +286,15 @@ export interface DesignState {
   activePlatform: string;
   platforms: Record<string, PlatformSnapshot>;
   comments: DesignComment[];
-  actionFlows: Record<string, ActionFlow>;
+
   pageLinks: PageLink[];
   revision: number;
   /** 导入记录: pageId → provenance of the "导入 → 调整 → 一键应用" pipeline. */
   imports: Record<string, ImportRecord>;
-  /** Upgrade plan U1: smooth scroll configuration (Lenis). */
-  scroll?: ScrollConfig;
-  /** Upgrade plan U2: Vanta 3D backgrounds keyed by component/section id. */
-  vantaBackgrounds?: Record<string, VantaBackgroundConfig>;
-  /** Upgrade plan U3: React Bits component registry (component_id → meta). */
-  reactBits?: Record<string, { name: string; variant: string; props?: Record<string, unknown> }>;
-  /** Upgrade plan U4: export runtime level (minimal | standard | full). */
-  exportRuntime?: "minimal" | "standard" | "full";
+
+
+
+
   /** 背景编辑 (P1): 页面级背景（颜色/渐变/图片/图案/动画预设）。 */
   pageBackground?: PageBackground;
 }
@@ -320,38 +315,7 @@ export interface PageBackground {
   params?: Record<string, string | number>;
 }
 
-/** Lenis smooth scroll configuration (upgrade plan U1). */
-export interface ScrollConfig {
-  mode: "native" | "smooth" | "lenis-gsap";
-  options: {
-    lerp?: number;
-    duration?: number;
-    wheelMultiplier?: number;
-    syncTouch?: boolean;
-    anchors?: boolean;
-    allowNestedScroll?: boolean;
-    respectReducedMotion?: boolean;
-  };
-  /** ScrollTo targets recorded for export runtime injection. */
-  scrollToTargets?: ScrollToTarget[];
-}
 
-export interface ScrollToTarget {
-  id: string;
-  target: string; // component_id or CSS selector
-  offset?: number;
-  duration?: number;
-  label?: string;
-}
-
-/** Vanta 3D background configuration (upgrade plan U2). */
-export interface VantaBackgroundConfig {
-  effect: string; // one of VANTA_EFFECTS
-  params: Record<string, number | string | boolean>;
-  mouseControls?: boolean;
-  touchControls?: boolean;
-  gyroControls?: boolean;
-}
 
 export interface PlatformSnapshot {
   platform: string;
@@ -427,19 +391,15 @@ type StoredState = {
   activePlatform: string;
   platforms: Record<string, PlatformSnapshot>;
   comments: DesignComment[];
-  actionFlows: Record<string, ActionFlow>;
+
   pageLinks: PageLink[];
   revision: number;
   /** 导入记录: pageId → provenance of the "导入 → 调整 → 一键应用" pipeline. */
   imports: Record<string, ImportRecord>;
-  /** Upgrade plan U1: smooth scroll configuration (Lenis). */
-  scroll?: ScrollConfig;
-  /** Upgrade plan U2: Vanta 3D backgrounds keyed by component/section id. */
-  vantaBackgrounds?: Record<string, VantaBackgroundConfig>;
-  /** Upgrade plan U3: React Bits component registry (component_id → meta). */
-  reactBits?: Record<string, { name: string; variant: string; props?: Record<string, unknown> }>;
-  /** Upgrade plan U4: export runtime level (minimal | standard | full). */
-  exportRuntime?: "minimal" | "standard" | "full";
+
+
+
+
   /** 背景编辑 (P1): 页面级背景（颜色/渐变/图片/图案/动画预设）。 */
   pageBackground?: PageBackground;
 };
@@ -458,8 +418,7 @@ export class DesignStateStore extends EventEmitter {
   private batchChange: unknown = null;
   private batchSnapshot: StoredState | null = null;
 
-  /** M3 协同: 远端变更投影时置位——此时 commit 走 commitCollab（不入 undo 历史）。 */
-  private suppressHistory = false;
+
 
   // Pending user prompt (from client dashboard)
   private pendingPrompt: string | null;
@@ -497,7 +456,7 @@ export class DesignStateStore extends EventEmitter {
       activePlatform: "web-desktop",
       platforms: {},
       comments: [],
-      actionFlows: {},
+
       pageLinks: [],
       revision: 0,
       imports: {},
@@ -1327,95 +1286,34 @@ export class DesignStateStore extends EventEmitter {
     return true;
   }
 
-  getPageBackground(): PageBackground | null {
-    return this.state.pageBackground
-      ? JSON.parse(JSON.stringify(this.state.pageBackground))
-      : null;
-  }
+  
 
   // ===== Scroll (upgrade plan U1: Lenis integration) =====
-  setScroll(mode: ScrollConfig["mode"], options: ScrollConfig["options"], source: "ai" | "user" = "ai"): void {
-    this.state.scroll = {
-      mode,
-      options: options || {},
-      scrollToTargets: this.state.scroll?.scrollToTargets || [],
-    };
-    this.logActivity("set_scroll", "scroll", `Scroll mode set to "${mode}"`, source);
-    this.commit({ type: "setScroll", mode, options });
-  }
+  
 
-  getScroll(): ScrollConfig | null {
-    return this.state.scroll ? JSON.parse(JSON.stringify(this.state.scroll)) : null;
-  }
+  
 
-  addScrollToTarget(target: Omit<ScrollToTarget, "id"> & { id?: string }, source: "ai" | "user" = "ai"): ScrollToTarget {
-    if (!this.state.scroll) {
-      this.state.scroll = { mode: "native", options: {}, scrollToTargets: [] };
-    }
-    if (!this.state.scroll.scrollToTargets) this.state.scroll.scrollToTargets = [];
-    const withId = { ...target, id: target.id || `scroll_${Date.now()}_${Math.random().toString(36).slice(2, 7)}` };
-    this.state.scroll.scrollToTargets.push(withId);
-    this.logActivity("add_scroll_target", "scroll", `Added scroll-to target ${target.target}`, source);
-    this.commit({ type: "addScrollTarget", target: withId });
-    return withId;
-  }
+  
 
   // ===== Vanta backgrounds (upgrade plan U2) =====
 
-  setVantaBackground(
-    targetId: string,
-    config: VantaBackgroundConfig,
-    source: "ai" | "user" = "ai"
-  ): VantaBackgroundConfig {
-    if (!this.state.vantaBackgrounds) this.state.vantaBackgrounds = {};
-    this.state.vantaBackgrounds[targetId] = config;
-    this.logActivity("set_vanta_bg", "vanta", `Set Vanta ${config.effect} background for ${targetId}`, source);
-    this.commit({ type: "setVantaBackground", targetId, config });
-    return config;
-  }
+  
 
-  removeVantaBackground(targetId: string, source: "ai" | "user" = "ai"): boolean {
-    if (!this.state.vantaBackgrounds || !this.state.vantaBackgrounds[targetId]) return false;
-    delete this.state.vantaBackgrounds[targetId];
-    this.logActivity("remove_vanta_bg", "vanta", `Removed Vanta background for ${targetId}`, source);
-    this.commit({ type: "removeVantaBackground", targetId });
-    return true;
-  }
+  
 
-  getVantaBackgrounds(): Record<string, VantaBackgroundConfig> {
-    return JSON.parse(JSON.stringify(this.state.vantaBackgrounds || {}));
-  }
+  
 
   // ===== React Bits (upgrade plan U3) =====
 
-  registerReactBitsComponent(
-    componentId: string,
-    name: string,
-    variant: string,
-    props?: Record<string, unknown>,
-    source: "ai" | "user" = "ai"
-  ): void {
-    if (!this.state.reactBits) this.state.reactBits = {};
-    this.state.reactBits[componentId] = { name, variant, props };
-    this.logActivity("register_react_bits", "react-bits", `Registered React Bits ${name} (${variant}) for ${componentId}`, source);
-    this.commit({ type: "registerReactBits", componentId, name, variant });
-  }
+  
 
-  getReactBitsComponent(componentId: string): { name: string; variant: string; props?: Record<string, unknown> } | null {
-    return this.state.reactBits?.[componentId] ? JSON.parse(JSON.stringify(this.state.reactBits[componentId])) : null;
-  }
+  
 
   // ===== Export runtime (upgrade plan U4) =====
 
-  setExportRuntime(runtime: "minimal" | "standard" | "full", source: "ai" | "user" = "ai"): void {
-    this.state.exportRuntime = runtime;
-    this.logActivity("set_export_runtime", "export", `Export runtime set to "${runtime}"`, source);
-    this.commit({ type: "setExportRuntime", runtime });
-  }
+  
 
-  getExportRuntime(): "minimal" | "standard" | "full" {
-    return this.state.exportRuntime || "standard";
-  }
+  
 
   reorderComponent(
     fromId: string,
@@ -1701,171 +1599,6 @@ export class DesignStateStore extends EventEmitter {
   }
 
   /**
-   * M3 协同: 把 Y.Doc 侧（远端客户端）的组件变更投影进状态树。
-   * changed 中的 node 为平面表示（children 恒为 []）——已有组件做字段合并
-   * （不动 children），新组件按 parentId/index 插入，removed 直接摘除，
-   * 受影响的兄弟序列按 order（ydoc 全量索引）重排。
-   */
-  applyCollabEntries(
-    changed: Array<{ id: string; node: ComponentNode; parentId: string | null; pageId: string; index: number }>,
-    removedIds: string[],
-    order: Map<string, { parentId: string | null; pageId: string; index: number }>
-  ): boolean {
-    if (changed.length === 0 && removedIds.length === 0) return false;
-    const pages = this.state.pages;
-    const pageIds = new Set(pages.map((p) => p.id));
-    const touchedRootPages = new Set<string>();
-    const touchedParents = new Set<string>();
-
-    const detach = (id: string): void => {
-      const visit = (arr: ComponentNode[]): boolean => {
-        for (let i = 0; i < arr.length; i++) {
-          if (arr[i].id === id) {
-            arr.splice(i, 1);
-            return true;
-          }
-          if (visit(arr[i].children ?? [])) return true;
-        }
-        return false;
-      };
-      for (const page of pages) {
-        if (visit(page.components)) return;
-      }
-    };
-
-    for (const id of removedIds) {
-      const meta = order.get(id);
-      if (meta?.parentId) touchedParents.add(meta.parentId);
-      else if (meta) touchedRootPages.add(meta.pageId);
-      detach(id);
-    }
-
-    for (const e of changed) {
-      if (!pageIds.has(e.pageId)) continue;
-      const existing = this.findComponent(e.id);
-      if (existing) {
-        for (const [k, v] of Object.entries(e.node)) {
-          if (k !== "children") (existing as unknown as Record<string, unknown>)[k] = v;
-        }
-      } else {
-        const fresh = { ...(e.node as unknown as ComponentNode), children: [] as ComponentNode[] };
-        if (e.parentId) {
-          const parent = this.findComponent(e.parentId);
-          if (parent) {
-            parent.children = parent.children ?? [];
-            parent.children.push(fresh);
-          }
-        } else {
-          const page = pages.find((p) => p.id === e.pageId);
-          if (page) page.components.push(fresh);
-        }
-      }
-      if (e.parentId) touchedParents.add(e.parentId);
-      else touchedRootPages.add(e.pageId);
-    }
-
-    const sortSiblings = (arr: ComponentNode[]): void => {
-      arr.sort((a, b) => (order.get(a.id)?.index ?? 0) - (order.get(b.id)?.index ?? 0));
-    };
-    for (const pid of touchedParents) {
-      const parent = this.findComponent(pid);
-      if (parent?.children?.length) sortSiblings(parent.children);
-    }
-    for (const pageId of touchedRootPages) {
-      const page = pages.find((p) => p.id === pageId);
-      if (page) sortSiblings(page.components);
-    }
-
-    this.logActivity("collab_sync", "system", `Applied ${changed.length} changed / ${removedIds.length} removed components from collab`, "user");
-    this.commitCollab({ type: "collabSync" });
-    return true;
-  }
-
-  /**
-   * P3a 协同: 把 Y.Doc 侧（远端客户端）的评论变更投影进状态（无历史）。
-   * 全量列表比对（按 createdAt+id 排序保证双侧一致），无差异返回 false；
-   * 超过 200 条按 addComment 同款上限裁剪（裁剪差值随后由 reconcile 从
-   * Y.Doc 删除，保持双侧最终一致）。
-   */
-  applyCollabComments(comments: DesignComment[]): boolean {
-    const sorted = [...comments].sort(
-      (a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)
-    );
-    const clipped = sorted.length > 200 ? sorted.slice(-200) : sorted;
-    const prev = this.state.comments;
-    const same =
-      prev.length === clipped.length &&
-      prev.every((c, i) => JSON.stringify(c) === JSON.stringify(clipped[i]));
-    if (same) return false;
-    this.state.comments = clipped.map((c) => ({ ...c }));
-    this.logActivity("collab_sync", "system", `Applied ${clipped.length} comments from collab`, "user");
-    this.commitCollab({ type: "collabCommentsSync" });
-    return true;
-  }
-
-  /**
-   * P3b 协同: 把 Y.Doc 侧（远端客户端）的连线变更投影进状态（无历史）。
-   * 按 id 稳定排序后全量比对，超过 500 条按 addPageLink 同款上限裁剪。
-   */
-  applyCollabPageLinks(links: PageLink[]): boolean {
-    const sorted = [...links].sort((a, b) => a.id.localeCompare(b.id));
-    const clipped = sorted.length > 500 ? sorted.slice(-500) : sorted;
-    const prev = this.state.pageLinks;
-    const same =
-      prev.length === clipped.length &&
-      prev.every((l, i) => JSON.stringify(l) === JSON.stringify(clipped[i]));
-    if (same) return false;
-    this.state.pageLinks = clipped.map((l) => ({ ...l }));
-    this.logActivity("collab_sync", "system", `Applied ${clipped.length} page links from collab`, "user");
-    this.commitCollab({ type: "collabPageLinksSync" });
-    return true;
-  }
-
-  /**
-   * P3c 协同: 把 Y.Doc 侧（远端客户端）的 ActionFlow 变更投影进状态（无历史）。
-   * 数组按 id 排序后重建 Record 全量比对。
-   */
-  applyCollabActionFlows(flows: ActionFlow[]): boolean {
-    const sorted = [...flows].sort((a, b) => a.id.localeCompare(b.id));
-    const next: Record<string, ActionFlow> = {};
-    for (const f of sorted) next[f.id] = { ...f };
-    if (JSON.stringify(this.state.actionFlows) === JSON.stringify(next)) return false;
-    this.state.actionFlows = next;
-    this.logActivity("collab_sync", "system", `Applied ${sorted.length} action flows from collab`, "user");
-    this.commitCollab({ type: "collabActionFlowsSync" });
-    return true;
-  }
-
-  /**
-   * M2 智能布局: 对选中组件做确定性重排（等间距堆叠 + 左对齐 + 可选容器 clamp）。
-   */
-  applySmartLayout(
-    ids: string[],
-    options: { grid?: number; gap?: number; container?: { x: number; y: number; width: number; height: number } | null },
-    source: "ai" | "user" = "user"
-  ): boolean {
-    const targets = ids
-      .map((id) => this.findComponent(id))
-      .filter((c): c is ComponentNode => !!c);
-    if (targets.length === 0) return false;
-    const boxes = targets.map((c) => ({
-      id: c.id,
-      x: c.layout?.x ?? 0,
-      y: c.layout?.y ?? 0,
-      w: c.layout?.w ?? 320,
-      h: c.layout?.h ?? 80,
-    }));
-    const out = smartLayout(boxes, options);
-    runBatch("smart-layout", () => {
-      for (const b of out) {
-        this.updateComponent(b.id, {}, source, { x: b.x, y: b.y, w: b.w, h: b.h });
-      }
-    });
-    this.logActivity("smart_layout", "layout", `Smart layout applied to ${out.length} components`, source);
-    return true;
-  }
-
-  /**
    * Reorder a component's stacking order (精确编辑 P0): front / back /
    * forward / backward, within its containing list (top-level or nested).
    */
@@ -1927,36 +1660,6 @@ export class DesignStateStore extends EventEmitter {
   getImport(pageId: string | null | undefined): ImportRecord | null {
     if (!pageId || !this.state.imports) return null;
     return this.state.imports[pageId] || null;
-  }
-
-  /**
-   * Replace the current page's component order with the given ID sequence
-   * (components not in the list keep their relative order at the end).
-   * Used by the reflow tool; recorded in undo history like any mutation.
-   */
-  setComponentsOrder(orderedIds: string[], source: "ai" | "user" = "user"): boolean {
-    const page = this.currentPage();
-    if (!page) return false;
-    const current = page.components;
-    const byId = new Map(current.map((c) => [c.id, c]));
-    const next: ComponentNode[] = [];
-    for (const id of orderedIds) {
-      const comp = byId.get(id);
-      if (comp) next.push(comp);
-    }
-    const idSet = new Set(orderedIds);
-    const remaining = current.filter((c) => !idSet.has(c.id));
-    const newOrder = [...next, ...remaining];
-    if (
-      newOrder.length !== current.length ||
-      newOrder.some((c, i) => c.id !== current[i].id)
-    ) {
-      page.components = newOrder;
-      this.logActivity("reorder_page", "page", "Reflowed page to canonical section order", source);
-      this.commit({ type: "reorderPage", ids: newOrder.map((c) => c.id) });
-      return true;
-    }
-    return false;
   }
 
   private checkComponentDependency(type: string): { hasWarning: boolean; message: string } {
@@ -2030,305 +1733,40 @@ export class DesignStateStore extends EventEmitter {
 
   // ===== Platform Snapshots (C2) =====
 
-  savePlatformSnapshot(platform: string, source: "ai" | "user" = "user"): PlatformSnapshot {
-    const snapshot: PlatformSnapshot = {
-      platform,
-      savedAt: new Date().toISOString(),
-      pages: JSON.parse(JSON.stringify(this.state.pages)),
-      currentPageId: this.state.currentPageId,
-    };
-    this.state.platforms[platform] = snapshot;
-    this.logActivity("save_platform", "platform", `Saved ${platform} platform design`, source);
-    this.commit({ type: "savePlatform", platform, savedAt: snapshot.savedAt });
-    return snapshot;
-  }
+  
 
-  loadPlatformSnapshot(platform: string, source: "ai" | "user" = "user"): PlatformSnapshot {
-    const snapshot = this.state.platforms[platform];
-    if (!snapshot) {
-      throw new Error(`No saved design for platform "${platform}". Call design_save_platform first.`);
-    }
-    const pages = JSON.parse(JSON.stringify(snapshot.pages)) as PageDef[];
-    this.state.pages = pages;
-    this.state.currentPageId = pages.some((p) => p.id === snapshot.currentPageId)
-      ? snapshot.currentPageId
-      : pages[0]?.id ?? null;
-    this.logActivity("load_platform", "platform", `Restored ${platform} platform design`, source);
-    this.commit({ type: "loadPlatform", platform });
-    return snapshot;
-  }
+  
 
-  listPlatformSnapshots(): Array<{ platform: string; savedAt: string; pageCount: number; componentCount: number }> {
-    return Object.entries(this.state.platforms).map(([platform, s]) => ({
-      platform,
-      savedAt: s.savedAt,
-      pageCount: s.pages.length,
-      componentCount: s.pages.reduce((sum, p) => sum + p.components.length, 0),
-    }));
-  }
+  
 
   // ===== Comments (C5) =====
 
-  addComment(
-    componentId: string,
-    text: string,
-    author: string = "user",
-    source: "ai" | "user" = "user",
-    options: { x?: number; y?: number; assignee?: string } = {}
-  ): DesignComment {
-    const node = this.findComponent(componentId);
-    if (!node) {
-      throw new Error(`Component not found: ${componentId}`);
-    }
-    const comment: DesignComment = {
-      id: `cmt_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-      component_id: componentId,
-      author,
-      text,
-      createdAt: new Date().toISOString(),
-      ...(typeof options.x === "number" && Number.isFinite(options.x) ? { x: options.x } : {}),
-      ...(typeof options.y === "number" && Number.isFinite(options.y) ? { y: options.y } : {}),
-      ...(typeof options.assignee === "string" && options.assignee ? { assignee: options.assignee } : {}),
-    };
-    this.state.comments.push(comment);
-    if (this.state.comments.length > 200) {
-      this.state.comments = this.state.comments.slice(-200);
-    }
-    this.logActivity("add_comment", "comment", `Comment on ${node.type} (${componentId})`, source);
-    this.commit({ type: "addComment", comment });
-    return comment;
-  }
+  
 
-  removeComment(commentId: string, source: "ai" | "user" = "user"): boolean {
-    const idx = this.state.comments.findIndex((c) => c.id === commentId);
-    if (idx === -1) return false;
-    this.state.comments.splice(idx, 1);
-    this.logActivity("remove_comment", "comment", `Removed comment ${commentId}`, source);
-    this.commit({ type: "removeComment", commentId });
-    return true;
-  }
-
-  /** M3 打点评论: 更新文本/解决状态/指派人/坐标（partial patch，入 undo 历史）。 */
-  updateComment(
-    commentId: string,
-    patch: { text?: string; resolved?: boolean; assignee?: string | null; x?: number; y?: number },
-    source: "ai" | "user" = "user"
-  ): DesignComment | null {
-    const c = this.state.comments.find((x) => x.id === commentId);
-    if (!c) return null;
-    if (typeof patch.text === "string" && patch.text.trim()) c.text = patch.text;
-    if (typeof patch.resolved === "boolean") c.resolved = patch.resolved;
-    if (patch.assignee === null) delete c.assignee;
-    else if (typeof patch.assignee === "string" && patch.assignee) c.assignee = patch.assignee;
-    if (typeof patch.x === "number" && Number.isFinite(patch.x)) c.x = patch.x;
-    if (typeof patch.y === "number" && Number.isFinite(patch.y)) c.y = patch.y;
-    c.updatedAt = new Date().toISOString();
-    this.logActivity("update_comment", "comment", `Updated comment ${commentId}`, source);
-    this.commit({ type: "updateComment", commentId });
-    return c;
-  }
+  
 
   // ===== Action Flows (M3) =====
 
-  addActionFlow(flow: ActionFlow, source: "ai" | "user" = "user"): ActionFlow {
-    if (!this.findComponent(flow.componentId)) {
-      throw new Error(`Component not found: ${flow.componentId}`);
-    }
-    if (!Array.isArray(flow.steps)) {
-      throw new Error("steps must be an array");
-    }
-    for (const s of flow.steps) {
-      if (!s || typeof s.id !== "string" || !isFlowActionType(String(s.action))) {
-        throw new Error(`Invalid step action: ${String((s as { action?: unknown })?.action)}`);
-      }
-    }
-    this.state.actionFlows[flow.id] = { ...flow };
-    this.logActivity("add_action_flow", "action_flow", `Added flow ${flow.name} (${flow.id})`, source);
-    this.commit({ type: "addActionFlow", flowId: flow.id });
-    return flow;
-  }
+  
 
-  updateActionFlow(
-    id: string,
-    patch: Partial<Pick<ActionFlow, "name" | "steps" | "enabled">>,
-    source: "ai" | "user" = "user"
-  ): ActionFlow | null {
-    const flow = this.state.actionFlows[id];
-    if (!flow) return null;
-    if (typeof patch.name === "string" && patch.name.trim()) flow.name = patch.name;
-    if (typeof patch.enabled === "boolean") flow.enabled = patch.enabled;
-    if (Array.isArray(patch.steps)) {
-      for (const s of patch.steps) {
-        if (!s || typeof s.id !== "string" || !isFlowActionType(String(s.action))) {
-          throw new Error(`Invalid step action: ${String((s as { action?: unknown })?.action)}`);
-        }
-      }
-      flow.steps = patch.steps;
-    }
-    this.logActivity("update_action_flow", "action_flow", `Updated flow ${id}`, source);
-    this.commit({ type: "updateActionFlow", flowId: id });
-    return flow;
-  }
+  
 
-  removeActionFlow(id: string, source: "ai" | "user" = "user"): boolean {
-    if (!this.state.actionFlows[id]) return false;
-    delete this.state.actionFlows[id];
-    this.logActivity("remove_action_flow", "action_flow", `Removed flow ${id}`, source);
-    this.commit({ type: "removeActionFlow", flowId: id });
-    return true;
-  }
+  
 
-  getActionFlows(componentId?: string): ActionFlow[] {
-    const all = Object.values(this.state.actionFlows);
-    return componentId ? all.filter((f) => f.componentId === componentId) : all;
-  }
+  
 
   // ===== Page Links (Play Mode) =====
 
-  addPageLink(
-    fromPageId: string,
-    toPageId: string,
-    label?: string,
-    sourceComponentId?: string,
-    source: "ai" | "user" = "user",
-    transition?: string
-  ): PageLink {
-    const fromPage = this.state.pages.find((p) => p.id === fromPageId);
-    if (!fromPage) throw new Error(`Source page must exist: ${fromPageId}`);
-    const toPage = this.state.pages.find((p) => p.id === toPageId);
-    if (!toPage) throw new Error(`Target page must exist: ${toPageId}`);
-    if (transition !== undefined && (typeof transition !== "string" || !isPageLinkTransition(transition))) {
-      throw new Error(`Invalid transition: ${String(transition)}`);
-    }
+  
 
-    // One link per source component: re-linking replaces the old link.
-    if (sourceComponentId) {
-      const existing = this.state.pageLinks.findIndex(
-        (l) => l.source_component_id === sourceComponentId
-      );
-      if (existing !== -1) {
-        this.state.pageLinks.splice(existing, 1);
-        this.logActivity(
-          "replace_page_link",
-          "page_link",
-          `Replaced link for ${sourceComponentId}: ${fromPage.name} → ${toPage.name}`,
-          source
-        );
-      }
-    }
-
-    const link: PageLink = {
-      id: `link_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-      from_page_id: fromPageId,
-      to_page_id: toPageId,
-      transition: transition ?? "fade",
-    };
-    if (label) link.label = label;
-    if (sourceComponentId) link.source_component_id = sourceComponentId;
-    this.state.pageLinks.push(link);
-    if (this.state.pageLinks.length > 500) {
-      this.state.pageLinks = this.state.pageLinks.slice(-500);
-    }
-    this.logActivity(
-      "add_page_link",
-      "page_link",
-      `Linked ${fromPage.name} → ${toPage.name}`,
-      source
-    );
-    this.commit({ type: "addPageLink", link });
-    return link;
-  }
-
-  /** M4 转场: 更新连线的转场类型/标签（partial patch，入 undo 历史）。 */
-  updatePageLink(
-    linkId: string,
-    patch: { label?: string; transition?: string },
-    source: "ai" | "user" = "user"
-  ): PageLink | null {
-    const link = this.state.pageLinks.find((l) => l.id === linkId);
-    if (!link) return null;
-    if (patch.transition !== undefined) {
-      if (typeof patch.transition !== "string" || !isPageLinkTransition(patch.transition)) {
-        throw new Error(`Invalid transition: ${String(patch.transition)}`);
-      }
-      link.transition = patch.transition;
-    }
-    if (typeof patch.label === "string" && patch.label.trim()) link.label = patch.label;
-    this.logActivity("update_page_link", "page_link", `Updated page link ${linkId}`, source);
-    this.commit({ type: "updatePageLink", linkId });
-    return link;
-  }
-
-  removePageLink(linkId: string, source: "ai" | "user" = "user"): boolean {
-    const idx = this.state.pageLinks.findIndex((l) => l.id === linkId);
-    if (idx === -1) return false;
-    this.state.pageLinks.splice(idx, 1);
-    this.logActivity("remove_page_link", "page_link", `Removed page link ${linkId}`, source);
-    this.commit({ type: "removePageLink", linkId });
-    return true;
-  }
+  
 
   // ===== Page Constraints (R1 M2 修正记忆) =====
 
   /** 每页约束上限（防止无限堆积）。 */
   static readonly MAX_PAGE_CONSTRAINTS = 20;
 
-  /**
-   * R1 M2: 把当前组件的布局记为所在页面的约束（按 component_type 生效）。
-   * 组件无 layout 时不记（返回 null）；同一组件重复记 → 替换旧约束；
-   * 超上限时淘汰最早的约束。
-   */
-  addPageConstraint(componentId: string, source: "ai" | "user" = "user"): PageConstraint | null {
-    const state = this.state;
-    for (const page of state.pages) {
-      const find = (nodes: ComponentNode[]): ComponentNode | null => {
-        for (const n of nodes) {
-          if (n.id === componentId) return n;
-          const found = find(n.children || []);
-          if (found) return found;
-        }
-        return null;
-      };
-      const comp = find(page.components);
-      if (!comp) continue;
-      if (!comp.layout) return null; // 无布局（流式子项）不能记约束
-      if (!page.constraints) page.constraints = [];
-      // 同一组件重复记 → 替换
-      const dupIdx = page.constraints.findIndex((c) => c.source_component_id === componentId);
-      if (dupIdx !== -1) page.constraints.splice(dupIdx, 1);
-      const constraint: PageConstraint = {
-        id: `pc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-        component_type: comp.type,
-        layout: { ...comp.layout },
-        source_component_id: componentId,
-      };
-      page.constraints.push(constraint);
-      while (page.constraints.length > DesignStateStore.MAX_PAGE_CONSTRAINTS) {
-        page.constraints.shift();
-      }
-      this.logActivity(
-        "add_page_constraint",
-        "page_constraint",
-        `Locked ${comp.type} at ${Math.round(comp.layout.x)},${Math.round(comp.layout.y)} (${Math.round(comp.layout.w)}×${Math.round(comp.layout.h)})`,
-        source
-      );
-      this.commit({ type: "addPageConstraint", constraint });
-      return constraint;
-    }
-    return null;
-  }
-
-  removePageConstraint(constraintId: string, source: "ai" | "user" = "user"): boolean {
-    for (const page of this.state.pages) {
-      const idx = (page.constraints || []).findIndex((c) => c.id === constraintId);
-      if (idx === -1) continue;
-      page.constraints!.splice(idx, 1);
-      this.logActivity("remove_page_constraint", "page_constraint", `Removed page constraint ${constraintId}`, source);
-      this.commit({ type: "removePageConstraint", constraintId });
-      return true;
-    }
-    return false;
-  }
+  
 
   // ===== Clear All =====
 
@@ -2352,10 +1790,7 @@ export class DesignStateStore extends EventEmitter {
     this.state.currentPageId = defaultPage.id;
     this.state.themeMode = "light";
     this.state.imports = {};
-    this.state.scroll = undefined;
-    this.state.vantaBackgrounds = undefined;
-    this.state.reactBits = undefined;
-    this.state.exportRuntime = "standard";
+
     this.state.pageBackground = undefined;
 
     this.logActivity("clear_all", "system", "Cleared all design state", source);
@@ -2411,29 +1846,17 @@ export class DesignStateStore extends EventEmitter {
         typeof snapshot.activePlatform === "string" ? snapshot.activePlatform : "web-desktop",
       platforms: snapshot.platforms && typeof snapshot.platforms === "object" ? snapshot.platforms : {},
       comments: Array.isArray(snapshot.comments) ? snapshot.comments.slice(0, 200) : [],
-      actionFlows:
-        snapshot.actionFlows && typeof snapshot.actionFlows === "object"
-          ? JSON.parse(JSON.stringify(snapshot.actionFlows))
-          : {},
+
       pageLinks: Array.isArray(snapshot.pageLinks) ? snapshot.pageLinks.slice(0, 500) : [],
       revision: typeof snapshot.revision === "number" ? snapshot.revision : 0,
       imports:
         snapshot.imports && typeof snapshot.imports === "object"
           ? JSON.parse(JSON.stringify(snapshot.imports))
           : {},
-      scroll: snapshot.scroll && typeof snapshot.scroll === "object"
-        ? JSON.parse(JSON.stringify(snapshot.scroll))
-        : undefined,
-      vantaBackgrounds: snapshot.vantaBackgrounds && typeof snapshot.vantaBackgrounds === "object"
-        ? JSON.parse(JSON.stringify(snapshot.vantaBackgrounds))
-        : undefined,
-      reactBits: snapshot.reactBits && typeof snapshot.reactBits === "object"
-        ? JSON.parse(JSON.stringify(snapshot.reactBits))
-        : undefined,
-      exportRuntime:
-        snapshot.exportRuntime === "minimal" || snapshot.exportRuntime === "full"
-          ? snapshot.exportRuntime
-          : "standard",
+
+
+
+
       pageBackground:
         snapshot.pageBackground && typeof snapshot.pageBackground === "object"
           ? JSON.parse(JSON.stringify(snapshot.pageBackground))
@@ -2493,14 +1916,11 @@ export class DesignStateStore extends EventEmitter {
       activePlatform: "web-desktop",
       platforms: {},
       comments: [],
-      actionFlows: {},
+
       pageLinks: [],
       revision: 0,
       imports: {},
-      scroll: undefined,
-      vantaBackgrounds: undefined,
-      reactBits: undefined,
-      exportRuntime: "standard",
+
       pageBackground: undefined,
     };
     this.history = [JSON.parse(JSON.stringify(this.state))];
@@ -2510,71 +1930,13 @@ export class DesignStateStore extends EventEmitter {
 
   // ===== Pending Prompt (AI communication channel) =====
 
-  setPendingPrompt(prompt: string): void {
-    this.pendingPrompt = prompt;
-  }
-
-  /** Record a user prompt in the activity log (does not mutate design state). */
-  recordPrompt(prompt: string): void {
-    this.logActivity("user_prompt", "prompt", prompt, "user");
-  }
+  
 
   getPendingPrompt(): string | null {
     return this.pendingPrompt;
   }
 
-  clearPendingPrompt(): void {
-    this.pendingPrompt = null;
-  }
-
-  /**
-   * Consume the pending prompt (called when the agent polls via
-   * `design_check_prompts`) and emit an event so the server can broadcast
-   * an "accepted" acknowledgment back to the dashboard.
-   */
-  consumePendingPrompt(): string | null {
-    const prompt = this.pendingPrompt;
-    if (!prompt) return null;
-    this.pendingPrompt = null;
-    this.emit("prompt_accepted", prompt);
-    return prompt;
-  }
-
-  /** Log that the agent accepted a user prompt (does not mutate design). */
-  recordPromptAccepted(prompt: string): void {
-    this.logActivity("prompt_accepted", "prompt", `Agent accepted prompt: ${prompt}`, "ai");
-  }
-
-  /**
-   * Log that the built-in executor handled a prompt and emit an event so
-   * the server can broadcast the result back to the dashboard.
-   */
-  recordPromptExecuted(summary: string, action = "prompt_executed"): void {
-    this.logActivity("prompt_executed", "prompt", summary, "user");
-    this.emit("prompt_executed", { summary, action });
-  }
-
-  /**
-   * Replace a page's component tree (used by "apply canvas to preview").
-   * Recorded in undo history like any other mutation.
-   */
-  replacePageComponents(
-    pageId: string,
-    components: ComponentNode[],
-    source: "ai" | "user" = "user"
-  ): boolean {
-    const page = this.state.pages.find((p) => p.id === pageId);
-    if (!page) return false;
-    page.components = components;
-    this.logActivity(
-      "replace_components",
-      "canvas",
-      `Applied canvas: ${components.length} components on page ${pageId}`,
-      source
-    );
-    this.commit({ type: "replaceComponents", pageId, count: components.length });
-    return true;
-  }
+  
 
   // ===== Private Helpers =====
 

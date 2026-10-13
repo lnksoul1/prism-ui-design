@@ -85,11 +85,6 @@ export interface TidyUpdate {
 export type LayoutIntentKind = "row" | "stack" | "grid" | "sidebar" | "overlay";
 
 const BAND_INTENTS = new Set<LayoutIntentKind>(["row", "grid"]);
-
-export function isLayoutIntent(v: unknown): v is LayoutIntentKind {
-  return v === "row" || v === "stack" || v === "grid" || v === "sidebar" || v === "overlay";
-}
-
 /** R1 M1: tidy 的可选参数（生成落位管线传入；无参数时行为与 v1 完全一致）。 */
 export interface TidyOptions {
   /** 组件 id → 布局意图（缺省按 stack 处理）。 */

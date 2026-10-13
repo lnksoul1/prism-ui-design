@@ -10,8 +10,6 @@ import {
   getColorInfo,
   generateHarmony,
   generateNeutralGrays,
-  generateTints,
-  generateShades,
   normalizeHex,
   isValidHex,
   HarmonyScheme,

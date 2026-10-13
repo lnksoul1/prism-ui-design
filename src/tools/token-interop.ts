@@ -1,5 +1,5 @@
 /**
- * Design-token interchange tools (improvement plan B3):
+ * Design-token interchange tools:
  *   - design_export_tokens  → dtcg | css | style-dictionary | figma_tokens
  *   - design_import_tokens  → DTCG JSON with merge strategies
  */

@@ -1,600 +1,238 @@
 # Prism
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Node.js >= 20](https://img.shields.io/badge/node-%3E%3D20-green.svg)](https://nodejs.org/)
+[![Node.js >= 18](https://img.shields.io/badge/node-%3E%3D18-green.svg)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
-[![Tests](https://img.shields.io/badge/tests-450%20passing-brightgreen.svg)](https://nodejs.org/api/test.html)
-[![MCP Protocol](https://img.shields.io/badge/MCP-Protocol-purple.svg)](https://modelcontextprotocol.io/)
+[![MCP](https://img.shields.io/badge/MCP-stdio-purple.svg)](https://modelcontextprotocol.io/)
 
-Prism is a visual adjustment surface for non-designers: import a website or app
-, adjust any component, button, or interaction — down
-to the inner parts of a component — precisely and freely on the canvas, then
-apply the changes back to your product with one click. Quick-change presets
-(design systems, component blocks, interaction templates) get you there fast;
-fine-tuning gets you there precisely. See
-[`prism-product-definition-v2.md`](./prism-product-definition-v2.md) for the
-full product definition.
+**An MCP server for design work.** Give an AI agent the ability to generate design
+tokens, assemble a page from 45 component types, review it for accessibility and
+design quality, and export it as code or tokens.
 
-## Features
+- **41 tools**, 4 resources, 3 prompts over **stdio**
+- **45 component types** with validated Zod prop schemas
+- **Export** to HTML, React, Vue, React-TS, Svelte, CSS, presentation, Flutter, SwiftUI
+- **Tokens** in DTCG, CSS custom properties, Style Dictionary, Figma Tokens, Tailwind v4 `@theme`, DESIGN.md
+- **Sessions** are stateful and persisted: save/load a project as `.prism.json`
+- **No dashboard, no HTTP server, no external APIs.** Exported pages are self-contained (pure CSS animation, no CDN runtime)
 
-- **75 MCP tools** covering the full spectrum of UI design needs- **Built-in LLM channel** (product definition v2): fill in your own API key
-  (OpenAI-compatible / Anthropic / Gemini) in the AI settings dialog and the
-  dashboard itself can generate pages from natural language — no external
-  agent required. Unmatched prompts automatically fall through to it.
-- **Desktop app** (Electron shell): `npm run app` — double-click experience;
-  the main process starts the bundled server on a free port and opens the
-  dashboard window (`electron/main.cjs`).
-- **Freeform canvas by default**: drag/resize any component, snap to
-  guides/edges, edit the inner parts of a component in place, reorder layers.
-- **17 brand design systems** (Linear, Stripe, Vercel, Notion, Arc, Spotify,
-  Apple, GitHub, IBM Carbon, Shopify Polaris, Duolingo, Discord, Raycast,
-  Airbnb, Figma, Anthropic …) — one-click restyling; no style presets, the
-  design system is the only theming layer.
-- **41 component types** (Atomic Design: input, table, alert, tooltip, bento grid, skeleton, command palette, glass card, FAB, marquee, toggle, cookie banner …)
-- **20 animations** (13 entry + 7 hover, with duration/delay/easing/stagger)
-- **Complete design token system** generation in a single call
-- **Dual transport support**: stdio (local) and Streamable HTTP (remote)
-- **Zero external API dependencies** — all generation is algorithmic
+---
 
-## Built for non-professionals (non-designers)
-
-The dashboard is designed so people without design vocabulary or coding
-skills can drive it. See
-[docs/archive/prism-nonprofessional-painpoints.md](./docs/archive/prism-nonprofessional-painpoints.md)
-for the full pain-point analysis and benchmark against open-source tools
-(OpenUI, Lovable, draw-a-ui, v0, ui-toolkit-mcp …).
-
-- **Everyday-language prompt engine (v2)**: beyond colors/themes/templates,
-  plain instructions just work — "把标题改成「你好」" (edit copy), "字太小了，
-  大一点" (font scale), "间距更紧凑" (spacing), "整体调亮一点" (brightness),
-  "改成直角" (radius), "换成衬线字体" (font pairing), "检查一下对比度"
-  (contrast report), "重做" (redo). All executed locally, no agent required.
-- **Never a dead end**: when an instruction is not understood, it is still
-  queued for the agent — but the dashboard immediately shows clickable
-  example instructions (REST + WebSocket both acknowledge the outcome).
-- **Templates are non-destructive**: applying a template to a non-empty page
-  opens a fresh page instead of erroring.
-- **"解读" (Explain) button** + `design_explain_design` / `GET /api/explain`:
-  reads the tokens and explains the design in plain language (style, dominant
-  color, personality adjectives, fonts, contrast warnings) and lists concrete
-  instructions you can say next — clicking one fills the prompt bar.
-- **Starter examples on the empty canvas**: one-click example instructions
-  (change primary color / generate a template / bigger text / brighter page)
-  so nobody faces a blank page.
-- **Open-in-new-tab preview**: the export modal can open the generated HTML
-  as a standalone single-file page — save it or share it without any tooling.
-
-## Canvas-first editing (tldraw)
-
-The dashboard has a **Preview / Draw** toggle in the canvas toolbar. Draw mode embeds a full tldraw infinite canvas for non-coders:
-
-- Real drawing tools: select, pan/zoom, rectangles, ellipses, arrows, lines, text, sticky notes, images, box-select, align/distribute, z-order, undo/redo
-- Two-way mapping: entering Draw mode turns the current page components into **token-colored UI blocks** (primary-colored buttons, surface cards, tinted heroes); "Apply to preview" converts the drawing back into components
-- AI can draw live: `design_draw_canvas` queues rect/text/arrow/image/prism commands that appear on the canvas immediately
-- Auto-arrange: select shapes and arrange them into a tidy column with one click
-- Library drag & drop: drag components from the left library straight onto the canvas — a token-colored block is created at the drop point and autosaved
-- Prompt delivery status: sending a prompt shows a "queued" chip, which flips to "accepted ✓" when the agent polls `design_check_prompts` (REST fallback when WebSocket is down)
-- Built-in prompt engine: change primary/background color (name or #hex), switch light/dark mode, apply a design system by name (e.g. "换成玻璃拟态风格"), generate one of 5 page templates, add common components, undo, or clear — executed instantly **without an external agent**; unmatched prompts stay queued for the agent
-- Scrollable side panels: layers / library / versions / comments / tokens / activity scroll with the column
-- Template-first start: a blank canvas offers one-click templates (SaaS, e-commerce, blog, portfolio, dashboard, blank)
-- Autosave with debounce to `POST /api/canvas`; "Write back page file" exports the drawing as a real HTML page (`client/canvas-page.html`)
-- Agent-visible: `design_get_canvas` / `design_apply_canvas` let the AI inspect and adopt what the user drew
-
-## Quick Start
+## Quick start
 
 ```bash
-# Install dependencies
 npm install
-
-# Build
 npm run build
-
-# Rebuild the tldraw canvas bundle (client/vendor/)
-npm run build:canvas
-
-# Run via stdio (default)
-npm start
-
-# Run via HTTP
-TRANSPORT=http PORT=3100 npm start
-
-# Desktop app (Electron shell, double-click experience)
-npm run app
+npm start            # speak MCP over stdio
 ```
 
-## Import → adjust → one-click apply (your product, not a generator)
-
-Prism is an **adjustment surface for your own product**, not a first-time
-prototype generator:
-
-1. **导入 (Import)**: `⋯ → 导入` and pick a source — **项目文件夹 / 网页 URL /
-   HTML 代码** (or upload an HTML file) / **客户端界面** (Prism's own UI) /
-   **实际界面截图** (a live screenshot as a reference image). Your page is
-   fetched/parsed into editable components on a fresh page
-   (`POST /api/import/product`, `/api/import-client`, `/api/capture-client`),
-   and the source is recorded (`GET /api/imports`) for every kind — the apply
-   banner covers all of them.
-2. **调整 (Adjust)**: precisely and freely — freeform move/resize,
-   multi-select + align/distribute, z-order, layers, behaviors, tokens.
-3. **一键应用 (Apply)**: `POST /api/apply` writes `prism-adjusted-<page>.html`
-   (exactly what you see) and `prism-adjustments.css` (design-token overrides
-   you can link into your own product) into `PRISM_PRODUCT_DIR` (default
-   `~/.prism/products`), keeping timestamped backups. A result dialog shows the
-   exact artifact paths plus the `<link rel="stylesheet" href="prism-adjustments.css">`
-   hint; `POST /api/apply/rollback` restores the latest backup.
-
-The dashboard shows an apply banner whenever the current page came from an
-imported product.
-
-### Fidelity + real writeback (v3.3)
-
-- **原页面预览**: for URL / HTML / project-folder imports the canvas toolbar
-  shows a **◎ 原页面 / ✎ 编辑** toggle. 原页面 renders the complete original
-  document in a sandboxed iframe — original `<head>`, CSS, scripts, links and
-  form interactions keep working. 编辑 switches to the editable semantic
-  fragments.
-- **Full-document apply**: URL/HTML imports rebuild the adjusted page from the
-  original document (scripts and `<head>` preserved) instead of exporting a
-  reduced generated page. Plain-HTML project files are written back **in
-  place** to the original file, with a `.prism-backups` backup and rollback.
-- **Fragment element editing**: click any inner element of an imported
-  fragment to edit its text, attributes (`href`/`src`/`class`/`id`/…), 15 CSS
-  properties, or bind a Prism interaction (`elementMeta`), which play mode
-  triggers inside the fragment.
-
-
-## Template quick change (想快就套模板，想细就自己微调)
-
-Product definition v3.2 pillar ⑦ — one-click changes applied to the **current**
-product (never a fresh page):
-
-- **组件模板 (Component blocks)**: the library's components tab leads with 10
-  ready-made blocks (Hero 分屏+CTA, 定价三档, 注册表单, FAQ, CTA 横幅 …). With
-  the **替换选中** toggle on, clicking a block **replaces the selected
-  component in place — same id, same layout position, undoable**
-  (`state.replaceComponent`); dragging a block onto the canvas adds it.
-- **交互模板 (Behavior templates)**: a new **交互** library tab binds preset
-  interactions to the selected component in one click (打开链接新标签页 / 点击
-  提示 / 跳转首页 / 显隐切换 / 表单提交反馈 / AI 联动指令), triggered in play mode.
-- **设计系统 (Brand design systems)**: the library's default **设计系统** tab
-  lists 17 named design systems (Linear, Stripe, Vercel, Notion, Arc, Spotify,
-  Apple, GitHub, IBM Carbon, Shopify Polaris, Duolingo, Discord, Raycast,
-  Airbnb, Figma, Anthropic …) — one click restyles the whole project's tokens
-  (undoable, `POST /api/design-system/apply`).
-- Every path is undoable and broadcast; agents get the same power via
-  `design_apply_component_template` / `design_apply_behavior_template` /
-  `design_apply_style_guide`, and `GET /api/template-catalog` lists both
-  component and behavior templates.
-
-## Exact editing (精确编辑, freeform mode)
-
-Freeform mode is the **default** canvas (`流式/自由` toggle switches back to
-auto-stacking) — a precise adjustment surface, not just drag-and-drop:
-
-- **任意移动 + 缩放**: drag any top-level component anywhere; drag its
-  8 corner/edge handles to resize. Missing layouts are assigned automatically
-  on load, so every component is movable out of the box.
-- **组件内部组成部分**: nested item text (feature lists, pricing plans, stats,
-  navbar links, card grids) is editable in place via double-click — including
-  array paths like `items[0].title`. Child components appear indented in the
-  layers panel and are selectable/renamable/deletable.
-- **标尺 + 参考线**: rulers along the canvas edges; drag out of a ruler to
-  create a guide, drag a guide to move it, drag it back onto the ruler (or
-  double-click) to remove it. Guides are session-local editing aids and never
-  leak into exports.
-- **吸附 (Snapping)**: while dragging or resizing a component, edges/centers
-  snap to guides, the canvas center/edges, and other components' edges/centers
-  (5 px threshold) with a violet snap indicator.
-- **图层重命名**: double-click a layer name in the layers panel to rename it
-  (persisted on `ComponentNode.name`, undoable); agents use
-  `design_rename_component`.
-
-## Interactions on the drawing canvas (自由编辑补缺)
-
-Shapes and images drawn on the tldraw canvas are interactive too:
-
-- Select any shape/image → click the **⚡ 交互** button in the canvas toolbar →
-  bind one of the interaction templates (打开链接 / 点击提示 / 跳转首页 /
-  显隐切换 / 表单提交 / AI 联动) or clear it. The behavior lives on
-  `shape.meta.behavior` and persists with the saved canvas.
-- In **play mode** (▶ 播放), clicking a shape/image with a bound behavior
-  triggers it — same mental model as the main canvas.
-- **应用到预览 (Apply to preview)** carries `meta.behavior` into the
-  component (`shapesToComponents`), so behaviors survive the round trip and
-  the exported page keeps them.
-
-## Built-in AI (BYO API key)
-
-The dashboard can generate pages itself — no external agent needed:
-
-1. Open **⋯ → AI 设置** and pick a provider: OpenAI-compatible (OpenAI /
-   DeepSeek / 通义 / 智谱 / local endpoints via a custom base URL),
-   Anthropic Claude, or Google Gemini; paste your API key and save.
-2. Type a request in the prompt bar (e.g. "帮我做一个咖啡店的首页"). If the
-   local instruction engine cannot match it, the built-in AI takes over, the
-   page appears on the canvas, and the status flips to "AI 已生成…".
-3. The key is stored only in `~/.prism/projects/llm-config.json` (or your
-   `PRISM_PROJECT_DIR`), never logged, never returned by the API (masked).
-
-The LLM generates structured component JSON that goes through the same
-service/state layer as the MCP tools — fully undoable and broadcast to every
-connected client.
-
-## Tools
-
-| Tool | Description |
-|------|-------------|
-| `ui_generate_color_palette` | Generate harmonious color palettes from a base color using color theory |
-| `ui_suggest_typography` | Get curated font pairings (display + body) with Google Fonts links |
-| `ui_generate_type_scale` | Generate modular typography scales (golden ratio, perfect fourth, etc.) |
-| `ui_generate_spacing_scale` | Generate spacing systems (linear, geometric, fibonacci strategies) |
-| `ui_generate_shadow_system` | Generate elevation shadow systems (subtle, medium, sharp) |
-| `ui_generate_border_radius_scale` | Generate border-radius scales (sharp, subtle, rounded, pill) |
-| `ui_check_color_contrast` | Check WCAG 2.1 contrast ratios with AA/AAA grading |
-| `ui_generate_gradient` | Generate CSS gradients with harmonious color stops |
-| `ui_suggest_breakpoints` | Generate responsive breakpoint systems (Tailwind, Bootstrap, Material, custom) |
-| `ui_generate_design_tokens` | Generate a complete design token system (colors, type, spacing, shadows, radii, transitions) |
-
-### Real-time design tools (18)
-
-| Tool | Description |
-|------|-------------|
-| `design_init` | Initialize a design project with neutral default tokens (+ optional base color) |
-| `design_add_component` | Add a UI component (hero, navbar, card, etc.) to the canvas |
-| `design_update_component` | Update properties of an existing component |
-| `design_rename_component` | Rename a component's layer (shown in the layers panel, empty reverts to the default) |
-| `design_remove_component` | Remove a component from the canvas |
-| `design_set_animation` | Set entry/hover animations for a component |
-| `design_set_token` | Set or update a single design token |
-| `design_get_state` | Get the full design state (tokens, components, activity log, undo/redo capability) |
-| `design_undo` | Undo the last operation |
-| `design_redo` | Redo an undone operation |
-| `design_add_page` | Add a new page |
-| `design_switch_page` | Switch the current page |
-| `design_remove_page` | Remove a page |
-| `design_apply_template` | Apply a page template (ecommerce, SaaS, blog, portfolio, dashboard) |
-| `design_export` | Export the design as HTML, React, Vue, or Figma Tokens |
-| `design_reorder_component` | Reorder components on the canvas |
-| `design_set_theme` | Switch between light and dark theme |
-| `design_get_conflicts` | Get token contrast conflicts |
-| `design_check_prompts` | Read and clear pending user prompts |
-| `design_save_project` | Persist the current design to a `.prism.json` file |
-| `design_load_project` | Restore a design from a `.prism.json` file |
-| `design_list_projects` | List saved project files |
-| `design_export_tokens` | Export tokens as W3C DTCG, CSS, Style Dictionary, or Figma Tokens |
-| `design_import_tokens` | Import design tokens from DTCG JSON (replace / merge strategies) |
-| `design_audit_accessibility` | Score the design against WCAG-oriented accessibility rules |
-| `design_render_preview` | Render the design as HTML (and PNG screenshot when Playwright is installed) |
-| `design_save_template` | Save the current design as a reusable template |
-| `design_load_template` | Load a saved template |
-| `design_list_templates` | List saved templates |
-| `design_create_version` | Snapshot the design as a named version |
-| `design_list_versions` | List version snapshots |
-| `design_restore_version` | Restore a previous version |
-| `design_diff_versions` | Diff two versions (components + tokens) |
-| `design_import_design_md` | Import tokens from a Google DESIGN.md document |
-| `design_import_webpage` | Import a webpage URL / HTML as components |
-| `design_get_style_guide` | Look up a named style guide (glassmorphism, brutalist, …) |
-| `design_apply_style_guide` | Apply a brand design system over the neutral default tokens |
-| `design_semantic_style` | Map natural-language adjectives to tokens with traceable reasons |
-| `design_list_capabilities` | Self-describing capability manifest for agents |
-| `design_list_components` | List components on the current page |
-| `design_list_pages` | List all pages |
-| `design_set_project_name` | Rename the project |
-| `design_get_tokens` | Get current tokens as DTCG JSON |
-| `design_set_token_batch` | Batch-set tokens in a category |
-| `design_delete_token` | Delete a single token |
-| `design_suggest_improvements` | Heuristic design review with actionable suggestions |
-| `design_create_brand_style` | Learn a brand style from its colors (dominant hue + brand palette) |
-| `design_reflow` | Reorder the page into canonical section order |
-| `design_auto_improve` | Apply common structural fixes (tokens / navbar / hero / footer) |
-| `design_set_platform` | Set the preview platform (web / desktop / mobile) |
-| `design_save_platform` | Save current pages as a platform-specific design |
-| `design_load_platform` | Restore a saved platform design |
-| `design_list_platforms` | List saved platform designs |
-| `design_add_comment` | Attach a review comment to a component |
-| `design_list_comments` | List review comments |
-| `design_remove_comment` | Remove a review comment |
-| `design_generate_page` | Generate a page from a brief (template + semantic style) |
-| `design_review_and_improve` | One-call review loop: score, fix, re-score + a11y audit |
-| `design_explain_design` | Explain the current design in plain language + suggest follow-up instructions (read-only) |
-| `design_set_behavior` | Bind an interaction to a component — navigate / link / toggle / toast / submit / prompt (play mode) |
-| `design_apply_component_template` | Apply a ready-made component block — add, or replace the selected component in place |
-| `design_apply_behavior_template` | Bind a preset interaction template to a component in one click |
-| `design_align_components` | Align/distribute multiple components in freeform space (single undo step) |
-| `design_z_order_component` | Reorder component stacking — front / back / forward / backward |
-
-## Testing
-
-```bash
-npm test
-```
-
-The test suite covers the state store (undo/redo, pages, tokens, conflicts),
-style-preset token generation, all MCP tool schemas, the shared service layer,
-project persistence, DTCG token interop, accessibility audit, render preview,
-the prompt executor v1/v2 intents, plain-language design explanation, component
-and behavior templates, and an HTTP + WebSocket integration chain
-(**446 tests passing**), plus an optional Playwright browser smoke
-(`npm run test:e2e`).
-
-### Git hooks
-
-A pre-push hook runs lint + unit tests before every push to keep `main` green.
-Install it once per clone:
-
-```bash
-npm run hooks:install   # git config core.hooksPath .githooks
-```
-
-Bypass temporarily with `git push --no-verify`.
-
-## Templates, versions, semantics & style guides
-
-- **Templates** (`design_save_template` / `design_load_template`): persist any
-  design as a `.prism-template.json` file and re-apply it later.
-- **Versions** (`design_create_version` / `design_restore_version` /
-  `design_diff_versions`): session-scoped snapshots with component + token diff.
-- **Design review** (`design_suggest_improvements`): heuristic score for
-  structure completeness, density, motion, accessibility, and tokens.
-- **Brand style learning** (`design_create_brand_style`): derive a brand token
-  set from 1–8 brand colors (dominant hue, primary/accent, radius strategy).
-- **Reflow** (`design_reflow`): canonical page section order in one call.
-- **Semantic styling** (`design_semantic_style`): adjectives such as "温暖 /
-  warm" are translated into measurable deltas (hue, saturation, lightness,
-  radius, shadow, font mood); every applied token records its reason.
-- **Style guides** (`design_get_style_guide` / `design_apply_style_guide`):
-  glassmorphism, brutalist, retro, neumorphism, cyberpunk, and editorial
-  token overrides.
-- **DESIGN.md interop**: `design_import_design_md` parses Google DESIGN.md
-  front matter; `design_export_tokens(format="design_md")` generates it.
-- **Webpage import**: `design_import_webpage` fetches a URL or accepts pasted
-  HTML and extracts navbar/hero/sections/footer components.
-- **Presentation export**: `design_export(format="presentation")` turns every
-  page into a navigable HTML slide deck (arrow keys + print);
-  `design_export(format="react-ts")` emits typed React components and
-  `design_export(format="css")` emits tokens + base component CSS.
-  `flutter` / `swiftui` formats emit mobile code with token-derived themes.
-- **Auto-improve** (`design_auto_improve`): deterministically adds missing
-  tokens / navbar / hero / footer in one call.
-- **Presence**: the dashboard shows how many clients are online, and the
-  active preview platform syncs between server state and every client.
-- **Platform designs** (`design_save_platform` / `design_load_platform`):
-  keep a separate page layout per platform (web / desktop / mobile) while
-  sharing style + tokens.
-- **Comments** (`design_add_comment` / `design_list_comments`): attach review
-  feedback to any component without changing the design.
-- **One-shot generation** (`design_generate_page`): turn a brief into a
-  complete page — template detection + semantic adjectives in one call.
-- **Review & improve** (`design_review_and_improve`): score the design, apply
-  structural fixes, re-score, and run the accessibility audit in one call.
-- **Tailwind export**: `design_export_tokens(format="tailwind")` emits a
-  Tailwind v4 CSS-first `@theme` block; `design_export(format="svelte")`
-  emits a Svelte SFC with token CSS.
-- **i18n**: the dashboard shell supports 中文 / English with a topbar toggle
-  (persisted in localStorage).
-- **Live cursors** (C5): every connected dashboard broadcasts its pointer
-  position (throttled); other clients see remote cursors with a client tag.
-- **Conflict detection** (C5): every mutation carries the client's last-seen
-  `revision`; if the design changed underneath it, the mutation is rejected
-  with a `conflict` message and the client auto-resyncs.
-- **Premium UI** (spec §5.1–5.3): the dashboard follows a top-tier design
-  system — violet brand (`#7C3AED`), white base, 8/12/16 radius ladder,
-  restrained shadows, Vercel-style dual focus rings, six micro-states,
-  dot-grid canvas, and crafted empty states (canvas guide card with AI /
-  library / template entry points, activity clock state, WCAG contrast-pass
-  card with the live ratio).
-- **Real screenshots**: the screenshot button downloads a PNG rendered by
-  Playwright (`/api/render?format=png`), falling back to HTML when browsers
-  are unavailable.
-- **Client panels**: project switcher, template library (built-in + saved),
-  version snapshots, and component comments are now first-class dashboard
-  panels; activity/token/library search and conflict reload UI included.
-- **Open client UI**: the canvas empty state includes "打开客户端界面", which
-  imports the dashboard's own shell (`client/index.html`) as a design page
-  (`POST /api/import-client`) so the service can adjust this project's UI.
-- **Capture actual UI**: "截取实际界面" screenshots the live dashboard with
-  Playwright (`POST /api/capture-client`) and drops the image into the canvas
-  as a faithful reference next to the structural components.
-- **One-click write-back**: "✍ 写回" (`POST /api/writeback`) writes the design
-  tokens back into `client/style.css` (with a timestamped backup) and exports
-  the full design to `client/design-writeback.html`, so canvas changes
-  directly restyle the project's own UI.
-- **Prompt queue visibility**: queued user prompts appear in the activity log
-  and are broadcast as `prompt_queued` for connected agents/gateways.
-- **Canvas fixes**: the preview canvas now scrolls when content overflows, and
-  freeform mode lets you drag components anywhere (whole wrapper, not just the
-  handle) and resize with corner handles.
-- **Freeform canvas**: toggle between flow layout and free positioning —
-  drag components anywhere, resize with 8 handles, edit X/Y/W/H in the
-  inspector, and auto-arrange into a clean vertical stack.
-  Layouts are stored on the component (`layout`, `visible`, `locked`) and
-  updated through `design_update_component` / WebSocket.
-
-## Agent context (MCP Resources & Prompts)
-
-The server exposes four resources (`prism://tokens/active`,
-`prism://components/registry`, `prism://patterns`, `prism://audit/checklist`)
-and three prompts (`build_page`, `design_review`, `import_project`) so agents
-can discover design context without guessing.
-
-## Optional: screenshot rendering
-
-`design_render_preview` always returns standalone HTML. To enable PNG
-screenshots (the AI visual-verification loop), install the optional runtime:
-
-```bash
-npm i -D playwright && npx playwright install chromium
-```
-
-## Project persistence
-
-Designs are saved automatically (debounced) to
-`~/.prism/projects/autosave.prism.json` and restored on the next startup.
-Explicit save/load is available through the MCP tools
-(`design_save_project`, `design_load_project`, `design_list_projects`),
-the REST endpoints (`/api/project/save`, `/api/project/load`, `/api/projects`),
-and the dashboard toolbar (💾 保存 / 📂 加载).
-Override the storage directory with `PRISM_PROJECT_DIR`.
-
-## Agent workflow
-
-The browser prompt bar queues instructions for the AI agent. Agents poll the
-queue and act on it:
-
-```
-loop:
-  result = design_check_prompts()        # returns + clears the pending prompt
-  if result.has_prompt:
-    act_on(result.prompt)                # e.g. design_update_component(...)
-  sleep(2s)
-```
-
-Every queued prompt is also written to the activity log and broadcast over
-WebSocket as `{ type: "prompt_queued", prompt }`.
-
-## Dashboard shortcuts & quick actions
-
-The dashboard follows common design-tool interaction patterns (inspired by
-Figma / Linear / Penpot):
-
-| Shortcut | Action |
-|---|---|
-| `?` | Toggle the keyboard-shortcut help overlay |
-| `Ctrl+K` | Open the command palette (type to filter, ↑↓ to select, Enter to run) |
-| `/` | Focus the AI instruction input |
-| `P` | Toggle canvas editor / preview mode |
-| `Ctrl+Z` / `Ctrl+Shift+Z` | Undo / redo |
-| `Del` | Delete the selected component |
-
-The prompt bar also shows one-click instruction chips (dark mode, light mode,
-SaaS/e-commerce templates, clear). Instructions run locally through the built-in
-prompt executor when they match, and are queued for the agent otherwise.
-The drawing-canvas template picker renders each built-in template with a
-semantic miniature thumbnail (hero + feature grid, product grid, dashboard
-stats + chart, etc.) so non-designers can pick a starting point visually.
-
-## Configuration (environment)
-
-| Variable | Default | Effect |
-|---|---|---|
-| `DASHBOARD_PORT` | `3100` | HTTP/WebSocket port |
-| `PRISM_PROJECT_DIR` | `~/.prism/projects` | Project/template storage directory |
-| `PRISM_AUTOLOAD` | on | Restore the autosave checkpoint on startup (`off` disables) |
-| `PRISM_AUTOIMPORT` | on | Auto-import workspace pages on startup (`off` starts with a fresh Home page) |
-| `PRISM_PREVIEWS_DIR` | `.prism-previews` | Screenshot output directory (tool only) |
-| `PRISM_PRODUCT_DIR` | `~/.prism/products` | One-click apply output directory (adjusted HTML + adjustment CSS, with backups) |
-| `PRISM_SKIP_E2E` | off | Skip Playwright browser smoke tests (`1` skips) |
-
-## Quality gates
-
-```bash
-npm run lint      # ESLint (warnings don't block)
-npm run format    # Prettier --write
-npm run check     # lint + build + test (CI gate)
-npm run test:e2e  # optional Playwright browser smoke (needs Chromium)
-```
-
-CI (GitHub Actions, `.github/workflows/ci.yml`) runs lint + build + test on
-every push/PR with Node 20.
-
-## Configuration
-
-### stdio (local)
+### Wire it into an MCP client
 
 ```json
 {
   "mcpServers": {
-    "ui-design": {
+    "prism": {
       "command": "node",
-      "args": ["/path/to/ui-design-mcp-server/dist/index.js"]
+      "args": ["/absolute/path/to/prism/dist/index.js"]
     }
   }
 }
 ```
 
-### Streamable HTTP (remote)
+Any MCP-capable client works (Claude Desktop, Cursor, Claude Code, or your own).
+Once connected, ask the agent for something like:
+
+> Build a landing page for a coffee roastery, warm and editorial. Then audit it
+> for accessibility and export the React version.
+
+The agent will call `design_init` → `design_add_component` → `design_audit_accessibility`
+→ `design_export` and can inspect its own work through `design_get_state`.
+
+### Verify the server
 
 ```bash
-TRANSPORT=http PORT=3100 npm start
+node smoke-mcp.mjs    # spawns dist/index.js, handshakes, lists tools/resources/prompts
 ```
 
-Endpoint: `http://localhost:3100/mcp`
+---
 
-## Style Presets
+## Tools
 
-| Style | Description | Shadow | Radius | Spacing Base |
-|-------|-------------|--------|--------|-------------|
-| `minimal` | Clean, airy, neutral palette | subtle | subtle | 8px |
-| `bold` | High contrast, vibrant accents | medium | rounded | 8px |
-| `playful` | Warm, friendly, rounded shapes | medium | pill | 8px |
-| `dark` | Dark-first, luminous accents | sharp | subtle | 8px |
-| `editorial` | Magazine-like, elegant serif | subtle | sharp | 8px |
-| `tech` | Futuristic, precise, cyan/blue | sharp | sharp | 4px |
+Call `design_list_capabilities` for the machine-readable manifest. It lists
+**exactly** the registered tools — this is enforced by `tests/tools.test.ts`,
+so the manifest cannot drift from the registry.
 
-## Example Usage
+### Generation — stateless token and asset generators (10)
 
-### Generate a complementary color palette
+| Tool | What it does |
+|---|---|
+| `ui_generate_color_palette` | Harmonious palettes from a base colour (6 harmony schemes) |
+| `ui_suggest_typography` | Curated font pairings with Google Fonts links |
+| `ui_generate_type_scale` | Modular type scales (golden ratio, perfect fourth, …) |
+| `ui_generate_spacing_scale` | Spacing systems (linear, geometric, fibonacci) |
+| `ui_generate_shadow_system` | Elevation shadow sets (subtle, medium, sharp) |
+| `ui_generate_border_radius_scale` | Radius scales (sharp, subtle, rounded, pill) |
+| `ui_check_color_contrast` | WCAG 2.1 contrast ratios with AA/AAA grading |
+| `ui_generate_gradient` | CSS gradients with harmonious stops |
+| `ui_suggest_breakpoints` | Responsive breakpoint systems (Tailwind, Bootstrap, Material) |
+| `ui_generate_design_tokens` | A complete token system in one call |
+
+### Session — build a design in the server's state (18 + 3 persistence)
+
+| Tool | What it does |
+|---|---|
+| `design_init` | Start a session (neutral default tokens + optional base colour) |
+| `design_add_component` | Add a component by type, with validated props |
+| `design_update_component` | Update props, layout, visibility, lock |
+| `design_rename_component` | Rename a layer |
+| `design_remove_component` | Remove a component |
+| `design_reorder_component` | Reorder siblings |
+| `design_align_components` | Align/distribute (single undo step) |
+| `design_z_order_component` | Stacking: front/back/forward/backward |
+| `design_set_token` | Set one token |
+| `design_set_theme` | Light/dark |
+| `design_apply_template` | One of 5 page templates |
+| `design_add_page` / `design_switch_page` / `design_remove_page` | Multi-page sessions |
+| `design_get_state` | Read the whole session (tokens, pages, components, activity) |
+| `design_get_conflicts` | Token contrast conflicts |
+| `design_undo` / `design_redo` | History (50 snapshots) |
+| `design_save_project` / `design_load_project` / `design_list_projects` | Persist and restore a session as `.prism.json` |
+
+### Review, delivery and meta (10)
+
+| Tool | What it does |
+|---|---|
+| `design_audit_accessibility` | WCAG-oriented audit with a 0–100 score |
+| `design_suggest_improvements` | Heuristic review: structure, density, motion, a11y, tokens |
+| `design_render_preview` | Standalone HTML preview (PNG when Playwright is installed) |
+| `design_export` | html / react / vue / react-ts / svelte / css / presentation / flutter / swiftui |
+| `design_export_tokens` | DTCG / CSS / Style Dictionary / Figma Tokens / DESIGN.md / Tailwind v4 |
+| `design_import_tokens` | Import DTCG tokens (replace / merge-overwrite / merge-keep) |
+| `design_import_webpage` | Import a URL or pasted HTML as components |
+| `design_import_design_md` | Import tokens from a Google DESIGN.md document |
+| `design_semantic_style` | Map adjectives ("warm", "温暖") onto measurable token deltas |
+| `design_list_capabilities` | The manifest |
+
+### Resources and prompts
+
+- Resources: `prism://tokens/active`, `prism://components/registry`,
+  `prism://patterns`, `prism://audit/checklist`
+- Prompts: `build_page`, `design_review`, `import_project`
+
+---
+
+## Component types
+
+45 types the exporter can render. Values are validated by
+`src/component-schemas.ts` (unknown keys pass through, missing keys are tolerant).
+
+`hero` · `navbar` · `card_grid` · `card` · `cta` · `footer` · `text_section` ·
+`feature_list` · `stats` · `pricing` · `testimonial` · `banner` · `timeline` ·
+`faq` · `form` · `image` · `button` · `tabs` · `accordion` · `carousel` ·
+`modal` · `sidebar` · `breadcrumb` · `pagination` · `progress` · `badge` ·
+`avatar` · `input` · `grid` · `table` · `alert` · `tooltip` · `toggle` ·
+`bento_grid` · `skeleton` · `command_palette` · `glass_card` · `fab` ·
+`marquee` · `feature_grid` · `cookie_banner` · `text` · `section` ·
+`container` · `html_fragment`
+
+`html_fragment` is how imported HTML is represented: an imported page becomes
+faithful regions (header / nav / main / footer / section-N / content) that keep
+the original CSS, and `demo`-style edits are written back through
+`applyHtmlFragmentsToDocument` with head and scripts preserved.
+
+---
+
+## Configuration
+
+| Variable | Default | Effect |
+|---|---|---|
+| `PRISM_PROJECT_DIR` | `~/.prism/projects` | Where `design_save_project` / autosave write |
+| `PRISM_AUTOSAVE` | on (set `off` to disable) | Rolling autosave of the session |
+| `PRISM_AUTOLOAD` | on (set `off` to disable) | Restore the autosave checkpoint on start |
+
+The LLM API key is never involved: Prism has no built-in AI channel — the agent
+driving the MCP server *is* the intelligence. Nothing leaves your machine except
+the exported files you ask for.
+
+---
+
+## Architecture
 
 ```
-Tool: ui_generate_color_palette
-Arguments: { "base_color": "#3B82F6", "scheme": "complementary" }
+┌──────────────┐   stdio (MCP)   ┌────────────────────────────────────────┐
+│  MCP client  │ ◄─────────────► │  src/index.ts                          │
+│  (agent)     │                 │   ├─ McpServer: 41 tools               │
+└──────────────┘                 │   ├─ 4 resources · 3 prompts           │
+                                 │   └─ DesignStateStore (in-memory + disk)│
+                                 └────────────────────────────────────────┘
 ```
 
-### Check WCAG contrast
+One mutation path: every tool calls `design-service`, which calls
+`DesignStateStore`. Undo/redo, activity logging, conflict detection and the
+export pipeline all hang off that single store, so no two tools can disagree
+about state.
 
 ```
-Tool: ui_check_color_contrast
-Arguments: { "foreground": "#333333", "background": "#FFFFFF" }
+src/
+├── index.ts              # MCP registration + stdio bootstrap
+├── state.ts              # DesignStateStore: state, undo/redo, mutators
+├── service/design-service.ts  # shared mutation layer + input validation
+├── component-schemas.ts  # per-type Zod prop schemas (45)
+├── tools/                # 41 tool registrations, one module per area
+├── tokens.ts + tokens/dtcg.ts # token generation and interop
+├── layout-engine.ts, layout/  # server-side page composition and tidy-up
+├── import-project.ts     # HTML → html_fragment regions → back again
+├── semantics.ts          # adjective → token deltas
+├── project-store.ts      # .prism.json persistence + autosave
+└── resources/, prompts/  # MCP context surfaces
 ```
 
-### Generate complete design tokens for a dark theme
-
-```
-Tool: ui_generate_design_tokens
-Arguments: { "style": "dark", "base_color": "#6366F1", "dark_mode": true }
-```
-
-## Project Structure
-
-```
-ui-design-mcp-server/
-├── package.json
-├── tsconfig.json
-├── src/
-│   ├── index.ts              # Main entry point
-│   ├── types.ts              # TypeScript interfaces
-│   ├── constants.ts          # Font pairings, motion profiles, breakpoints
-│   ├── utils/
-│   │   ├── color.ts          # Color theory engine (HSL, contrast, harmony)
-│   │   └── formatter.ts      # Output formatting helpers
-│   └── tools/
-│       ├── color-palette.ts   # Color palette generation
-│       ├── typography.ts      # Font pairing + type scale
-│       ├── spacing.ts         # Spacing scale generation
-│       ├── shadows.ts         # Shadow system generation
-│       ├── border-radius.ts   # Border radius scale
-│       ├── contrast.ts        # WCAG contrast checking
-│       ├── gradient.ts        # Gradient generation
-│       ├── breakpoints.ts     # Responsive breakpoints
-│       └── design-tokens.ts   # Complete design token system
-└── dist/                      # Built JavaScript
-```
+---
 
 ## Development
 
 ```bash
-# Development with auto-reload
-npm run dev
-
-# Build
-npm run build
-
-# Clean build artifacts
-npm run clean
+npm run dev      # tsx watch src/index.ts
+npm run build    # tsc
+npm test         # build + compile tests + node --test (glob over .test-build/tests)
+npm run lint     # eslint
+npm run check    # lint + test
 ```
 
-## Requirements
+The test suite is 176 tests covering the state store, service layer, all 41 tool
+contracts, component schemas, the export formats, token interop, layout, and
+HTML import fidelity. Two contract tests are worth knowing about:
 
-- Node.js >= 18
-- npm
+- `tests/tools.test.ts` — the registered tool set must equal the
+  `design_list_capabilities` manifest, every tool must accept its documented
+  parameters and respond.
+- `tests/service.test.ts` — the component allowlist and the transport-agnostic
+  mutation schema.
+
+`.githooks/pre-push` runs `npm run lint && npm test`; install it with
+`npm run hooks:install`.
+
+---
+
+## History
+
+This repository previously contained a much larger product: an Electron desktop
+app, a vanilla-JS dashboard, a React 19 client, Yjs real-time collaboration,
+JSX bidirectional sync, a scraped design-library catalog, and a built-in LLM
+channel — 82 tools in total. That surface was removed in the **route B refactor**
+because it was not reachable from the MCP server, not verifiable, or actively
+drifted from the code (much of the documentation described features that had been
+deleted, and the capability manifest advertised tools that were never registered).
+
+The refactor is recorded in [`docs/plans/2026-08-route-b-refactor.md`](./docs/plans/2026-08-route-b-refactor.md).
+
+The earlier narrative documents (`DESIGN.md`, `PRD.md`,
+`prism-product-definition-v2.md`, `docs/archive/*`, and the dated V2.0 plans)
+described that removed product and had drifted out of sync with the code, so they
+were deleted rather than left to mislead. This README and
+`docs/plans/2026-08-route-b-refactor.md` are the only product documentation that
+remains; `src/` is the source of truth.
+
+## License
+
+MIT.

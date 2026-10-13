@@ -1,12 +1,8 @@
 // tests/layout-tidy.test.ts — 一键整理: overlap-cluster cohesion + anchored bars + semantic gaps
-import { test, describe, before, after, beforeEach } from "node:test";
+import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import express, { type Express } from "express";
-import type { Server } from "node:http";
-import { stateStore, type ComponentNode, type PageDef } from "../src/state.js";
+import type { ComponentNode, PageDef } from "../src/state.js";
 import { tidyPageLayout, verifyLayout, type LayoutIntentKind } from "../src/layout/tidy.js";
-import { registerLayoutRoutes } from "../src/routes/layout.js";
-import { errorHandler } from "../src/routes/shared.js";
 
 // ---------- helpers ----------
 
@@ -258,113 +254,5 @@ describe("verifyLayout (R1 M1)", () => {
     });
     assert.equal(withIntent.overlaps, 0, "overlay floating on card is intentional");
     assert.equal(verifyLayout(page, 1200).overlaps, 1, "without intent it is an overlap");
-  });
-});
-
-// ---------- route ----------
-
-let app: Express;
-let server: Server;
-let base = "";
-
-before(async () => {
-  app = express();
-  app.use(express.json());
-  app.use(registerLayoutRoutes());
-  app.use(errorHandler);
-  await new Promise<void>((resolve) => {
-    server = app.listen(0, "127.0.0.1", () => {
-      const addr = server.address();
-      if (addr && typeof addr === "object") base = `http://127.0.0.1:${addr.port}`;
-      resolve();
-    });
-  });
-});
-
-after(async () => {
-  server.closeAllConnections();
-  await new Promise<void>((resolve) => server.close(() => resolve()));
-});
-
-beforeEach(() => {
-  stateStore.resetForTests();
-});
-
-function post(path: string, body: unknown): Promise<{ status: number; body: Record<string, unknown> }> {
-  return fetch(`${base}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  }).then(async (res) => ({ status: res.status, body: (await res.json()) as Record<string, unknown> }));
-}
-
-function rootLayouts(): Record<string, { x: number; y: number; w: number; h: number }> {
-  const out: Record<string, { x: number; y: number; w: number; h: number }> = {};
-  for (const c of stateStore.getState().components as ComponentNode[]) {
-    if (c.layout) out[c.id] = c.layout;
-  }
-  return out;
-}
-
-describe("POST /api/layout/tidy (route)", () => {
-  test("applies tidy layouts as one undo step on the current page", async () => {
-    const nav = stateStore.addComponent("navbar", undefined, {}, null, "user");
-    const card = stateStore.addComponent("card", undefined, {}, null, "user");
-    const footer = stateStore.addComponent("footer", undefined, {}, null, "user");
-    stateStore.updateComponent(nav.id, {}, "user", { x: 40, y: 200, w: 900, h: 64 });
-    stateStore.updateComponent(card.id, {}, "user", { x: 100, y: 500, w: 600, h: 160 });
-    stateStore.updateComponent(footer.id, {}, "user", { x: 0, y: 900, w: 1100, h: 120 });
-
-    const res = await post("/api/layout/tidy", {});
-    assert.equal(res.status, 200);
-    assert.equal(res.body.success, true);
-    assert.equal(res.body.applied, 3);
-
-    const after = rootLayouts();
-    assert.deepEqual(after[nav.id], { x: 0, y: 0, w: 1200, h: 64 });
-    assert.deepEqual(after[card.id], { x: 100, y: 80, w: 600, h: 160 });
-    assert.deepEqual(after[footer.id], { x: 0, y: 256, w: 1200, h: 120 });
-
-    // 单个 undo 步: 一次 undo 全部回滚
-    assert.equal(stateStore.undo(), true);
-    const restored = rootLayouts();
-    assert.deepEqual(restored[nav.id], { x: 40, y: 200, w: 900, h: 64 });
-    assert.deepEqual(restored[card.id], { x: 100, y: 500, w: 600, h: 160 });
-    assert.deepEqual(restored[footer.id], { x: 0, y: 900, w: 1100, h: 120 });
-  });
-
-  test("unknown page_id returns 404", async () => {
-    const res = await post("/api/layout/tidy", { page_id: "nope" });
-    assert.equal(res.status, 404);
-  });
-
-  test("explicit page_id tidies a non-current page (single undo step)", async () => {
-    const homeId = stateStore.getState().currentPageId as string;
-    const pageB = stateStore.addPage("B", "user").id;
-    const card = stateStore.addComponent("card", undefined, {}, null, "user");
-    stateStore.updateComponent(card.id, {}, "user", { x: 40, y: 300, w: 600, h: 160 });
-    stateStore.switchPage(homeId, "user");
-
-    const res = await post("/api/layout/tidy", { page_id: pageB });
-    assert.equal(res.status, 200);
-    assert.equal(res.body.applied, 1);
-
-    const pageBafter = stateStore
-      .getState()
-      .pages.find((p) => p.id === pageB)?.components[0]?.layout;
-    assert.deepEqual(pageBafter, { x: 40, y: 0, w: 600, h: 160 });
-
-    stateStore.undo();
-    const pageBrestored = stateStore
-      .getState()
-      .pages.find((p) => p.id === pageB)?.components[0]?.layout;
-    assert.deepEqual(pageBrestored, { x: 40, y: 300, w: 600, h: 160 });
-  });
-
-  test("empty page reports applied 0", async () => {
-    const res = await post("/api/layout/tidy", {});
-    assert.equal(res.status, 200);
-    assert.equal(res.body.success, true);
-    assert.equal(res.body.applied, 0);
   });
 });

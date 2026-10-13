@@ -1,5 +1,5 @@
 /**
- * Semantic style mapping (improvement plan C1).
+ * Semantic style mapping.
  *
  * Bridges natural-language adjectives to concrete design tokens, the core
  * differentiator identified in `ui-intent-expression-analysis.html`. Each
@@ -15,7 +15,7 @@ import {
 } from "./constants.js";
 import { hslToHex, hexToHsl, adjustLightness } from "./utils/color.js";
 import { applyStyleTokenSet } from "./tokens.js";
-import { radiusSetFor, shadowSetFor } from "./style-guides.js";
+import { radiusSetFor, shadowSetFor } from "./token-presets.js";
 
 export interface AdjectiveDef {
   hueShift: number;
@@ -172,12 +172,12 @@ export function applySemanticStyle(
   const fontMood = Object.entries(fontVotes).sort((a, b) => b[1] - a[1])[0][0] as
     "serif" | "sans" | "geometric" | "mono";
 
-  // Compute a new base color from the neutral default hue + adjective hue shifts
-  const startHsl = hexToHsl(baseColor && /^#[0-9A-Fa-f]{6}$/.test(baseColor) ? baseColor : hslToHex({
-    h: 220,
-    s: 45,
-    l: 50,
-  }));
+  // Shift from the project's *current* primary so adjectives adjust the brand
+  // colour instead of resetting it to a neutral default. An explicit baseColor
+  // still wins.
+  const currentPrimary = stateStore.getState().tokens.colors["color-primary"]?.value;
+  const explicit = baseColor && /^#[0-9A-Fa-f]{6}$/.test(baseColor) ? baseColor : null;
+  const startHsl = hexToHsl(explicit || currentPrimary || "#4F46E5");
   const adjustedHsl = {
     h: (startHsl.h + hueShift + 360) % 360,
     s: Math.max(0, Math.min(100, startHsl.s + saturationDelta)),

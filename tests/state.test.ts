@@ -587,38 +587,6 @@ describe("events, clearAll, and pending prompt", () => {
     assert.equal(state.themeMode, "light");
   });
 
-  test("pending prompt can be set, read, and cleared", () => {
-    assert.equal(stateStore.getPendingPrompt(), null);
-    stateStore.setPendingPrompt("Make it warmer");
-    assert.equal(stateStore.getPendingPrompt(), "Make it warmer");
-    stateStore.clearPendingPrompt();
-    assert.equal(stateStore.getPendingPrompt(), null);
-  });
-
-  test("page links: add, dedupe by source component, and remove", () => {
-    const p1 = stateStore.getState().currentPageId as string;
-    const p2 = stateStore.addPage("About", "user").id;
-    const link = stateStore.addPageLink(p1, p2, "Go to About", "comp_x", "user");
-    assert.ok(link.id.startsWith("link_"));
-    assert.equal(stateStore.getState().pageLinks.length, 1);
-
-    // Same source component replaces the old link instead of duplicating
-    stateStore.addPageLink(p1, p2, "Updated", "comp_x", "user");
-    assert.equal(stateStore.getState().pageLinks.length, 1);
-    assert.equal(stateStore.getState().pageLinks[0].label, "Updated");
-
-    // Unknown pages are rejected
-    assert.throws(
-      () => stateStore.addPageLink(p1, "page_nope", undefined, undefined, "user"),
-      /page must exist/
-    );
-
-    // Removal works against the current link id
-    const current = stateStore.getState().pageLinks[0];
-    assert.equal(stateStore.removePageLink(current.id, "user"), true);
-    assert.equal(stateStore.getState().pageLinks.length, 0);
-    assert.equal(stateStore.removePageLink(current.id, "user"), false);
-  });
 });
 
 describe("project buckets (Phase 2.3)", () => {
@@ -701,7 +669,7 @@ describe("canvas hierarchy ops (group / reparent / move to page)", () => {
   test("ungroupComponents promotes children back to top level", () => {
     const a = stateStore.addComponent("button", undefined, {}, null, "ai");
     const b = stateStore.addComponent("button", undefined, {}, null, "ai");
-    const c = stateStore.addComponent("button", undefined, {}, null, "ai");
+    stateStore.addComponent("button", undefined, {}, null, "ai");
     const group = stateStore.groupComponents([a.id, b.id], "user");
     assert.ok(group);
     assert.equal(stateStore.ungroupComponents(group!.id, "user"), true);

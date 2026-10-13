@@ -233,34 +233,6 @@ export function generateHarmony(baseHsl: HSL, scheme: HarmonyScheme): HSL[] {
 
 // ===== Tints, Shades & Tones =====
 
-export function generateTints(baseHsl: HSL, count: number = 5): HSL[] {
-  const tints: HSL[] = [];
-  const step = (95 - baseHsl.l) / count;
-  for (let i = 0; i < count; i++) {
-    tints.push({
-      h: baseHsl.h,
-      s: Math.max(10, baseHsl.s - i * 3),
-      l: Math.min(96, Math.round(baseHsl.l + step * (i + 1))),
-    });
-  }
-  return tints;
-}
-
-export function generateShades(baseHsl: HSL, count: number = 5): HSL[] {
-  const shades: HSL[] = [];
-  const step = baseHsl.l / (count + 1);
-  for (let i = 0; i < count; i++) {
-    shades.push({
-      h: baseHsl.h,
-      s: Math.min(100, baseHsl.s + i * 2),
-      l: Math.max(5, Math.round(baseHsl.l - step * (i + 1))),
-    });
-  }
-  return shades;
-}
-
-// ===== Neutral Gray Generation =====
-
 export function generateNeutralGrays(
   baseHsl: HSL,
   count: number = 11
@@ -310,12 +282,6 @@ export function adjustHue(hsl: HSL, degrees: number): HSL {
 export function adjustLightness(hsl: HSL, amount: number): HSL {
   return { ...hsl, l: Math.max(0, Math.min(100, hsl.l + amount)) };
 }
-
-export function adjustSaturation(hsl: HSL, amount: number): HSL {
-  return { ...hsl, s: Math.max(0, Math.min(100, hsl.s + amount)) };
-}
-
-// ===== Validation =====
 
 export function isValidHex(hex: string): boolean {
   return /^#?([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(hex);

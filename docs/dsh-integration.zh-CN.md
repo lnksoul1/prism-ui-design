@@ -23,7 +23,8 @@ Prism 本身就是一个 MCP server，而 DSH 自带 MCP 客户端，所以这�
 
 - 从检出安装：`plugin_manager` · `action: install_bundle` · `target: D:\Prism\dsh-plugin`
   —— 先打包服务器：`npm run build && node dsh-plugin/scripts/copy-server.mjs`
-- 从 npm 安装（发布之后）：`plugin_manager` · `action: install_bundle` · `target: dsh-plugin-prism-design`
+- 从 npm 安装：`plugin_manager` · `action: install_bundle` · `target: dsh-plugin-prism-design`
+  —— [npmjs.com/package/dsh-plugin-prism-design](https://www.npmjs.com/package/dsh-plugin-prism-design) · `dsh plugin add dsh-plugin-prism-design`
 
 然后确认它已生效：
 
@@ -178,7 +179,7 @@ mcp__prism__design_list_capabilities
 | SPDX 可识别的许可证 | MIT（[`LICENSE`](../LICENSE)） |
 | 插件 id 匹配 `^[a-z0-9]+(-[a-z0-9]+)*$` | `dsh-plugin-prism-design`（包名）· `prism-ui-design`（仓库名） |
 | 源码可扫描 | `src/`（TypeScript）与插件的 ES 模块 |
-| 有已发布的 tarball 可安装 | 在 `dsh-plugin/` 里 `npm publish`；它的 `prepack` 会把服务器打进 tarball |
+| 有已发布的 tarball 可安装 | [`dsh-plugin-prism-design@1.0.0`](https://www.npmjs.com/package/dsh-plugin-prism-design)：已用发布出来的 tarball 做过安装 + MCP 握手验证（42 个工具、4 个 resource） |
 
 在 <https://www.dsh.so/zh/submit/> 粘贴仓库地址即可提交：检查器会拉取源码、校验格式、
 执行安全扫描，并生成一条待审条目。在有人报告真实运行结果之前，兼容性只会被记为

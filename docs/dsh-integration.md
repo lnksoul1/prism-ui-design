@@ -25,7 +25,8 @@ Installation runs through `plugin_manager`; do not hand-edit the profile's
 
 - From a checkout: `plugin_manager` · `action: install_bundle` · `target: D:\Prism\dsh-plugin`
   — build the packaged server first: `npm run build && node dsh-plugin/scripts/copy-server.mjs`
-- From npm, once published: `plugin_manager` · `action: install_bundle` · `target: dsh-plugin-prism-design`
+- From npm: `plugin_manager` · `action: install_bundle` · `target: dsh-plugin-prism-design`
+  — [npmjs.com/package/dsh-plugin-prism-design](https://www.npmjs.com/package/dsh-plugin-prism-design) · `dsh plugin add dsh-plugin-prism-design`
 
 Then confirm it took effect:
 
@@ -193,7 +194,7 @@ What its checker expects, and where this repository stands:
 | An SPDX-recognizable licence | MIT ([`LICENSE`](../LICENSE)) |
 | A plugin id matching `^[a-z0-9]+(-[a-z0-9]+)*$` | `dsh-plugin-prism-design` (package) · `prism-ui-design` (repository) |
 | Scannable source | `src/` (TypeScript) and the plugin's ES modules |
-| A published tarball to install from | `npm publish` in `dsh-plugin/`; its `prepack` hook packs the server into the tarball |
+| A published tarball to install from | [`dsh-plugin-prism-design@1.0.0`](https://www.npmjs.com/package/dsh-plugin-prism-design) — installing that tarball and completing an MCP handshake was verified (42 tools, 4 resources) |
 
 Submit by pasting the repository URL at <https://www.dsh.so/zh/submit/>: the
 checker pulls the source, validates the format, runs its security scan, and opens

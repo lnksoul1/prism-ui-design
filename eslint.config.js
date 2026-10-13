@@ -22,6 +22,8 @@ export default [
       "test-results/**",
       "prism-ui-design-mcp/**",
       ".dsh-plugin-inspect/**",
+      // The DSH plugin's packaged server copy (dsh-plugin/scripts/copy-server.mjs).
+      "dsh-plugin/server/**",
     ],
   },
   js.configs.recommended,

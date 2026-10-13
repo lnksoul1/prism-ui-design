@@ -15,10 +15,15 @@ Prism 本身就是一个 MCP server，而 DSH 自带 MCP 客户端，所以这�
 
 ## 安装
 
+这个插件是**自包含**的：它自带要拉起的 MCP server（`dsh-plugin/server/`，由
+`dsh-plugin/scripts/copy-server.mjs` 打包），所以安装它不需要 Prism 仓库的任何东西。
+
 安装走 `plugin_manager`；**不要手工编辑** profile 的 `package.json` 或
 `cordis.patch.yml`。
 
-- `plugin_manager` · `action: install_bundle` · `target: D:\Prism\dsh-plugin`
+- 从检出安装：`plugin_manager` · `action: install_bundle` · `target: D:\Prism\dsh-plugin`
+  —— 先打包服务器：`npm run build && node dsh-plugin/scripts/copy-server.mjs`
+- 从 npm 安装（发布之后）：`plugin_manager` · `action: install_bundle` · `target: dsh-plugin-prism-design`
 
 然后确认它已生效：
 
@@ -36,13 +41,17 @@ plugin_manager · action: list_bundles      # bundle 出现在列表里，applic
 
 ## 前置条件
 
-- Harness 进程必须能解析到 `node`（bundle 会拉起 `node D:\Prism\dist\index.js`）。
-  先构建：`npm run build`。
-- `dsh-plugin/cordis.patch.yml` 里的绝对路径必须匹配你这份检出：`args[0]` 与那三个
-  `PRISM_*` 值。
-- Host 那一行是用**绝对 file URL**（`file:///D:/Prism/dsh-plugin/host-entry.mjs`）指到
-  Host 半区的。从 profile 外链进来的 bundle 按包名能解析，但它的**子路径**过不了
-  profile 的模块解析层——那种行会以 `failed to import` 失败。
+- Harness 进程必须能解析到 `node`（bundle 会拉起它）。
+- **patch 里没有任何与这台机器绑定的东西。** 所有路径都在加载时推导：
+  `createRequire(baseUrl)` 定位已安装的包（MCP 行要拉起的服务器、以及 Host 半区的
+  file URL），`dshHomePath()` 把预览产物与保存的项目放到 Harness home 下
+  （`<DSH_HOME>/prism/design.html`、`<DSH_HOME>/prism/projects`）。检出可以放在任何
+  位置，别人安装时一个字都不用改。
+- Host 那一行用**绝对 file URL** 寻址，URL 由已安装的包计算出来。这是有意的：从
+  profile 外链进来的 bundle 按包名能解析，但它的**子路径**过不了 profile 的模块解析
+  层；而运行中的 Host 又会把模块代次留在 Node 的 ESM 缓存里——所以这一行直接指名文件。
+- 从检出安装时需要先打包服务器：`npm run build && node dsh-plugin/scripts/copy-server.mjs`。
+  发布时由插件的 `prepack` 钩子自动执行同一步。
 
 ## 配置
 
@@ -51,10 +60,12 @@ plugin_manager · action: list_bundles      # bundle 出现在列表里，applic
 
 | 行 | 字段 | 默认值 | 含义 |
 |---|---|---|---|
-| `mcp-prism` | `command` / `args` | `node` + `D:\Prism\dist\index.js` | 如何启动服务器 |
+| `mcp-prism` | `command` / `args` | `node` + `<包目录>/server/index.js` | 如何拉起打包进来的服务器 |
+| `mcp-prism` | `env.PRISM_PROJECT_DIR` | `<DSH_HOME>/prism/projects` | `design_save_project` 写到哪里 |
+| `mcp-prism` | `env.PRISM_PREVIEW_FILE` | `<DSH_HOME>/prism/design.html` | 实时预览产物 |
 | `mcp-prism` | `toolCallTimeoutMs` | `120000` | 单次调用超时；截图类调用可以调高 |
 | `mcp-prism` | `failOnStartupError` | `true` | 拒绝激活，而不是静默地"启动了但没有工具" |
-| `prism-design-panel` | `previewPath` | `D:\Prism\.prism-preview\design.html` | 必须等于服务器的 `PRISM_PREVIEW_FILE` |
+| `prism-design-panel` | `previewPath` | `<DSH_HOME>/prism/design.html` | 必须等于服务器的 `PRISM_PREVIEW_FILE` |
 | `prism-design-panel` | `pollIntervalMs` | `1500` | 预览刷新间隔 |
 
 面板的 Host 半区把这份配置声明为 **Standard Schema**（`Config["~standard"].validate`），
@@ -122,7 +133,7 @@ mcp__prism__design_add_component   …… 然后再次 sync
 | Remote 调用回的是 `{ ok, value }` / `{ ok, error }` 信封 | 直接读信封上的 `result.data` 会拿到 `undefined`，字节解出空字符串，面板显示 "The preview file is empty" |
 | `dsh.client.inject` 必须列出 Client 半区用到的所有服务所属的包 | 浏览器的模块表需要加载 `@deepseek-ai/dsh-client-ui-sidebar-right`（页签注册表）、`@deepseek-ai/dsh-client-ui-sidebar`（图标栏 + 主区）、`@deepseek-ai/dsh-api-remotes`（文件读取） |
 | 预览 iframe 的 sandbox **只能给** `allow-scripts` | `allow-scripts allow-same-origin` 会让产物与 Harness 应用同源：它的脚本能摸到父页面，甚至摘掉自己的 sandbox 属性 |
-| Host 行用 file URL，包根只做 re-export | 运行中的 Host 会把模块代次留在 Node 的 ESM 缓存里（失败的也留），这正是那一行要用 file URL 的原因 |
+| Host 行用 file URL，URL 由已安装的包计算 | 运行中的 Host 会把模块代次留在 Node 的 ESM 缓存里（失败的也留）；而链入 bundle 的子路径过不了 profile 的模块解析层——所以 `exports["."]` 就是 Host 半区，那一行直接指名这个文件 |
 
 `main` 面板是 root 作用域、**拿不到会话绑定**，所以它自己订阅 Client 当前会话
 （`uiSession.adapter.current`）并把文件读取绑到那个 id；右栏页签则相反，session id 由
@@ -152,6 +163,27 @@ mcp__prism__design_list_capabilities
 两者都不会改动设计。如果它们不存在，说明 MCP 那一行没激活：去查 profile 日志，而不是
 看面板。
 
+## 收录到 dsh.so
+
+[dsh.so](https://www.dsh.so/zh/) 是社区插件市场（与 DeepSeek AI 无隶属关系）。它会索引带
+[`dsh-plugin`](https://github.com/topics/dsh-plugin) 话题的仓库——本仓库已经带上——提交
+表单接受仓库地址或 npm 包名。
+
+它的检查器要求什么，本仓库的现状：
+
+| 要求 | 现状 |
+|---|---|
+| DSH 兼容信号 | `dsh-plugin/package.json` 里的 `dsh.bundle.patch` + `dsh.client`，以及仓库话题 |
+| README 带安装说明 | [仓库 README](../README.zh-CN.md) 与本指南 |
+| SPDX 可识别的许可证 | MIT（[`LICENSE`](../LICENSE)） |
+| 插件 id 匹配 `^[a-z0-9]+(-[a-z0-9]+)*$` | `dsh-plugin-prism-design`（包名）· `prism-ui-design`（仓库名） |
+| 源码可扫描 | `src/`（TypeScript）与插件的 ES 模块 |
+| 有已发布的 tarball 可安装 | 在 `dsh-plugin/` 里 `npm publish`；它的 `prepack` 会把服务器打进 tarball |
+
+在 <https://www.dsh.so/zh/submit/> 粘贴仓库地址即可提交：检查器会拉取源码、校验格式、
+执行安全扫描，并生成一条待审条目。在有人报告真实运行结果之前，兼容性只会被记为
+*Declared（声明）*；市场的兼容性模板要求填写插件、DSH 版本、安装方式、结果与备注。
+
 ## 验证状态
 
 **已验证**——在真实桌面版 Harness 上，以及用脚本
@@ -166,8 +198,12 @@ mcp__prism__design_list_capabilities
   自包含文档，并在设计变化时跟随刷新。
 - 预览产物本身（`node verify-preview.mjs`）：已写出、自包含（无远程引用）、带 revision
   戳，并在磁盘上被观察到随之改变。
-- 结构静态检查（`node verify-dsh-bundle.mjs`，38 项）：manifest 契约、export 路径、
-  patch 行、JavaScript 语法、上面那些 Client 契约、以及 locale 文件。
+- 结构静态检查（`node verify-dsh-bundle.mjs`，40 项）：manifest 契约（名称、patch、
+  client 声明、export、随包服务器、运行时依赖、prepack）、patch 行、patch 的可移植性、
+  JavaScript 语法、上面那些 Client 契约、以及 locale 文件。
+- **可移植性：真机验证**。以可发布的包名卸载并重装，所有路径都由表达式推导——
+  `application: applied`，随包服务器成功启动，`design_preview_sync` 写到
+  `<DSH_HOME>/prism/design.html`。
 
 **未验证**
 

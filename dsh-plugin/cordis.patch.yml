@@ -1,23 +1,30 @@
 # Prism design bundle
 #
 # Two independent rows:
-#   1. the MCP client, which connects DSH to the local Prism stdio server and
-#      registers its tools as mcp__prism__<tool>;
+#   1. the MCP client, which connects DSH to the Prism stdio server packaged in
+#      this plugin and registers its tools as mcp__prism__<tool>;
 #   2. this bundle's Host half, which contributes no service of its own: it
 #      carries the panel's config and is the row the Client half hangs off.
 #
-# Row 2 names its module by absolute file URL on purpose. A bundle linked in from
-# outside the profile resolves by package name, but a *subpath* of it does not
-# resolve through the profile's module layer, and such a row fails to import; the
-# file URL is resolved natively and works. Point it at this checkout's
-# `host-entry.mjs` if Prism lives elsewhere.
+# Every path below is derived at load time — from wherever this package got
+# installed, and from the Harness home — so the bundle works on any machine and
+# nothing points at the checkout it was developed in. `baseUrl` and `dshHomePath`
+# are the loader's own patch-expression helpers; the shipped profiles use them the
+# same way.
 #
-# `PRISM_AUTOSAVE`/`PRISM_AUTOLOAD` are switched off deliberately: leaving them
-# on makes the server silently reuse whatever design was last saved, so a new
-# session would start from stale state instead of an empty document.
+# Row 2 is addressed by absolute file URL. A bundle linked in from outside the
+# profile resolves by package name, but a subpath of it does not resolve through
+# the profile's module layer, and a running Host keeps a module generation in
+# Node's ESM cache — so the row names the file, computed from the installed
+# package directory.
 #
-# `PRISM_PROJECT_DIR` pins saved projects to one directory rather than the
-# Harness process's working directory, so `design_save_project` is predictable.
+# `PRISM_AUTOSAVE`/`PRISM_AUTOLOAD` are off deliberately: left on, the server
+# silently reuses whatever design was last saved, so a new session would start
+# from stale state instead of an empty document.
+#
+# Preview artifact and saved projects live under the Harness home rather than the
+# process working directory, so both are predictable for every session and every
+# workspace.
 
 - insert:
     - id: mcp-prism
@@ -27,20 +34,30 @@
         transport: stdio
         command: node
         args:
-          - 'D:\Prism\dist\index.js'
+          # The server this plugin packages (dsh-plugin/scripts/copy-server.mjs).
+          - !!js >-
+            process.getBuiltinModule('node:path').join(
+              process.getBuiltinModule('node:path').dirname(
+                process.getBuiltinModule('node:module').createRequire(baseUrl).resolve('dsh-plugin-prism-design/package.json')),
+              'server', 'index.js')
         env:
           PRISM_AUTOSAVE: 'off'
           PRISM_AUTOLOAD: 'off'
-          PRISM_PROJECT_DIR: 'D:\Prism\.prism-projects'
-          PRISM_PREVIEW_FILE: 'D:\Prism\.prism-preview\design.html'
+          PRISM_PROJECT_DIR: !!js dshHomePath('prism/projects')
+          PRISM_PREVIEW_FILE: !!js dshHomePath('prism/design.html')
         # Surface the failure instead of silently starting without the tools.
         failOnStartupError: true
         toolCallTimeoutMs: 120000
 
     - id: prism-design-panel
-      name: 'file:///D:/Prism/dsh-plugin/host-entry.mjs'
+      name: !!js >-
+        process.getBuiltinModule('node:url').pathToFileURL(
+          process.getBuiltinModule('node:path').join(
+            process.getBuiltinModule('node:path').dirname(
+              process.getBuiltinModule('node:module').createRequire(baseUrl).resolve('dsh-plugin-prism-design/package.json')),
+            'host-entry.mjs')).href
       config:
-        # Absolute path of the preview artifact written by design_preview_sync.
-        previewPath: 'D:\Prism\.prism-preview\design.html'
-        # How often the panel checks the artifact's version, in ms.
+        # The artifact design_preview_sync writes; must equal PRISM_PREVIEW_FILE.
+        previewPath: !!js dshHomePath('prism/design.html')
+        # How often the panel checks the artifact's revision, in ms.
         pollIntervalMs: 1500

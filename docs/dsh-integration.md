@@ -16,10 +16,16 @@ configuration-only bundle plus one UI panel. The bundle lives in
 
 ## Install
 
+The plugin is self-contained: it carries the MCP server it launches
+(`dsh-plugin/server/`, produced by `dsh-plugin/scripts/copy-server.mjs`), so
+installing it needs nothing from the Prism checkout.
+
 Installation runs through `plugin_manager`; do not hand-edit the profile's
 `package.json` or `cordis.patch.yml`.
 
-- `plugin_manager` · `action: install_bundle` · `target: D:\Prism\dsh-plugin`
+- From a checkout: `plugin_manager` · `action: install_bundle` · `target: D:\Prism\dsh-plugin`
+  — build the packaged server first: `npm run build && node dsh-plugin/scripts/copy-server.mjs`
+- From npm, once published: `plugin_manager` · `action: install_bundle` · `target: dsh-plugin-prism-design`
 
 Then confirm it took effect:
 
@@ -39,14 +45,21 @@ reload picks up a changed Client half too.
 
 ## Prerequisites
 
-- `node` must be resolvable by the Harness process (the bundle spawns
-  `node D:\Prism\dist\index.js`). Build first: `npm run build`.
-- The absolute paths in `dsh-plugin/cordis.patch.yml` must match this checkout:
-  `args[0]` plus the three `PRISM_*` values.
-- The Host row names its module by absolute **file URL**
-  (`file:///D:/Prism/dsh-plugin/host-entry.mjs`). A bundle linked in from outside
-  the profile resolves by package name, but a *subpath* of it does not resolve
-  through the profile's module layer — such a row fails with `failed to import`.
+- `node` must be resolvable by the Harness process (the bundle spawns it).
+- **Nothing in the patch is machine-specific.** Every path is derived at load
+  time: `createRequire(baseUrl)` locates the installed package — both the server
+  the MCP row launches and the Host half's file URL — and `dshHomePath()` places
+  the preview artifact and saved projects under the Harness home
+  (`<DSH_HOME>/prism/design.html`, `<DSH_HOME>/prism/projects`). A checkout can
+  live anywhere, and anyone installing it edits nothing.
+- The Host row is addressed by absolute **file URL**, computed from the installed
+  package. That is deliberate: a bundle linked in from outside the profile
+  resolves by package name, but a *subpath* of it does not resolve through the
+  profile's module layer, and a running Host keeps a module generation in Node's
+  ESM cache — so the row names the file.
+- Installing from a checkout needs the packaged server present:
+  `npm run build && node dsh-plugin/scripts/copy-server.mjs`. Publishing runs the
+  same step through the plugin's `prepack` hook.
 
 ## Configuration
 
@@ -55,10 +68,12 @@ and can be overridden from your profile patch layer:
 
 | Row | Field | Default | Meaning |
 |---|---|---|---|
-| `mcp-prism` | `command` / `args` | `node` + `D:\Prism\dist\index.js` | How to start the server |
+| `mcp-prism` | `command` / `args` | `node` + `<package>/server/index.js` | How to start the packaged server |
+| `mcp-prism` | `env.PRISM_PROJECT_DIR` | `<DSH_HOME>/prism/projects` | Where `design_save_project` writes |
+| `mcp-prism` | `env.PRISM_PREVIEW_FILE` | `<DSH_HOME>/prism/design.html` | The live-preview artifact |
 | `mcp-prism` | `toolCallTimeoutMs` | `120000` | Per-call timeout; raising it helps screenshot calls |
 | `mcp-prism` | `failOnStartupError` | `true` | Refuse activation instead of silently starting with no tools |
-| `prism-design-panel` | `previewPath` | `D:\Prism\.prism-preview\design.html` | Must equal the server's `PRISM_PREVIEW_FILE` |
+| `prism-design-panel` | `previewPath` | `<DSH_HOME>/prism/design.html` | Must equal the server's `PRISM_PREVIEW_FILE` |
 | `prism-design-panel` | `pollIntervalMs` | `1500` | Preview refresh interval |
 
 The panel's Host half declares that config as a **Standard Schema**
@@ -131,7 +146,7 @@ guarded by [`verify-dsh-bundle.mjs`](../verify-dsh-bundle.mjs).
 | Remote calls answer `{ ok, value }` / `{ ok, error }` | reading `result.data` off the envelope yields `undefined`, the bytes decode to an empty string, and the panel reports "The preview file is empty" |
 | `dsh.client.inject` lists every package whose services the client half uses | the browser module table must load `@deepseek-ai/dsh-client-ui-sidebar-right` (tab registry), `@deepseek-ai/dsh-client-ui-sidebar` (rail + main column) and `@deepseek-ai/dsh-api-remotes` (file reads) |
 | The preview iframe is sandboxed with `allow-scripts` **only** | `allow-scripts allow-same-origin` makes the artifact same-origin with the Harness app: its scripts could reach the parent document and even strip their own sandbox attribute |
-| The Host row imports a file URL; the package root only re-exports it | a running Host keeps a module generation in Node's ESM cache — failures included, which is why the row's specifier is a file URL |
+| The Host row imports a file URL, computed from the installed package | a running Host keeps a module generation in Node's ESM cache — failures included — and a subpath of a linked bundle does not resolve through the profile's module layer, so `exports["."]` is the Host half and the row names that file |
 
 A `main` panel is root-scoped and receives **no Session binding**, so it tracks
 the Client's current Session itself (`uiSession.adapter.current`) and binds the
@@ -162,6 +177,30 @@ mcp__prism__design_list_capabilities
 Both run without touching the design. If they are absent, the MCP row failed to
 activate: check the profile log rather than the panel.
 
+## Listing it on dsh.so
+
+[dsh.so](https://www.dsh.so/zh/) is the community plugin marketplace (independent
+of DeepSeek AI). It indexes repositories carrying the
+[`dsh-plugin`](https://github.com/topics/dsh-plugin) topic — this one does — and
+its submission form takes a repository URL or an npm package name.
+
+What its checker expects, and where this repository stands:
+
+| Expectation | Here |
+|---|---|
+| A DSH compatibility signal | `dsh.bundle.patch` + `dsh.client` in `dsh-plugin/package.json`, plus the repository topic |
+| README with install instructions | the [repository README](../README.md) and this guide |
+| An SPDX-recognizable licence | MIT ([`LICENSE`](../LICENSE)) |
+| A plugin id matching `^[a-z0-9]+(-[a-z0-9]+)*$` | `dsh-plugin-prism-design` (package) · `prism-ui-design` (repository) |
+| Scannable source | `src/` (TypeScript) and the plugin's ES modules |
+| A published tarball to install from | `npm publish` in `dsh-plugin/`; its `prepack` hook packs the server into the tarball |
+
+Submit by pasting the repository URL at <https://www.dsh.so/zh/submit/>: the
+checker pulls the source, validates the format, runs its security scan, and opens
+a review entry. Compatibility is recorded as *Declared* until someone reports a
+real run; the marketplace's compatibility template asks for the plugin, the DSH
+version, the install method, the result, and notes.
+
 ## Verification status
 
 **Verified** — live desktop Harness, plus scripts
@@ -178,9 +217,14 @@ activate: check the profile log rather than the panel.
   the design changes.
 - The preview artifact itself (`node verify-preview.mjs`): written, self-contained
   (no remote references), stamped, and observed changing on disk.
-- Static structure (`node verify-dsh-bundle.mjs`, 38 checks): the manifest
-  contract, exported paths, patch rows, JavaScript syntax, the client-half
-  contracts above, and the locale file.
+- Static structure (`node verify-dsh-bundle.mjs`, 40 checks): the manifest
+  contract (name, patch, client declaration, exports, shipped server, runtime
+  dependencies, prepack step), patch rows, the patch's portability, JavaScript
+  syntax, the client-half contracts above, and the locale file.
+- **Portability, live**: the bundle was removed and re-installed under its
+  publishable name with every path expression-derived — `application: applied`,
+  the packaged server started, and `design_preview_sync` wrote to
+  `<DSH_HOME>/prism/design.html`.
 
 **Not verified**
 

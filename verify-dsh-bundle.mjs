@@ -14,7 +14,6 @@ const check = (name, ok, detail = "") => results.push({ name, ok, detail });
 // --- 1. required files exist ---
 const REQUIRED = [
   "package.json",
-  "index.js",
   "host-entry.mjs",
   "client.js",
   "cordis.patch.yml",
@@ -35,7 +34,8 @@ try {
 }
 if (manifest) {
   // Host-only bundle contract: name, version, dsh.bundle.patch.
-  check("manifest has a unique name", /^@local\/[a-z0-9-]+$/.test(manifest.name), manifest.name);
+  // Marketplace id rule (dsh.so): a plain kebab-case package name.
+  check("manifest name is a publishable plugin id", /^[a-z0-9]+(-[a-z0-9]+)*$/.test(manifest.name), manifest.name);
   check("manifest has a version", typeof manifest.version === "string", manifest.version);
   check("manifest declares dsh.bundle.patch", !!manifest.dsh?.bundle?.patch, manifest.dsh?.bundle?.patch);
   // UI-plugin contract from references/ui-plugin.md.
@@ -52,6 +52,25 @@ if (manifest) {
     if (v.includes("*")) continue;
     check(`export ${k} resolves`, fs.existsSync(path.join(DIR, v)), v);
   }
+  // Distribution: the plugin launches a server, so it has to carry one and the
+  // dependencies that server needs at runtime.
+  check("manifest ships the packaged server", (manifest.files ?? []).includes("server"));
+  check(
+    "manifest ships a package README",
+    (manifest.files ?? []).includes("README.md") && fs.existsSync(path.join(DIR, "README.md"))
+  );
+  check(
+    "manifest declares the server's runtime dependencies",
+    ["@modelcontextprotocol/sdk", "js-yaml", "zod"].every(
+      (d) => typeof manifest.dependencies?.[d] === "string"
+    ),
+    Object.keys(manifest.dependencies ?? {}).join(", ")
+  );
+  check(
+    "manifest rebuilds the server copy before packing",
+    typeof manifest.scripts?.prepack === "string" && manifest.scripts.prepack.includes("copy-server"),
+    manifest.scripts?.prepack
+  );
 }
 
 // --- 3. every recognized plugin name is a real DSH package ---
@@ -59,6 +78,21 @@ if (manifest) {
 // extracted (`node extract-asar.mjs`); otherwise against the known set, so this
 // script stays runnable without the extraction step.
 const patchText = fs.readFileSync(path.join(DIR, "cordis.patch.yml"), "utf8");
+// The bundle ships to machines that never saw this checkout: every path must be
+// derived at load time — `createRequire(baseUrl)` for the installed package,
+// `dshHomePath` for the Harness home — rather than written into the patch.
+{
+  const hardCoded = /[A-Za-z]:[\\/]/.test(patchText) || /file:\/\/\/[A-Za-z]:/.test(patchText);
+  check(
+    "patch hard-codes no checkout path",
+    !hardCoded,
+    hardCoded ? "a drive-letter path is written into the patch" : "paths are expression-derived"
+  );
+  check(
+    "patch derives paths from the installed package and the Harness home",
+    /createRequire\(baseUrl\)/.test(patchText) && /dshHomePath\(/.test(patchText)
+  );
+}
 const KNOWN_DSH_PACKAGES = new Set([
   "@deepseek-ai/dsh-mcp-client",
   "@deepseek-ai/dsh-mcp-resources",
@@ -102,7 +136,7 @@ if (manifest) {
 }
 
 // --- 4. JS syntax ---
-for (const f of ["index.js", "host-entry.mjs", "client.js"]) {
+for (const f of ["host-entry.mjs", "client.js", "scripts/copy-server.mjs"]) {
   const p = path.join(DIR, f);
   if (!fs.existsSync(p)) continue;
   try {

@@ -16,7 +16,7 @@ design quality, and export it as code or tokens.
 - **Export** to HTML, React, Vue, React-TS, Svelte, CSS, presentation, Flutter, SwiftUI
 - **Tokens** in DTCG, CSS custom properties, Style Dictionary, Figma Tokens, Tailwind v4 `@theme`, DESIGN.md
 - **Sessions** are stateful and persisted: save/load a project as `.prism.json`
-- **Live preview**: one stable artifact any viewer can follow (`design_preview_sync`), plus a DeepSeek Harness panel reachable from the sidebar rail and from the right Sidebar
+- **Live preview**: one stable artifact any viewer can follow (`design_preview_sync`), plus a self-contained DeepSeek Harness plugin (`dsh-plugin-prism-design`) whose panel opens from the sidebar rail or the right Sidebar
 - **No dashboard, no HTTP server, no external APIs.** Exported pages are self-contained (pure CSS animation, no CDN runtime)
 
 ---
@@ -130,7 +130,9 @@ so the manifest cannot drift from the registry.
 a revision. Because it is a single path that is overwritten in place, any watcher
 can follow it — see [DeepSeek Harness integration](docs/dsh-integration.md), whose
 bundle also adds a Prism Preview panel (left sidebar rail, or a right-Sidebar tab)
-that re-renders whenever the revision changes.
+that re-renders whenever the revision changes. That bundle is self-contained — it
+packages the MCP server it launches, derives every path from where it is
+installed, and declares no machine-specific configuration.
 
 ---
 

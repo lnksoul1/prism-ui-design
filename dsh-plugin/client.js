@@ -22,19 +22,23 @@
  */
 
 window.__ModuleLoader__.load({
-  id: '@local/dsh-prism-design',
+  id: 'dsh-plugin-prism-design',
   factory(require) {
     const React = require('react');
     const h = React.createElement;
 
     const TAB_KIND = 'prism-preview';
-    const DEF_ID = '@local/dsh-prism-design/preview';
+    const DEF_ID = 'dsh-plugin-prism-design/preview';
     /** Main-column panel id; the left-rail entry addresses it. */
     const PANEL_ID = 'prism-preview';
     const TITLE = 'Prism Preview';
 
-    /** Default artifact location; the Host row's config can override it. */
-    const DEFAULT_PREVIEW_PATH = 'D:\\Prism\\.prism-preview\\design.html';
+    /**
+     * Fallback artifact location. The Host row always supplies one through the
+     * Slot `inject` factory; this default is workspace-relative, so it stays
+     * meaningful on machines that never saw the checkout it was written in.
+     */
+    const DEFAULT_PREVIEW_PATH = '.prism-preview/design.html';
     const DEFAULT_POLL_MS = 1500;
 
     /** Pull the revision the exporter stamped into the document. */

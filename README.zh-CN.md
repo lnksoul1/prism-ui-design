@@ -15,7 +15,7 @@
 - **导出** HTML、React、Vue、React-TS、Svelte、CSS、演示文稿、Flutter、SwiftUI
 - **令牌**支持 DTCG、CSS 自定义属性、Style Dictionary、Figma Tokens、Tailwind v4 `@theme`、DESIGN.md
 - **会话**有状态且可持久化：存/取为一个 `.prism.json`
-- **实时预览**：一个固定产物，任何查看方都能跟踪（`design_preview_sync`）；另有 DeepSeek Harness 面板，左侧图标栏与右栏都能打开
+- **实时预览**：一个固定产物，任何查看方都能跟踪（`design_preview_sync`）；另有自包含的 DeepSeek Harness 插件（`dsh-plugin-prism-design`），面板在左侧图标栏与右栏都能打开
 - **没有 Dashboard、没有 HTTP 服务、不调用外部 API。** 导出的页面完全自包含（纯 CSS 动画，无 CDN 运行时）
 
 ---
@@ -127,7 +127,9 @@ npm run smoke    # 拉起 dist/index.js，完成握手，列出 tools/resources/
 （`PRISM_PREVIEW_FILE`，默认 `<cwd>/.prism-preview/design.html`），并写入 revision 戳。
 因为它是单一路径、原地覆盖，任何监视器都能跟踪它——见
 [DeepSeek Harness 集成](docs/dsh-integration.zh-CN.md)：那个 bundle 还会装上
-Prism Preview 面板（左侧图标栏入口，或右栏页签），revision 一变就重新渲染。
+Prism Preview 面板（左侧图标栏入口，或右栏页签），revision 一变就重新渲染。这个 bundle
+是**自包含**的：它把要拉起的 MCP server 一起打包，所有路径都从「装在哪里」推导出来，
+没有任何与本机绑定的配置。
 
 ---
 

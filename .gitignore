@@ -35,6 +35,9 @@ examples/variant-audit.html
 # DSH harness inspection scratch
 .dsh-plugin-inspect/
 
+# The DSH bundle's packaged server copy (dsh-plugin/scripts/copy-server.mjs)
+dsh-plugin/server/
+
 # Environment
 .env
 .env.local

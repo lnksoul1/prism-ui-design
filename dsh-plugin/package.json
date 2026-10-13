@@ -1,27 +1,54 @@
 {
-  "name": "@local/dsh-prism-design",
+  "name": "dsh-plugin-prism-design",
   "version": "1.0.0",
-  "private": true,
   "type": "module",
-  "description": "Prism design tools in the Harness: connects the Prism MCP server and adds a live preview panel.",
+  "description": "Prism design tools in the DeepSeek Harness: connects the packaged Prism MCP server and adds a live preview panel (left rail, or a right-Sidebar tab).",
   "meta": {
     "title": "Prism Design",
-    "description": "Generates UI with the Prism MCP server and previews it live in the right Sidebar."
+    "description": "Generates UI with the Prism MCP server and previews it live."
   },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lnksoul1/prism-ui-design.git",
+    "directory": "dsh-plugin"
+  },
+  "homepage": "https://github.com/lnksoul1/prism-ui-design/tree/main/dsh-plugin",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "mcp",
+    "mcp-server",
+    "design-tokens",
+    "prism"
+  ],
   "exports": {
-    ".": "./index.js",
-    "./host": "./host-entry.mjs",
+    ".": "./host-entry.mjs",
     "./client": "./client.js",
     "./package.json": "./package.json",
     "./locale/*.json": "./locale/*.json"
   },
   "files": [
-    "index.js",
+    "README.md",
     "host-entry.mjs",
     "client.js",
     "cordis.patch.yml",
+    "scripts/copy-server.mjs",
+    "server",
     "locale/*.json"
   ],
+  "scripts": {
+    "prepack": "node scripts/copy-server.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.6.1",
+    "js-yaml": "^5.2.3",
+    "zod": "^3.23.8"
+  },
+  "engines": {
+    "node": ">=18"
+  },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"

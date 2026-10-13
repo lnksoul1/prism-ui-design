@@ -342,6 +342,61 @@ export const COMPONENT_PROP_SCHEMAS: Record<string, z.ZodType> = {
 };
 
 /**
+ * List props each content component renders from. `items` is the canonical key;
+ * the other names are accepted aliases. Kept in sync with the renderers by
+ * `tests/component-contract.test.ts`.
+ */
+export const LIST_PROPS: Record<string, string[]> = {
+  navbar: ["items", "links"],
+  card_grid: ["items"],
+  footer: ["items", "links"],
+  stats: ["items"],
+  feature_list: ["items"],
+  pricing: ["items", "plans"],
+  testimonial: ["items"],
+  faq: ["items"],
+  timeline: ["items"],
+  tabs: ["items", "tabs"],
+  accordion: ["items"],
+  carousel: ["items", "slides"],
+  sidebar: ["items", "links"],
+  breadcrumb: ["items"],
+  grid: ["items"],
+  table: ["columns", "rows"],
+  bento_grid: ["items"],
+  marquee: ["items"],
+  feature_grid: ["items"],
+};
+
+/**
+ * Warn when a required list prop is missing or is not an array.
+ *
+ * These components render nothing without their list, and nothing else reports
+ * the mistake: the prop simply has no effect and the export comes out as an
+ * empty shell. Returning a warning turns a silent failure into a visible one.
+ */
+export function describePropWarning(type: string, props: Record<string, unknown>): string {
+  const keys = LIST_PROPS[type];
+  if (!keys) return "";
+  const present = keys.filter((k) => props[k] !== undefined);
+  if (present.length === 0) {
+    const alias = keys.length > 1 ? ` (aliases: ${keys.slice(1).join(", ")})` : "";
+    return `Warning: "${type}" renders nothing without its list prop "${keys[0]}"${alias}.`;
+  }
+  const bad = present.filter((k) => !Array.isArray(props[k]));
+  if (bad.length) {
+    return `Warning: "${type}" expects ${bad.map((k) => `"${k}"`).join(", ")} to be an array, got ${bad
+      .map((k) => typeof props[k])
+      .join(", ")} — the component will render empty.`;
+  }
+  const empty = present.filter((k) => (props[k] as unknown[]).length === 0);
+  if (empty.length === present.length) {
+    return `Note: "${type}" was given an empty "${empty[0]}" array, so it renders nothing.`;
+  }
+  return "";
+}
+
+/**
  * Validate & normalize props for a component type. Returns the parsed props
  * (unknown keys preserved). Throws when the value shape is fundamentally
  * wrong (e.g. items: "not-an-array").

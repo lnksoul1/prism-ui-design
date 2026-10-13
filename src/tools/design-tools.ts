@@ -8,6 +8,8 @@ import {
   type DesignState,
 } from "../state.js";
 import { applyStyleTokenSet } from "../tokens.js";
+import { describePropWarning, LIST_PROPS } from "../component-schemas.js";
+import { COMPONENT_TYPES } from "../service/design-service.js";
 
 // All methods used below now live directly on DesignStateStore (state.ts),
 // so no type extension or cast is needed.
@@ -818,9 +820,12 @@ ${pageBgKeyframes}
     .skeleton--text .skeleton__line { height: 0.75rem; margin-bottom: 0.5rem; }
     .skeleton--card { min-height: 10rem; }
     .marquee--logo .marquee__item { opacity: 0.75; }
-    .alert--info { border-left: 4px solid var(--color-primary, #6366F1); }
-    .alert--success { border-left: 4px solid #16a34a; }
-    .alert--warning { border-left: 4px solid #f59e0b; }
+    /* Use the status tokens rather than fixed hex, so alerts follow a restyle. */
+    .alert { padding: 1rem 1.25rem; border-radius: var(--radius-md, 8px); background: var(--color-surface, #fff); border-left: 4px solid var(--color-border, #e5e5e5); }
+    .alert--info { border-left-color: var(--color-primary, #6366F1); }
+    .alert--success { border-left-color: var(--color-success, #4AA367); }
+    .alert--warning { border-left-color: var(--color-warning, #C99800); }
+    .alert--error, .alert--danger { border-left-color: var(--color-error, #E03E3E); }
     .tooltip--rich { max-width: 20rem; text-align: left; }
     /* Tables were emitted without any styling (only an orphan .table-wrap rule
        existed), so every exported table rendered as unstyled text. */
@@ -1436,6 +1441,11 @@ Examples:
 
 // ===== Tool: design_add_component =====
 
+/** Component types, derived from the live catalog so this cannot go stale. */
+const COMPONENT_TYPE_LIST = [...COMPONENT_TYPES].join(", ");
+/** List-bearing types, derived from the renderers' contract. */
+const LIST_PROP_TYPES = Object.keys(LIST_PROPS).join(", ");
+
 export function registerDesignAddComponentTool(server: McpServer): void {
   server.registerTool(
     "design_add_component",
@@ -1443,57 +1453,38 @@ export function registerDesignAddComponentTool(server: McpServer): void {
       title: "Add UI Component",
       description: `Add a UI component to the current page.
 
-Component types: hero, navbar, card, card_grid, button, form, text_section, image, cta, footer, stats, timeline, pricing, testimonial, faq, feature_list, banner, tabs, accordion, carousel, modal, sidebar, breadcrumb, pagination, progress, badge, avatar
+Component types: ${COMPONENT_TYPE_LIST}
 
-Each type has variants:
-  - hero: 'centered', 'split', 'fullbleed'
-  - navbar: 'simple', 'with_cta', 'mega'
-  - card: 'product', 'feature', 'article', 'profile'
+Variants (optional; each type has a sensible default):
+  - hero: 'centered', 'split'
+  - navbar: 'simple', 'with_cta'
+  - card: 'product', 'article'
   - card_grid: '2col', '3col', '4col'
-  - button: 'primary', 'secondary', 'ghost'
-  - cta: 'centered', 'split', 'banner'
+  - cta: 'centered', 'banner'
+  - testimonial: 'grid', 'single'
+  - pricing: '2col', '3col'
 
-Accepted props per type (all optional; unknown keys are preserved):
-  - hero: title, subtitle, button_text, image_url
-  - navbar: brand, links, cta_text
-  - card_grid: items
-  - card: title, description, price, button_text, image_url
-  - cta: title, subtitle, button_text
-  - button: text, label
-  - footer: text, copyright, links
-  - feature_list: items
-  - stats: items
-  - pricing: plans
-  - timeline: items
-  - faq: items
-  - form: fields, button_text
-  - image: src, url, alt
-  - tabs: items
-  - accordion: items
-  - carousel: slides, items
-  - modal: title, text, cancel_text, confirm_text
-  - sidebar: title, links
-  - breadcrumb: items
-  - pagination: total, current
-  - progress: label, value
-  - badge: text, label
-  - avatar: name, image
-  - banner: text, button_text
-  - text_section: title, text
-  - testimonial: quote, author, role, avatar
-  - grid/table/alert/tooltip/bento_grid/glass_card/marquee/feature_grid/cookie_banner/toggle: see dashboard renderer
+Props are per-type and all optional:
+  - every type with a repeated list reads "items" (${LIST_PROP_TYPES});
+    passing a list, or spreading data across "items" and a legacy alias, is fine
+  - "table" additionally reads columns + rows
+  - text/plain types read title, subtitle, text, body, button_text
+  - image reads src + alt
+
+If a required list prop is missing or is not an array, this tool says so in its
+response instead of silently producing an empty component.
 
 Args:
   - type (string): Component type
   - variant (string, optional): Component variant
-  - props (object, optional): Component properties (title, subtitle, text, image_url, items, etc.)
+  - props (object, optional): Component properties
   - parent_id (string, optional): Parent component ID for nesting
 
 Examples:
   - design_add_component(type="hero", variant="centered", props={"title": "夏季大促", "subtitle": "精选商品5折起", "button_text": "立即抢购"})
   - design_add_component(type="card_grid", variant="3col", props={"items": [{...}, {...}, {...}]})`,
       inputSchema: {
-        type: z.string().describe("Component type (hero, navbar, card, card_grid, button, form, text_section, image, cta, footer, stats, timeline, pricing, testimonial, faq, feature_list, banner, tabs, accordion, carousel, modal, sidebar, breadcrumb, pagination, progress, badge, avatar)"),
+        type: z.string().describe(`Component type (${COMPONENT_TYPE_LIST})`),
         variant: z.string().optional().describe("Component variant"),
         props: z.record(z.unknown()).optional().describe("Component properties"),
         parent_id: z.string().optional().describe("Parent component ID for nesting"),
@@ -1507,10 +1498,12 @@ Examples:
     },
     async (params) => {
       try {
+        const props = params.props || {};
+        const warning = describePropWarning(params.type, props);
         const node = stateStore.addComponent(
           params.type,
           params.variant,
-          params.props || {},
+          props,
           params.parent_id || null,
           "ai"
         );
@@ -1518,7 +1511,11 @@ Examples:
         return {
           content: [{
             type: "text",
-            text: `Component added: ${params.type}${params.variant ? ` (${params.variant})` : ""}\nID: ${node.id}`,
+            text: [
+              `Component added: ${params.type}${params.variant ? ` (${params.variant})` : ""}`,
+              `ID: ${node.id}`,
+              warning,
+            ].filter(Boolean).join("\n"),
           }],
           structuredContent: { success: true, component_id: node.id, type: params.type, variant: params.variant },
         };

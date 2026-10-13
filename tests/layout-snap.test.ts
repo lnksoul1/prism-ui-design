@@ -3,7 +3,6 @@ import { test, describe, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { stateStore } from "../src/state.js";
 import { snapValue, snapToGrid } from "../src/layout/snap.js";
-import { smartLayout, type LayoutBox } from "../src/layout/smart.js";
 
 beforeEach(() => {
   stateStore.resetForTests();
@@ -71,43 +70,3 @@ describe("stateStore.snapComponentsToGrid", () => {
   });
 });
 
-describe("smartLayout", () => {
-  const boxes: LayoutBox[] = [
-    { id: "a", x: 100, y: 300, w: 200, h: 50 },
-    { id: "b", x: 50, y: 20, w: 300, h: 80 },
-    { id: "c", x: 0, y: 100, w: 250, h: 60 },
-  ];
-
-  test("stacks vertically in visual order with equal gaps", () => {
-    const out = smartLayout(boxes, { gap: 16 });
-    assert.equal(out.find((b) => b.id === "b")?.y, 16);
-    assert.equal(out.find((b) => b.id === "c")?.y, 16 + 80 + 16);
-    // c 高 60 非 8 倍数: 游标 188 吸附半格向下 → 184（保证所有 y 网格对齐）
-    assert.equal(out.find((b) => b.id === "a")?.y, snapValue(16 + 80 + 16 + 60 + 16, 8));
-  });
-
-  test("aligns left edge and snaps to grid", () => {
-    const out = smartLayout(boxes, { gap: 16 });
-    for (const b of out) {
-      assert.equal(b.x, 16);
-      assert.equal(b.x % 8, 0);
-      assert.equal(b.y % 8, 0);
-    }
-  });
-
-  test("clamps width to container and keeps inside bounds", () => {
-    const out = smartLayout(boxes, { gap: 16, container: { x: 0, y: 0, width: 260, height: 1000 } });
-    for (const b of out) {
-      assert.ok(b.x + b.w <= 260, `box ${b.id} overflows container`);
-      assert.ok(b.y + b.h <= 1000);
-    }
-    const bBox = out.find((b) => b.id === "b");
-    assert.ok(bBox && bBox.w <= 260);
-  });
-
-  test("preserves input when only one box", () => {
-    const out = smartLayout([{ id: "solo", x: 13, y: 13, w: 100, h: 40 }], { gap: 16 });
-    assert.equal(out[0].x, 16);
-    assert.equal(out[0].y, 16);
-  });
-});

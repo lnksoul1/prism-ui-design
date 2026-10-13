@@ -42,8 +42,6 @@ export interface ComponentNode {
   breakpointOverrides?: Partial<Record<import("./responsive.js").Breakpoint, Record<string, string>>>;
   /** V2.0 动效时间线: 多轨道动效块（旧 animation 字段继续兼容，见 resolveAnimations）。 */
   animations?: TimelineAnimation[];
-  /** M2 盒子模式: 复杂组件编辑态隔离（编辑器只控制外层容器）。 */
-  boxMode?: import("./box-mode.js").BoxMode;
   /**
    * 元素级编辑 (P1): per-inner-element metadata keyed by the element's prop
    * path (e.g. "title", "button_text", "items.0.title"). Lets inner rendered
@@ -923,26 +921,6 @@ export class DesignStateStore extends EventEmitter {
     node.baseStyle = { ...style };
     this.logActivity("set_base_style", node.type, `Base style set on ${id}`, source);
     this.commit({ type: "setBaseStyle", id });
-    return true;
-  }
-
-  /** M2 盒子模式: 更新组件的盒子模式配置（partial merge）。 */
-  setBoxMode(
-    id: string,
-    patch: { enabled?: boolean; internalConfig?: Record<string, unknown> },
-    source: "ai" | "user" = "user"
-  ): boolean {
-    const node = this.findComponent(id);
-    if (!node) return false;
-    node.boxMode = {
-      enabled: patch.enabled ?? node.boxMode?.enabled ?? false,
-      internalConfig: {
-        ...(node.boxMode?.internalConfig || {}),
-        ...(patch.internalConfig || {}),
-      },
-    };
-    this.logActivity("set_box_mode", node.type, `Box mode updated on ${id}`, source);
-    this.commit({ type: "setBoxMode", id });
     return true;
   }
 

@@ -1,19 +1,24 @@
 #!/usr/bin/env sh
-# pre-push hook: refuse to push when lint or unit tests fail.
+# pre-push hook: refuse to push when lint, unit tests or the stdio smoke test fail.
 # Install with: npm run hooks:install   (sets core.hooksPath to .githooks)
 # Bypass with:  git push --no-verify
 set -e
 
-echo "🔎 pre-push: running lint + tests…"
+echo "pre-push: running lint + tests + smoke..."
 
 if ! npm run lint; then
-  echo "❌ pre-push: lint failed — push aborted (use --no-verify to override)"
+  echo "pre-push: lint failed - push aborted (use --no-verify to override)"
   exit 1
 fi
 
 if ! npm test; then
-  echo "❌ pre-push: tests failed — push aborted (use --no-verify to override)"
+  echo "pre-push: tests failed - push aborted (use --no-verify to override)"
   exit 1
 fi
 
-echo "✅ pre-push: lint + tests passed"
+if ! npm run smoke; then
+  echo "pre-push: smoke test failed - push aborted (use --no-verify to override)"
+  exit 1
+fi
+
+echo "pre-push: lint + tests + smoke passed"

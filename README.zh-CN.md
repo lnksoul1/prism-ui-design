@@ -15,7 +15,7 @@
 - **导出** HTML、React、Vue、React-TS、Svelte、CSS、演示文稿、Flutter、SwiftUI
 - **令牌**支持 DTCG、CSS 自定义属性、Style Dictionary、Figma Tokens、Tailwind v4 `@theme`、DESIGN.md
 - **会话**有状态且可持久化：存/取为一个 `.prism.json`
-- **实时预览**：一个固定产物供查看方跟踪（`design_preview_sync`），另有 DeepSeek Harness 面板
+- **实时预览**：一个固定产物，任何查看方都能跟踪（`design_preview_sync`）；另有 DeepSeek Harness 面板，左侧图标栏与右栏都能打开
 - **没有 Dashboard、没有 HTTP 服务、不调用外部 API。** 导出的页面完全自包含（纯 CSS 动画，无 CDN 运行时）
 
 ---
@@ -123,11 +123,11 @@ npm run smoke    # 拉起 dist/index.js，完成握手，列出 tools/resources/
 
 ### 实时预览
 
-`design_preview_sync` 把当前设计渲染到**一个固定文件**
+`design_preview_sync` 把**当前页**渲染到**一个固定文件**
 （`PRISM_PREVIEW_FILE`，默认 `<cwd>/.prism-preview/design.html`），并写入 revision 戳。
 因为它是单一路径、原地覆盖，任何监视器都能跟踪它——见
-[DeepSeek Harness 集成](docs/dsh-integration.zh-CN.md)，其中还会在 Harness 侧边栏
-装一个预览面板。
+[DeepSeek Harness 集成](docs/dsh-integration.zh-CN.md)：那个 bundle 还会装上
+Prism Preview 面板（左侧图标栏入口，或右栏页签），revision 一变就重新渲染。
 
 ---
 
@@ -235,15 +235,18 @@ npm run check    # lint + test
 
 ### 可复现的审计脚本
 
-有三个脚本检查单元测试无法覆盖的性质，各自会自行重新生成所需的输入：
+这些脚本检查单元测试无法覆盖的性质，各自会自行重新生成所需的输入：
 
 | 脚本 | 它能证明什么 |
 |---|---|
 | `npm run smoke` | 服务器能通过真实 stdio 启动、完成握手，并注册出预期的表面 |
+| `node verify-dsh-bundle.mjs` | Harness bundle 结构正确：manifest 与导出路径、patch 行、JS 语法，以及 Client 半区的那些契约（guide thunk、Remote 结果信封、iframe sandbox、服务注入清单） |
+| `node verify-preview.mjs` | 实时预览产物确实被写出、自包含（无远程引用）且带 revision 戳 |
 | `node audit-rendered-css.mjs` | 导出时发出的每个变体类，在浏览器里都确有生效的 CSS 规则 |
 | `node verify-components.mjs` | 重做过的组件真的能用（标签页会切换、提示框 hover 前隐藏、跑马灯在动、轮播可滚动） |
 
-这些需要 `playwright`（devDependency）与本机缓存的 Chromium。
+`verify-dsh-bundle.mjs` 与 `npm run smoke` 在任何环境都能跑；CSS 与组件审计需要
+`playwright`（devDependency）与本机缓存的 Chromium。
 
 ---
 
@@ -255,18 +258,19 @@ npm run check    # lint + test
 原因是它们从 MCP server 出发不可达、无法验证，或已与代码实际脱节（大量文档
 描述的是已被删除的功能，而能力清单还在宣传从未注册过的工具）。
 
-该重构记录在 [`docs/plans/2026-08-route-b-refactor.md`](./docs/plans/2026-08-route-b-refactor.md)。
+描述那个已移除产品形态的文档全部被删除，而不是留着误导人：`DESIGN.md`、`PRD.md`、
+`prism-product-definition-v2.md`、`docs/archive/*`、三个带日期的 V2.0 计划，以及
+——出于同样的理由——**那份重构计划本身**：它记录的目标工具面（22 个）实现时从未
+存在，其中的数字又被此后每一次改动推翻，留着只会变成第二份错误的描述。
 
-更早的叙事型文档（`DESIGN.md`、`PRD.md`、`prism-product-definition-v2.md`、
-`docs/archive/*` 以及三个带日期的 V2.0 计划）描述的是那个已被移除的产品形态、
-且与代码脱节，因此被删除而不是留着误导人。现在留下的文档是：本文件、
-[英文版](./README.md)、
-[DeepSeek Harness 集成指南](./docs/dsh-integration.zh-CN.md)、以及那份重构计划；
+那次重构之后还有两轮清理：组件目录从 45 种裁剪到 **38 种**（移除了那些在静态导出里
+做不到任何有意义之事、或与另一类型重复的条目），以及删除了已死的布局几何层。再之后
+是 [DeepSeek Harness 集成](./docs/dsh-integration.zh-CN.md)——一个 MCP 连接加上它的
+预览面板，也是本仓库唯一与另一个应用对话的部分。
+
+现在留下的文档是：本文件、[英文版](./README.md)，以及集成指南的
+[中文版](./docs/dsh-integration.zh-CN.md)与[英文版](./docs/dsh-integration.md)；
 `src/` 是唯一的事实来源。
-
-那次重构之后还有两轮清理，值得知道：组件目录从 45 种裁剪到 **38 种**
-（移除了那些在静态导出里做不到任何有意义之事、或与另一类型重复的条目），
-以及删除了已死的布局几何层。
 
 ## 许可
 

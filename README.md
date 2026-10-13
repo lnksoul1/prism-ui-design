@@ -16,7 +16,7 @@ design quality, and export it as code or tokens.
 - **Export** to HTML, React, Vue, React-TS, Svelte, CSS, presentation, Flutter, SwiftUI
 - **Tokens** in DTCG, CSS custom properties, Style Dictionary, Figma Tokens, Tailwind v4 `@theme`, DESIGN.md
 - **Sessions** are stateful and persisted: save/load a project as `.prism.json`
-- **Live preview**: one stable artifact a viewer can follow (`design_preview_sync`), plus a DeepSeek Harness panel
+- **Live preview**: one stable artifact any viewer can follow (`design_preview_sync`), plus a DeepSeek Harness panel reachable from the sidebar rail and from the right Sidebar
 - **No dashboard, no HTTP server, no external APIs.** Exported pages are self-contained (pure CSS animation, no CDN runtime)
 
 ---
@@ -125,11 +125,12 @@ so the manifest cannot drift from the registry.
 
 ### Live preview
 
-`design_preview_sync` renders the current design to one stable file
+`design_preview_sync` renders the current page to one stable file
 (`PRISM_PREVIEW_FILE`, default `<cwd>/.prism-preview/design.html`), stamped with
 a revision. Because it is a single path that is overwritten in place, any watcher
-can follow it — see [DeepSeek Harness integration](docs/dsh-integration.md), which
-also installs a preview panel in the Harness Sidebar.
+can follow it — see [DeepSeek Harness integration](docs/dsh-integration.md), whose
+bundle also adds a Prism Preview panel (left sidebar rail, or a right-Sidebar tab)
+that re-renders whenever the revision changes.
 
 ---
 
@@ -243,16 +244,19 @@ with `npm run hooks:install`. CI runs the same plus a dependency audit.
 
 ### Reproducible audits
 
-Three scripts check properties that unit tests cannot, and each regenerates what
+These scripts check properties that unit tests cannot, and each regenerates what
 it needs:
 
 | Script | What it proves |
 |---|---|
 | `npm run smoke` | The server starts over real stdio, handshakes, and registers the expected surface |
+| `node verify-dsh-bundle.mjs` | The Harness bundle is well formed: manifest and exported paths, patch rows, JS syntax, and the client-half contracts (guide thunks, the Remote result envelope, the iframe sandbox, the service inject list) |
+| `node verify-preview.mjs` | The live-preview artifact is written, self-contained (no remote references) and revision-stamped |
 | `node audit-rendered-css.mjs` | Every variant class an export emits actually has a CSS rule that takes effect in a browser |
 | `node verify-components.mjs` | The reworked components behave (tabs switch, tooltip hides until hover, marquee animates, carousel scrolls) |
 
-These need `playwright` (a devDependency) and a cached Chromium.
+`verify-dsh-bundle.mjs` and `npm run smoke` run anywhere; the CSS and component
+audits need `playwright` (a devDependency) and a cached Chromium.
 
 ---
 
@@ -266,19 +270,23 @@ because it was not reachable from the MCP server, not verifiable, or actively
 drifted from the code (much of the documentation described features that had been
 deleted, and the capability manifest advertised tools that were never registered).
 
-The refactor is recorded in [`docs/plans/2026-08-route-b-refactor.md`](./docs/plans/2026-08-route-b-refactor.md).
-The earlier narrative documents (`DESIGN.md`, `PRD.md`,
-`prism-product-definition-v2.md`, `docs/archive/*`, and the dated V2.0 plans)
-described that removed product and had drifted out of sync with the code, so they
-were deleted rather than left to mislead. What remains is this README, its
-[Chinese translation](./README.zh-CN.md), the
-[DeepSeek Harness integration guide](./docs/dsh-integration.md), and the refactor
-plan; `src/` is the source of truth.
+Everything that described that removed product was deleted rather than left to
+mislead: `DESIGN.md`, `PRD.md`, `prism-product-definition-v2.md`,
+`docs/archive/*`, the dated V2.0 plans, and — for the same reason — the refactor
+plan itself, which tracked a target surface (22 tools) the implementation never
+had and quoted numbers that every later change invalidated.
 
-Two later cleanups happened after that refactor and are worth knowing about:
-the component catalog was trimmed from 45 to 38 types (removing entries that
-either could not do anything meaningful in a static export, or duplicated another
-type), and the dead layout geometry layer was deleted.
+Two later cleanups followed the refactor: the component catalog was trimmed from
+45 to 38 types (removing entries that could not do anything meaningful in a static
+export, or duplicated another type), and the dead layout geometry layer was
+deleted. Then came the [DeepSeek Harness integration](docs/dsh-integration.md) —
+an MCP connection plus its preview panel, and the only part of this repository
+that talks to another application.
+
+What remains is this README, its [Chinese translation](./README.zh-CN.md), and the
+integration guide with its
+[Chinese translation](./docs/dsh-integration.zh-CN.md). `src/` is the source of
+truth.
 
 ## License
 

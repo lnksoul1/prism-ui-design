@@ -98,13 +98,14 @@ so the manifest cannot drift from the registry.
 | `design_undo` / `design_redo` | History (50 snapshots) |
 | `design_save_project` / `design_load_project` / `design_list_projects` | Persist and restore a session as `.prism.json` |
 
-### Review, delivery and meta (10)
+### Review, delivery and meta (11)
 
 | Tool | What it does |
 |---|---|
 | `design_audit_accessibility` | WCAG-oriented audit with a 0–100 score |
 | `design_suggest_improvements` | Heuristic review: structure, density, motion, a11y, tokens |
 | `design_render_preview` | Standalone HTML preview (PNG when Playwright is installed) |
+| `design_preview_sync` | Write the live-preview file so a watching viewer shows the latest design |
 | `design_export` | html / react / vue / react-ts / svelte / css / presentation / flutter / swiftui |
 | `design_export_tokens` | DTCG / CSS / Style Dictionary / Figma Tokens / DESIGN.md / Tailwind v4 |
 | `design_import_tokens` | Import DTCG tokens (replace / merge-overwrite / merge-keep) |
@@ -118,6 +119,14 @@ so the manifest cannot drift from the registry.
 - Resources: `prism://tokens/active`, `prism://components/registry`,
   `prism://patterns`, `prism://audit/checklist`
 - Prompts: `build_page`, `design_review`, `import_project`
+
+### Live preview
+
+`design_preview_sync` renders the current design to one stable file
+(`PRISM_PREVIEW_FILE`, default `<cwd>/.prism-preview/design.html`), stamped with
+a revision. Because it is a single path that is overwritten in place, any watcher
+can follow it — see [DeepSeek Harness integration](docs/dsh-integration.md), which
+also installs a preview panel in the Harness Sidebar.
 
 ---
 
@@ -149,6 +158,8 @@ the original CSS, and `demo`-style edits are written back through
 | `PRISM_PROJECT_DIR` | `~/.prism/projects` | Where `design_save_project` / autosave write |
 | `PRISM_AUTOSAVE` | on (set `off` to disable) | Rolling autosave of the session |
 | `PRISM_AUTOLOAD` | on (set `off` to disable) | Restore the autosave checkpoint on start |
+| `PRISM_PREVIEW_FILE` | `<cwd>/.prism-preview/design.html` | The live-preview artifact `design_preview_sync` writes |
+| `PRISM_PREVIEWS_DIR` | `<cwd>/.prism-previews` | Where `design_render_preview` writes PNG screenshots |
 
 The LLM API key is never involved: Prism has no built-in AI channel — the agent
 driving the MCP server *is* the intelligence. Nothing leaves your machine except

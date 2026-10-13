@@ -1,0 +1,40 @@
+# Prism design bundle
+#
+# Two independent rows:
+#   1. the MCP client, which connects DSH to the local Prism stdio server and
+#      registers its tools as mcp__prism__<tool>;
+#   2. this bundle's Host half, which currently contributes nothing but is what
+#      the Client half hangs off.
+#
+# `PRISM_AUTOSAVE`/`PRISM_AUTOLOAD` are switched off deliberately: leaving them
+# on makes the server silently reuse whatever design was last saved, so a new
+# session would start from stale state instead of an empty document.
+#
+# `PRISM_PROJECT_DIR` pins saved projects to one directory rather than the
+# Harness process's working directory, so `design_save_project` is predictable.
+
+- insert:
+    - id: mcp-prism
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: prism
+        transport: stdio
+        command: node
+        args:
+          - 'D:\Prism\dist\index.js'
+        env:
+          PRISM_AUTOSAVE: 'off'
+          PRISM_AUTOLOAD: 'off'
+          PRISM_PROJECT_DIR: 'D:\Prism\.prism-projects'
+          PRISM_PREVIEW_FILE: 'D:\Prism\.prism-preview\design.html'
+        # Surface the failure instead of silently starting without the tools.
+        failOnStartupError: true
+        toolCallTimeoutMs: 120000
+
+    - id: prism-design-panel
+      name: '@local/dsh-prism-design'
+      config:
+        # Absolute path of the preview artifact written by design_preview_sync.
+        previewPath: 'D:\Prism\.prism-preview\design.html'
+        # How often the panel checks the artifact's version, in ms.
+        pollIntervalMs: 1500

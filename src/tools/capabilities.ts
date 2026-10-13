@@ -58,6 +58,7 @@ const TOOL_MANIFEST: Array<{ name: string; group: string; summary: string; examp
   { name: "design_audit_accessibility", group: "quality", summary: "WCAG-oriented accessibility audit with a score", example: 'design_audit_accessibility(level="AA")' },
   { name: "design_suggest_improvements", group: "quality", summary: "Heuristic design review with actionable suggestions", example: "design_suggest_improvements()" },
   { name: "design_render_preview", group: "delivery", summary: "Render a standalone HTML preview (PNG when Playwright is installed)", example: 'design_render_preview(viewport="desktop")' },
+  { name: "design_preview_sync", group: "delivery", summary: "Write the live-preview file so a watching viewer shows the latest design", example: "design_preview_sync()" },
   { name: "design_export", group: "delivery", summary: "Export as html/react/vue/react-ts/svelte/css/presentation/flutter/swiftui", example: 'design_export(format="html")' },
   { name: "design_export_tokens", group: "delivery", summary: "Export tokens as DTCG/CSS/Style Dictionary/Figma Tokens/DESIGN.md/Tailwind", example: 'design_export_tokens(format="dtcg")' },
   { name: "design_import_tokens", group: "delivery", summary: "Import DTCG tokens (replace / merge strategies)", example: 'design_import_tokens(tokens_json="{...}")' },

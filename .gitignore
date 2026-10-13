@@ -23,6 +23,8 @@ npm-debug.log*
 
 # Generated design artifacts (regenerated on demand)
 .prism-previews/
+.prism-preview/
+.prism-projects/
 
 # Scratch output from the preview/audit scripts (showcase.mjs,
 # audit-rendered-css.mjs and survey-types.mjs regenerate these on demand)

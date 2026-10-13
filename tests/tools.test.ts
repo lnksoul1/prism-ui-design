@@ -58,6 +58,7 @@ import { registerProjectTools } from "../src/tools/project-tools.js";
 import { registerAuditTool } from "../src/tools/design-audit.js";
 import { registerSuggestTool } from "../src/tools/design-review-suggest.js";
 import { registerRenderTool } from "../src/tools/design-render.js";
+import { registerPreviewSyncTool } from "../src/tools/design-preview.js";
 import { registerTokenInteropTools } from "../src/tools/token-interop.js";
 import { registerWebpageImportTool } from "../src/tools/webpage-import.js";
 import { registerDesignMdTool } from "../src/tools/design-md.js";
@@ -116,6 +117,7 @@ const registrations: Array<(s: never) => void> = [
   registerAuditTool,
   registerSuggestTool,
   registerRenderTool,
+  registerPreviewSyncTool,
   registerTokenInteropTools,
   registerWebpageImportTool,
   registerDesignMdTool,
@@ -138,7 +140,7 @@ test.after(() => {
 });
 
 test("the tool surface is exactly the documented size and has unique names", () => {
-  assert.equal(captured.length, 41);
+  assert.equal(captured.length, 42);
   assert.equal(new Set(captured.map((t) => t.name)).size, captured.length);
 });
 
@@ -203,6 +205,7 @@ const VALID_PARAMS: Record<string, Record<string, unknown>> = {
   design_audit_accessibility: { level: "AA" },
   design_suggest_improvements: {},
   design_render_preview: { viewport: "desktop" },
+  design_preview_sync: {},
   design_export_tokens: { format: "dtcg" },
   design_import_tokens: { tokens_json: '{"colors":{"color-primary":{"$value":"#111111"}}}' },
   design_import_webpage: { html: "<nav><a href='/'>x</a></nav>" },

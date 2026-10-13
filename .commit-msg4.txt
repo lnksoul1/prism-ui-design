@@ -1,0 +1,41 @@
+feat: DSH 集成（MCP 连接 + 实时预览面板）
+
+把 Prism 接入 DeepSeek Harness，并实现 AI 生成 UI 的实时预览。
+
+① design_preview_sync：可被监视的预览产物
+
+新增第 42 个工具。此前 design_render_preview 每次调用写一个带时间戳的
+PNG——任何文件监视器都无法跟踪，而且丢掉页面的交互部分。
+
+现在改为把当前设计导出为**一个固定路径**的完整 HTML 文档（内联样式、无外部
+请求），原地覆盖，并在文档里写入 <meta name="prism-preview-revision"> 戳，
+让查看方能区分"真的变了"和"重写了相同内容"。
+
+路径：PRISM_PREVIEW_FILE，默认 <cwd>/.prism-preview/design.html。
+
+② dsh-plugin/：一个 DSH bundle
+
+- MCP 连接：通过 @deepseek-ai/dsh-mcp-client 把 Prism 注册为 stdio 服务器，
+  42 个工具以 mcp__prism__<tool> 暴露；failOnStartupError: true 让启动失败
+  可见而不是静默无工具。刻意关掉 PRISM_AUTOSAVE/PRISM_AUTOLOAD，否则新会话
+  会静默复用上次保存的设计。
+- 预览面板：Client 半区在右侧边栏注册一个 Prism Preview 页，轮询预览产物并
+  比对 revision，变化即重渲染。面板自身 chrome 用主题令牌；预览文档刻意
+  **不**继承 Harness 主题——它是被检视的另一套设计系统，必须显示自己的配色。
+
+按 DSH 自带的 cordis-plugin-development 参考资料编写（manifest 契约、
+__ModuleLoader__ 客户端格式、v2 侧边栏契约均取自其文档）。
+
+③ 文档
+
+docs/dsh-integration.md 说明原理、安装步骤（plugin_manager install_bundle，
+不手改 profile 文件）、配置项与验证状态。README 补上第 42 个工具、新的
+预览小节，以及 PRISM_PREVIEW_FILE / PRISM_PREVIEWS_DIR 两个环境变量。
+
+验证：build/lint 通过；166 个测试通过；smoke 报告 42 工具 / 4 资源 / 3 提示词；
+预览产物端到端验证（自包含、revision 递增、文件监视触发）；bundle 28 项静态
+检查通过。
+
+未验证（重要）：本环境没有 plugin_manager 工具、没有 dsh CLI，也无法重启正在
+运行的 Harness，因此该 bundle **从未被加载过**——面板能否渲染需要在 DSH 中
+安装后才能确认。

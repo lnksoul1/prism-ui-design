@@ -58,4 +58,11 @@ export default [
       globals: { ...globals.node, ...globals.browser },
     },
   },
+  {
+    // The DSH Client half runs in the Harness web page, not in Node.
+    files: ["dsh-plugin/client.js"],
+    languageOptions: {
+      globals: { ...globals.browser },
+    },
+  },
 ];

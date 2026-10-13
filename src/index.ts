@@ -3,13 +3,13 @@
  * Prism MCP server (route B).
  *
  * A stdio-only Model Context Protocol server that lets an AI agent generate
- * design tokens, assemble a page from 55 component types, review it for
+ * design tokens, assemble a page from 38 component types, review it for
  * accessibility and design quality, and export it as code or tokens.
  *
  * Architecture:
  *   ┌──────────────┐    stdio (MCP)    ┌───────────────────────────────┐
  *   │  AI agent /  │ ◄───────────────► │  McpServer                    │
- *   │  MCP client  │                   │   ├─ 40 tools                 │
+ *   │  MCP client  │                   │   ├─ 42 tools                 │
  *   └──────────────┘                   │   ├─ 4 resources              │
  *                                      │   ├─ 3 prompts                │
  *                                      │   └─ DesignStateStore (state) │
@@ -69,6 +69,7 @@ import {
 import { registerAuditTool } from "./tools/design-audit.js";
 import { registerSuggestTool } from "./tools/design-review-suggest.js";
 import { registerRenderTool } from "./tools/design-render.js";
+import { registerPreviewSyncTool } from "./tools/design-preview.js";
 import { registerTokenInteropTools } from "./tools/token-interop.js";
 import { registerWebpageImportTool } from "./tools/webpage-import.js";
 import { registerDesignMdTool } from "./tools/design-md.js";
@@ -125,6 +126,7 @@ registerProjectTools(server);
 registerAuditTool(server);
 registerSuggestTool(server);
 registerRenderTool(server);
+registerPreviewSyncTool(server);
 registerTokenInteropTools(server);
 registerWebpageImportTool(server);
 registerDesignMdTool(server);

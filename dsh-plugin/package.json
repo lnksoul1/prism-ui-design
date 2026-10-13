@@ -1,0 +1,35 @@
+{
+  "name": "@local/dsh-prism-design",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Prism design tools in the Harness: connects the Prism MCP server and adds a live preview panel.",
+  "meta": {
+    "title": "Prism Design",
+    "description": "Generates UI with the Prism MCP server and previews it live in the right Sidebar."
+  },
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ]
+    }
+  }
+}

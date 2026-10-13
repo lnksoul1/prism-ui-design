@@ -3,8 +3,14 @@
 # Two independent rows:
 #   1. the MCP client, which connects DSH to the local Prism stdio server and
 #      registers its tools as mcp__prism__<tool>;
-#   2. this bundle's Host half, which currently contributes nothing but is what
-#      the Client half hangs off.
+#   2. this bundle's Host half, which contributes no service of its own: it
+#      carries the panel's config and is the row the Client half hangs off.
+#
+# Row 2 names its module by absolute file URL on purpose. A bundle linked in from
+# outside the profile resolves by package name, but a *subpath* of it does not
+# resolve through the profile's module layer, and such a row fails to import; the
+# file URL is resolved natively and works. Point it at this checkout's
+# `host-entry.mjs` if Prism lives elsewhere.
 #
 # `PRISM_AUTOSAVE`/`PRISM_AUTOLOAD` are switched off deliberately: leaving them
 # on makes the server silently reuse whatever design was last saved, so a new
@@ -32,7 +38,7 @@
         toolCallTimeoutMs: 120000
 
     - id: prism-design-panel
-      name: '@local/dsh-prism-design'
+      name: 'file:///D:/Prism/dsh-plugin/host-entry.mjs'
       config:
         # Absolute path of the preview artifact written by design_preview_sync.
         previewPath: 'D:\Prism\.prism-preview\design.html'

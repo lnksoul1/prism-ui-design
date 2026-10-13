@@ -12,7 +12,14 @@ const results = [];
 const check = (name, ok, detail = "") => results.push({ name, ok, detail });
 
 // --- 1. required files exist ---
-const REQUIRED = ["package.json", "index.js", "client.js", "cordis.patch.yml", "locale/en.json"];
+const REQUIRED = [
+  "package.json",
+  "index.js",
+  "host-entry.mjs",
+  "client.js",
+  "cordis.patch.yml",
+  "locale/en.json",
+];
 for (const f of REQUIRED) {
   const p = path.join(DIR, f);
   check(`file exists: ${f}`, fs.existsSync(p), fs.existsSync(p) ? `${fs.statSync(p).size} bytes` : "MISSING");
@@ -70,6 +77,22 @@ if (manifest) {
   }
   for (const n of names) {
     const local = n === manifest.name;
+    // A row may name its module by absolute file URL instead of by package: a
+    // bundle linked in from outside the profile resolves by package name, but a
+    // subpath of it does not resolve through the profile's module layer.
+    const fileUrl = /^(file:|\/|[A-Za-z]:[\\/])/.test(n);
+    if (fileUrl) {
+      let exists = false;
+      let detail = "NOT FOUND";
+      try {
+        exists = fs.existsSync(n.startsWith("file:") ? new URL(n) : n);
+        detail = exists ? "local file" : detail;
+      } catch {
+        // An unresolvable URL is reported as a miss below.
+      }
+      check(`patch plugin "${n}" is resolvable`, exists, detail);
+      continue;
+    }
     check(
       `patch plugin "${n}" is resolvable`,
       local || shared.has(n),
@@ -79,7 +102,7 @@ if (manifest) {
 }
 
 // --- 4. JS syntax ---
-for (const f of ["index.js", "client.js"]) {
+for (const f of ["index.js", "host-entry.mjs", "client.js"]) {
   const p = path.join(DIR, f);
   if (!fs.existsSync(p)) continue;
   try {
@@ -91,6 +114,17 @@ for (const f of ["index.js", "client.js"]) {
   }
 }
 
+// --- 4b. the Host half keeps its Config dependency-free ---
+{
+  const src = fs.readFileSync(path.join(DIR, "host-entry.mjs"), "utf8");
+  check("host-entry.mjs config is a Standard Schema", src.includes('"~standard"'));
+  check(
+    "host-entry.mjs imports no Harness package",
+    !/from\s+["']@deepseek-ai\//.test(src),
+    "a linked bundle cannot resolve Harness packages"
+  );
+}
+
 // --- 5. client.js uses only the documented module-loader shape ---
 {
   const src = fs.readFileSync(path.join(DIR, "client.js"), "utf8");
@@ -99,8 +133,40 @@ for (const f of ["index.js", "client.js"]) {
   check("client.js requires React from the module table", src.includes("require('react')"));
   check("client.js does not import a Harness Client package", !/@deepseek-ai\/dsh-client-/.test(src));
   check("client.js registers into sidebar.right.pane.tab", src.includes("'sidebar.right.pane.tab'"));
-  check("client.js declares inject: slots + remote", /inject:\s*\['slots',\s*'remote'\]/.test(src));
+  check(
+    "client.js declares the services it uses",
+    /inject:\s*\[[^\]]*'slots'[^\]]*'sidebarRightTabs'[^\]]*'remote'[^\]]*'remote\.workspaceFiles'[^\]]*\]/.test(
+      src
+    )
+  );
+  check(
+    "client.js binds its Remote read to one session id",
+    /const makeReader = \(sessionId\)[\s\S]{0,200}readBytes\(\s*sessionId/.test(src)
+  );
+  check(
+    "client.js feeds the tab's session into that reader",
+    /readPreview:\s*makeReader\(sessionId\)/.test(src)
+  );
+  // Remote calls answer `{ ok, value }` / `{ ok, error }`; reading `.data` off
+  // the envelope silently yields an empty document.
+  check(
+    "client.js unwraps the Remote result envelope",
+    /unwrapRemote\(await readPreview/.test(src) && /typeof result\.ok === 'boolean'/.test(src)
+  );
+  // The right Sidebar's GuideBody calls `entry.title()` and
+  // `entry.description?.()`, so a string for either field throws inside the
+  // guide and takes that whole tab down.
+  check(
+    "client.js guide entry reads title and description as thunks",
+    /guide:\s*\[[\s\S]{0,400}?title:\s*\(\)\s*=>[\s\S]{0,200}?description:\s*\(\)\s*=>/.test(src)
+  );
   check("client.js has no naked document.body access", !/document\.body/.test(src));
+  // The preview iframe holds agent-authored markup: allow-scripts alone keeps it
+  // in an opaque origin. allow-same-origin would let it reach the Harness origin.
+  check(
+    "client.js sandboxes the preview without allow-same-origin",
+    /sandbox:\s*'allow-scripts'/.test(src) && !/sandbox:\s*'[^']*allow-same-origin/.test(src)
+  );
 }
 
 // --- 6. locale JSON parses ---

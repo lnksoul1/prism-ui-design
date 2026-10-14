@@ -59,6 +59,12 @@ if (manifest) {
     "manifest ships a package README",
     (manifest.files ?? []).includes("README.md") && fs.existsSync(path.join(DIR, "README.md"))
   );
+  // The marketplace's format check looks for a licence beside the manifest, so the
+  // plugin package carries its own copy rather than relying on the repository root.
+  check(
+    "manifest ships a LICENSE",
+    (manifest.files ?? []).includes("LICENSE") && fs.existsSync(path.join(DIR, "LICENSE"))
+  );
   check(
     "manifest declares the server's runtime dependencies",
     ["@modelcontextprotocol/sdk", "js-yaml", "zod"].every(

@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-prism-design",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "description": "Prism design tools in the DeepSeek Harness: connects the packaged Prism MCP server and adds a live preview panel (left rail, or a right-Sidebar tab).",
   "meta": {
@@ -31,6 +31,7 @@
   },
   "files": [
     "README.md",
+    "LICENSE",
     "host-entry.mjs",
     "client.js",
     "cordis.patch.yml",

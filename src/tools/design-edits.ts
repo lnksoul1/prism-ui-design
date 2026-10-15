@@ -154,7 +154,8 @@ export function drainEditMailbox():
   let payload: unknown;
   try {
     payload = JSON.parse(readFileSync(mailbox, "utf8"));
-  } catch (error) {
+  } catch {
+    // A half-written file must not spin the watcher: quarantine it instead.
     renameSync(mailbox, mailbox.replace(/\.json$/, "") + ".rejected.json");
     return { applied: false };
   }

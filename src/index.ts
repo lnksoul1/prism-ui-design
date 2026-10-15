@@ -70,6 +70,7 @@ import { registerAuditTool } from "./tools/design-audit.js";
 import { registerSuggestTool } from "./tools/design-review-suggest.js";
 import { registerRenderTool } from "./tools/design-render.js";
 import { registerPreviewSyncTool } from "./tools/design-preview.js";
+import { registerApplyEditsTool, startEditMailbox } from "./tools/design-edits.js";
 import { registerTokenInteropTools } from "./tools/token-interop.js";
 import { registerWebpageImportTool } from "./tools/webpage-import.js";
 import { registerDesignMdTool } from "./tools/design-md.js";
@@ -127,6 +128,7 @@ registerAuditTool(server);
 registerSuggestTool(server);
 registerRenderTool(server);
 registerPreviewSyncTool(server);
+registerApplyEditsTool(server);
 registerTokenInteropTools(server);
 registerWebpageImportTool(server);
 registerDesignMdTool(server);
@@ -172,6 +174,11 @@ async function main(): Promise<void> {
   if (process.env.PRISM_AUTOSAVE !== "off") {
     enableAutoSave();
   }
+
+  // Edits made by hand in the preview panel arrive as a mailbox file next to the
+  // artifact (see tools/design-edits.ts). Watching it is what makes the panel's
+  // "edit and write back" loop real-time without an agent turn in between.
+  startEditMailbox((message) => console.error(`[${SERVER_NAME}] ${message}`));
 
   const transport = new StdioServerTransport();
   await server.connect(transport);

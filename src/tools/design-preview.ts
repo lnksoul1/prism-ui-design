@@ -15,6 +15,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { mkdirSync, writeFileSync } from "fs";
 import path from "path";
 import { exportDesign } from "./design-tools.js";
+import { previewEditorHTML } from "./preview-editor.js";
 import { stateStore } from "../state.js";
 
 /**
@@ -31,22 +32,34 @@ export function previewFilePath(): string {
 }
 
 /** Write the current design to the live preview path; returns what was written. */
-export function writePreviewFile(format: "html" = "html"): {
+export function writePreviewFile(
+  format: "html" = "html",
+  options: { annotate?: boolean } = {}
+): {
   path: string;
   bytes: number;
   componentCount: number;
   revision: number;
 } {
-  const html = exportDesign(format);
+  const annotate = options.annotate === true;
+  const html = exportDesign(format, { annotate });
   const file = previewFilePath();
   mkdirSync(path.dirname(file), { recursive: true });
   // Stamp the revision into the document so a viewer can tell a real change from
   // a rewrite of identical content.
   const revision = Date.now();
-  const stamped = html.replace(
+  let stamped = html.replace(
     "</head>",
     `  <meta name="prism-preview-revision" content="${revision}"/>\n</head>`
   );
+  // The preview edit layer rides along with the artifact only; exports stay
+  // clean. It disables itself unless the document is inside the panel's iframe.
+  if (annotate) {
+    const editor = previewEditorHTML();
+    stamped = stamped.includes("</body>")
+      ? stamped.replace("</body>", `${editor}\n</body>`)
+      : stamped + editor;
+  }
   writeFileSync(file, stamped, "utf8");
   return {
     path: file,
@@ -81,7 +94,10 @@ Returns:
     },
     async () => {
       try {
-        const result = writePreviewFile("html");
+        // `PRISM_PREVIEW_EDIT=off` writes a plain, read-only artifact.
+        const result = writePreviewFile("html", {
+          annotate: process.env.PRISM_PREVIEW_EDIT !== "off",
+        });
         const state = stateStore.getState();
         const text = [
           `Live preview synced.`,

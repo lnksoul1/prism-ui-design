@@ -148,7 +148,12 @@ function tokensToCSSVariables(tokens: DesignTokens): string {
   return lines.join("\n");
 }
 
-export function componentToHTML(node: ComponentNode): string {
+/**
+ * `annotate` stamps each component's identity into its root element. Only the
+ * live-preview artifact asks for it: the edit layer in the preview needs to know
+ * which component an element belongs to, while exported deliverables stay clean.
+ */
+export function componentToHTML(node: ComponentNode, annotate = false): string {
   const p = node.props;
   // The exported stylesheet uses hyphenated class names (`card-grid--3col`,
   // `bento-grid--mixed`), so an underscore component type must be normalised
@@ -564,7 +569,7 @@ export function componentToHTML(node: ComponentNode): string {
   // Recursively render children
   if (node.children && node.children.length > 0) {
     const childrenHTML = node.children
-      .map((c) => `  ${componentToHTML(c)}`)
+      .map((c) => `  ${componentToHTML(c, annotate)}`)
       .join("\n");
     const lastClose = html.lastIndexOf("</");
     if (lastClose > 0) {
@@ -572,7 +577,28 @@ export function componentToHTML(node: ComponentNode): string {
     }
   }
 
+  if (annotate) html = annotateComponentHTML(html, node);
+
   return html;
+}
+
+/**
+ * Add the preview edit layer's handles to one rendered component: its id, its
+ * type (the toolbar's label) and its text-valued props (the `✎` chips). Values
+ * are escaped, so the JSON survives as an attribute value.
+ */
+function annotateComponentHTML(html: string, node: ComponentNode): string {
+  const textProps: Record<string, string> = {};
+  for (const [key, value] of Object.entries(node.props ?? {})) {
+    if (typeof value === "string" && value.trim()) textProps[key] = value;
+    if (Object.keys(textProps).length >= 6) break;
+  }
+  const attrs = [
+    ` data-prism-id="${escapeHTML(node.id)}"`,
+    ` data-prism-type="${escapeHTML(node.type)}"`,
+    ` data-prism-props="${escapeHTML(JSON.stringify(textProps))}"`,
+  ].join("");
+  return html.replace(/^<([a-zA-Z][\w-]*)/, `<$1${attrs}`);
 }
 
 export function htmlToJSX(html: string): string {
@@ -598,11 +624,15 @@ function buildRuntimeAssets(_state: DesignState): { headScripts: string; bodyScr
   return { headScripts: "", bodyScripts: "" };
 }
 
-function exportToHTML(state: DesignState, components: ComponentNode[] = state.components): string {
+function exportToHTML(
+  state: DesignState,
+  components: ComponentNode[] = state.components,
+  annotate = false
+): string {
   const cssVars = tokensToCSSVariables(state.tokens);
   const runtime = buildRuntimeAssets(state);
   const componentsHTML = components
-    .map((c) => `  ${componentToHTML(c)}`)
+    .map((c) => `  ${componentToHTML(c, annotate)}`)
     .join("\n");
 
   // 背景编辑 P1: 页面背景覆盖默认 body 背景（颜色/渐变/图片/图案/动画）。
@@ -1316,12 +1346,13 @@ export function exportDesign(
     | "presentation"
     | "flutter"
     | "swiftui"
-    | "svelte"
+    | "svelte",
+  options: { annotate?: boolean } = {}
 ): string {
   const state = stateStore.getState();
   switch (format) {
     case "html":
-      return exportToHTML(state);
+      return exportToHTML(state, state.components, options.annotate === true);
     case "react":
       return exportToReact(state);
     case "vue":
